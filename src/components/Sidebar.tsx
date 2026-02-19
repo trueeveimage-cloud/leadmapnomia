@@ -15,14 +15,15 @@ interface NavItem {
   color?: string;
 }
 
-function NavLink({ item }: { item: NavItem }) {
+function NavLink({ item, indent = false }: { item: NavItem; indent?: boolean }) {
   const { pathname } = useLocation();
   const active = pathname === item.path;
   return (
     <Link
       to={item.path}
       className={cn(
-        'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-all duration-100 group',
+        'flex items-center gap-2.5 py-1.5 rounded-md text-sm transition-all duration-100 group',
+        indent ? 'px-2 ml-4' : 'px-3',
         active
           ? 'bg-primary/10 text-primary font-medium'
           : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -60,18 +61,71 @@ function NavGroup({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-export default function Sidebar() {
-  const { counts } = useCRM();
+function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts'] }) {
+  const [subOpen, setSubOpen] = React.useState(false);
   const { pathname } = useLocation();
 
-  const sections: NavItem[] = [
-    { label: 'Unsorted', path: '/unsorted', icon: <Inbox size={15} />, badge: counts.unsorted, color: 'hsl(215 15% 55%)' },
-    { label: 'Has Phone', path: '/phone', icon: <Phone size={15} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
-    { label: 'Has Gmail', path: '/gmail', icon: <AtSign size={15} />, badge: counts.gmail, color: 'hsl(0 72% 55%)' },
-    { label: 'Has Email', path: '/email', icon: <Mail size={15} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
-    { label: 'Both', path: '/both', icon: <Zap size={15} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
-    { label: 'Missing', path: '/missing', icon: <AlertCircle size={15} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
+  const subsections: NavItem[] = [
+    { label: 'Has Phone', path: '/phone', icon: <Phone size={13} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
+    { label: 'Has Gmail', path: '/gmail', icon: <AtSign size={13} />, badge: counts.gmail, color: 'hsl(0 72% 55%)' },
+    { label: 'Has Email', path: '/email', icon: <Mail size={13} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
+    { label: 'Both', path: '/both', icon: <Zap size={13} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
+    { label: 'Missing', path: '/missing', icon: <AlertCircle size={13} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
   ];
+
+  const isUnsortedActive = pathname === '/unsorted';
+  const isSubActive = subsections.some(s => pathname === s.path);
+
+  return (
+    <div>
+      <div className="flex items-center gap-0.5">
+        <Link
+          to="/unsorted"
+          className={cn(
+            'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-all duration-100 group flex-1 min-w-0',
+            isUnsortedActive
+              ? 'bg-primary/10 text-primary font-medium'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+          )}
+        >
+          <span className={cn('shrink-0', isUnsortedActive ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground')}>
+            <Inbox size={15} />
+          </span>
+          <span className="flex-1 truncate">Unsorted</span>
+          {counts.unsorted > 0 && (
+            <span className={cn(
+              'text-xs px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center',
+              isUnsortedActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+            )}>
+              {counts.unsorted > 999 ? '999+' : counts.unsorted}
+            </span>
+          )}
+        </Link>
+        <button
+          onClick={() => setSubOpen(o => !o)}
+          className={cn(
+            'p-1.5 rounded-md transition-colors shrink-0',
+            (subOpen || isSubActive) ? 'text-primary' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
+          )}
+          title="Toggle subsections"
+        >
+          {subOpen || isSubActive ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      </div>
+
+      {(subOpen || isSubActive) && (
+        <div className="mt-0.5 space-y-0.5 ml-3 border-l border-border/40 pl-2">
+          {subsections.map(item => (
+            <NavLink key={item.path} item={item} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Sidebar() {
+  const { counts } = useCRM();
 
   const statusPages: NavItem[] = [
     { label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted },
@@ -81,6 +135,7 @@ export default function Sidebar() {
     { label: 'Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
     { label: 'Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
     { label: 'Unsure', path: '/status/unsure', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.unsure },
+    { label: 'Demo', path: '/status/demo', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(262 83% 65%)' }} />, badge: counts.demo },
     { label: 'Closed Won', path: '/status/closed-won', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 55%)' }} />, badge: counts.closed_won },
     { label: 'Closed Lost', path: '/status/closed-lost', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 50% 40%)' }} />, badge: counts.closed_lost },
   ];
@@ -114,7 +169,7 @@ export default function Sidebar() {
 
       <div className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
         <NavGroup label="Sections">
-          {sections.map(item => <NavLink key={item.path} item={item} />)}
+          <UnsortedGroup counts={counts} />
         </NavGroup>
 
         <NavGroup label="Status">

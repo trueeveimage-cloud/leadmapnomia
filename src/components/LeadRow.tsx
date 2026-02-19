@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Lead, LeadSection, LeadStatus, updateLead, deleteLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { CallButton } from './CallButton';
+import { DemoFormModal, DemoBriefSummary } from './DemoFormModal';
 import { Button } from '@/components/ui/button';
-import { ExternalLink, Phone, Mail, Star, MapPin, Globe, Trash2, ArrowRight } from 'lucide-react';
+import { ExternalLink, Phone, Mail, Star, MapPin, Globe, Trash2, ArrowRight, FileEdit } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -16,6 +17,7 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
   interested: 'bg-green-500/10 text-green-400 border-green-500/20',
   not_interested: 'bg-red-500/10 text-red-400 border-red-500/20',
   unsure: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  demo: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
   closed_won: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   closed_lost: 'bg-red-900/20 text-red-400/70 border-red-900/30',
 };
@@ -28,6 +30,7 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   interested: 'Interested',
   not_interested: 'Not Interested',
   unsure: 'Unsure',
+  demo: 'Demo',
   closed_won: 'Closed Won',
   closed_lost: 'Closed Lost',
 };
@@ -51,6 +54,7 @@ interface LeadRowProps {
 
 export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSelect }: LeadRowProps) {
   const { refreshCounts } = useCRM();
+  const [demoOpen, setDemoOpen] = useState(false);
 
   const handleTriage = async (section: LeadSection) => {
     try {
@@ -165,13 +169,26 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
           </div>
         )}
 
-        {lead.notes && (
+        {lead.status === 'demo' && <DemoBriefSummary notes={lead.notes} />}
+
+        {lead.notes && lead.status !== 'demo' && (
           <div className="text-xs text-muted-foreground mt-1 italic truncate max-w-[400px]">{lead.notes}</div>
         )}
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {lead.status === 'demo' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs gap-1 text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+            onClick={() => setDemoOpen(true)}
+          >
+            <FileEdit size={11} />
+            Brief
+          </Button>
+        )}
         {lead.phone && <CallButton lead={lead} onUpdate={onUpdate} />}
         {lead.maps_url && (
           <a href={lead.maps_url} target="_blank" rel="noreferrer">
@@ -184,6 +201,15 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
           <Trash2 size={12} />
         </Button>
       </div>
+
+      {demoOpen && (
+        <DemoFormModal
+          lead={lead}
+          open={demoOpen}
+          onClose={() => setDemoOpen(false)}
+          onSave={updated => { onUpdate(updated); setDemoOpen(false); }}
+        />
+      )}
     </div>
   );
 }
