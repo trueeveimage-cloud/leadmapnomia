@@ -22,20 +22,7 @@ export default function AddPage() {
     const trimmed = url.trim();
     if (!trimmed) return;
 
-    // Short links (maps.app.goo.gl) use JavaScript redirects that can't be resolved server-side.
-    // Tell the user to open the link in their browser first and copy the full URL.
-    if (trimmed.includes('maps.app.goo.gl') || (trimmed.includes('goo.gl') && !trimmed.includes('google.com/maps'))) {
-      toast.error(
-        <span>
-          Short links can't be resolved automatically.<br />
-          Open the link in your browser → copy the URL from the address bar → paste that here.
-        </span>,
-        { duration: 6000 }
-      );
-      return;
-    }
-
-    if (!trimmed.includes('google.com/maps') && !trimmed.includes('goo.gl')) {
+    if (!trimmed.includes('google.com/maps') && !trimmed.includes('goo.gl') && !trimmed.includes('maps.app.goo.gl')) {
       toast.error('Please paste a valid Google Maps link');
       return;
     }
@@ -100,7 +87,7 @@ export default function AddPage() {
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !loading && handleAdd()}
-            placeholder="https://www.google.com/maps/place/..."
+            placeholder="https://www.google.com/maps/place/... or maps.app.goo.gl/..."
             className="flex-1 h-11 text-sm bg-card border-border"
             disabled={loading}
           />

@@ -9,6 +9,7 @@ export type LeadStatus =
   | 'interested'
   | 'not_interested'
   | 'unsure'
+  | 'demo'
   | 'closed_won'
   | 'closed_lost';
 
@@ -90,6 +91,7 @@ export async function fetchLeadCounts() {
     interested: leads.filter(l => l.status === 'interested').length,
     not_interested: leads.filter(l => l.status === 'not_interested').length,
     unsure: leads.filter(l => l.status === 'unsure').length,
+    demo: leads.filter(l => l.status === 'demo').length,
     closed_won: leads.filter(l => l.status === 'closed_won').length,
     closed_lost: leads.filter(l => l.status === 'closed_lost').length,
   };
