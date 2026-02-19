@@ -45,7 +45,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/unsorted" replace />} />
             <Route path="/add" element={<AddPage />} />
             <Route path="/bulk" element={<BulkPage />} />
-            <Route path="/unsorted" element={<SectionPage section="unsorted" title="Unsorted Inbox" showTriage emptyMessage="No unsorted leads — add some above!" />} />
+            <Route path="/unsorted" element={<SectionPage allSections title="Unsorted Inbox" showTriage emptyMessage="No unsorted leads — add some above!" />} />
             <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
             <Route path="/gmail" element={<SectionPage section="gmail" title="Has Gmail" emptyMessage="No Gmail leads yet" />} />
             <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
