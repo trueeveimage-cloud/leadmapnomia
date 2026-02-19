@@ -229,13 +229,15 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const url = body?.url;
-    if (!url || typeof url !== 'string') {
+    const rawUrl = body?.url;
+    if (!rawUrl || typeof rawUrl !== 'string') {
       return new Response(JSON.stringify({ error: 'URL is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    // Strip any extra text after the URL (spaces, notes, etc.)
+    const url = rawUrl.trim().split(/\s+/)[0];
     console.log('Input URL:', url.substring(0, 150));
 
     const resolvedUrl = await resolveUrl(url);
