@@ -15,14 +15,15 @@ interface NavItem {
   color?: string;
 }
 
-function NavLink({ item, indent = false }: { item: NavItem; indent?: boolean }) {
+function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: boolean; onNav?: () => void }) {
   const { pathname } = useLocation();
   const active = pathname === item.path;
   return (
     <Link
       to={item.path}
+      onClick={onNav}
       className={cn(
-        'flex items-center gap-2.5 py-1.5 rounded-md text-sm transition-all duration-100 group',
+        'flex items-center gap-2.5 py-2.5 rounded-md text-sm transition-all duration-100 group',
         indent ? 'px-2 ml-4' : 'px-3',
         active
           ? 'bg-primary/10 text-primary font-medium'
@@ -61,7 +62,7 @@ function NavGroup({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts'] }) {
+function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
   const [subOpen, setSubOpen] = React.useState(false);
   const { pathname } = useLocation();
 
@@ -81,8 +82,9 @@ function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts']
       <div className="flex items-center gap-0.5">
         <Link
           to="/unsorted"
+          onClick={onNav}
           className={cn(
-            'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-all duration-100 group flex-1 min-w-0',
+            'flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-100 group flex-1 min-w-0',
             isUnsortedActive
               ? 'bg-primary/10 text-primary font-medium'
               : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -104,7 +106,7 @@ function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts']
         <button
           onClick={() => setSubOpen(o => !o)}
           className={cn(
-            'p-1.5 rounded-md transition-colors shrink-0',
+            'p-2 rounded-md transition-colors shrink-0',
             (subOpen || isSubActive) ? 'text-primary' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
           )}
           title="Toggle subsections"
@@ -116,7 +118,7 @@ function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts']
       {(subOpen || isSubActive) && (
         <div className="mt-0.5 space-y-0.5 ml-3 border-l border-border/40 pl-2">
           {subsections.map(item => (
-            <NavLink key={item.path} item={item} />
+            <NavLink key={item.path} item={item} onNav={onNav} />
           ))}
         </div>
       )}
@@ -124,7 +126,7 @@ function UnsortedGroup({ counts }: { counts: ReturnType<typeof useCRM>['counts']
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { counts } = useCRM();
 
   const statusPages: NavItem[] = [
@@ -141,7 +143,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-56 shrink-0 h-screen sticky top-0 flex flex-col border-r border-sidebar-border bg-sidebar overflow-y-auto">
+    <aside className="w-60 shrink-0 h-screen flex flex-col border-r border-sidebar-border bg-sidebar overflow-y-auto">
       {/* Logo */}
       <div className="px-4 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
@@ -157,8 +159,8 @@ export default function Sidebar() {
 
       {/* Add links */}
       <div className="px-3 py-3 space-y-0.5">
-        <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} />
-        <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} />
+        <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+        <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
       </div>
 
       {/* Total count */}
@@ -169,17 +171,17 @@ export default function Sidebar() {
 
       <div className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
         <NavGroup label="Sections">
-          <UnsortedGroup counts={counts} />
+          <UnsortedGroup counts={counts} onNav={onClose} />
         </NavGroup>
 
         <NavGroup label="Status">
-          {statusPages.map(item => <NavLink key={item.path} item={item} />)}
+          {statusPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
       </div>
 
       {/* Settings */}
       <div className="px-3 py-3 border-t border-sidebar-border">
-        <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} />
+        <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
       </div>
     </aside>
   );

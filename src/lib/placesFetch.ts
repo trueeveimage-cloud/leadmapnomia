@@ -35,11 +35,19 @@ async function resolveShortLinkInBrowser(url: string): Promise<string> {
   return url;
 }
 
-export async function fetchPlaceFromUrl(url: string): Promise<{ result?: PlaceResult; error?: string }> {
+/** Strip any accidental text after the URL (spaces, notes, etc.) */
+function sanitizeUrl(raw: string): string {
+  return raw.trim().split(/\s+/)[0];
+}
+
+export async function fetchPlaceFromUrl(rawUrl: string): Promise<{ result?: PlaceResult; error?: string }> {
   try {
+    // Strip any text after the URL first (frontend layer of protection)
+    const cleanUrl = sanitizeUrl(rawUrl);
+
     // For short links, attempt browser-side resolution first
     // (browsers can follow Google's JS redirects; servers cannot)
-    const resolvedUrl = await resolveShortLinkInBrowser(url);
+    const resolvedUrl = await resolveShortLinkInBrowser(cleanUrl);
     console.log('[placesFetch] resolved URL:', resolvedUrl.substring(0, 120));
 
     const { data, error } = await supabase.functions.invoke('fetch-place', {

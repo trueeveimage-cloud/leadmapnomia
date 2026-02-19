@@ -1,35 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { fetchPlaceFromUrl } from '@/lib/placesFetch';
 import { addLead } from '@/lib/supabase';
-import { useCRM } from '@/context/CRMContext';
+import { useCRM, ImportResult } from '@/context/CRMContext';
 import { Loader2, CheckCircle, XCircle, AlertCircle, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface ImportResult {
-  url: string;
-  status: 'added' | 'duplicate' | 'failed';
-  name?: string;
-  reason?: string;
-}
-
 export default function BulkPage() {
-  const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [results, setResults] = useState<ImportResult[]>([]);
-  const { refreshCounts } = useCRM();
+  const { bulkImport, setBulkImport, refreshCounts } = useCRM();
+  const { text, loading, progress, total, results } = bulkImport;
+
+  const setText = (v: string) => setBulkImport(s => ({ ...s, text: v }));
 
   const handleImport = async () => {
     const urls = text.split('\n').map(u => u.trim()).filter(u => u.length > 0);
     if (urls.length === 0) return;
 
-    setLoading(true);
-    setProgress(0);
-    setTotal(urls.length);
-    setResults([]);
+    setBulkImport(s => ({ ...s, loading: true, progress: 0, total: urls.length, results: [] }));
 
     const newResults: ImportResult[] = [];
 
@@ -38,8 +26,7 @@ export default function BulkPage() {
 
       if (!url.includes('google.com/maps') && !url.includes('goo.gl') && !url.includes('maps.app')) {
         newResults.push({ url, status: 'failed', reason: 'Not a valid Google Maps link' });
-        setProgress(i + 1);
-        setResults([...newResults]);
+        setBulkImport(s => ({ ...s, progress: i + 1, results: [...newResults] }));
         continue;
       }
 
@@ -47,8 +34,7 @@ export default function BulkPage() {
         const { result, error } = await fetchPlaceFromUrl(url);
         if (error || !result) {
           newResults.push({ url, status: 'failed', reason: error || 'Could not fetch' });
-          setProgress(i + 1);
-          setResults([...newResults]);
+          setBulkImport(s => ({ ...s, progress: i + 1, results: [...newResults] }));
           continue;
         }
 
@@ -83,12 +69,11 @@ export default function BulkPage() {
         newResults.push({ url, status: 'failed', reason: e.message });
       }
 
-      setProgress(i + 1);
-      setResults([...newResults]);
+      setBulkImport(s => ({ ...s, progress: i + 1, results: [...newResults] }));
     }
 
     refreshCounts();
-    setLoading(false);
+    setBulkImport(s => ({ ...s, loading: false }));
     const added = newResults.filter(r => r.status === 'added').length;
     toast.success(`Import complete: ${added} added`);
   };
@@ -99,24 +84,24 @@ export default function BulkPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto px-6 pt-10 pb-10">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">Bulk Import</h1>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-8 pb-10">
+        <div className="mb-5">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Bulk Import</h1>
           <p className="text-sm text-muted-foreground mt-1">Paste Google Maps links — one per line</p>
         </div>
 
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder={"https://www.google.com/maps/place/...\nhttps://www.google.com/maps/place/...\nhttps://goo.gl/maps/..."}
-          className="w-full h-48 bg-card border border-border rounded-lg px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+          placeholder={"https://www.google.com/maps/place/...\nhttps://maps.app.goo.gl/..."}
+          className="w-full h-44 bg-card border border-border rounded-lg px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary font-mono"
           disabled={loading}
         />
 
         <div className="flex items-center gap-3 mt-3">
           <Button onClick={handleImport} disabled={loading || !text.trim()} className="gap-2">
             {loading ? <Loader2 size={15} className="animate-spin" /> : <Layers size={15} />}
-            {loading ? `Processing ${progress}/${total}...` : 'Import Links'}
+            {loading ? `Processing ${progress}/${total}…` : 'Import Links'}
           </Button>
           {loading && (
             <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
@@ -128,9 +113,14 @@ export default function BulkPage() {
           )}
         </div>
 
+        {loading && (
+          <p className="text-xs text-muted-foreground mt-2">
+            You can navigate away — progress is saved.
+          </p>
+        )}
+
         {results.length > 0 && (
           <div className="mt-6">
-            {/* Summary */}
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-1.5 text-sm font-medium text-green-400">
                 <CheckCircle size={15} /> {added} added
@@ -143,26 +133,25 @@ export default function BulkPage() {
               </div>
             </div>
 
-            {/* Results table */}
             <div className="border border-border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-3 px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 border-b border-border">
+              <div className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_1fr] gap-3 px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 border-b border-border">
                 <span>Status</span>
                 <span>Name</span>
-                <span></span>
-                <span>URL</span>
+                <span className="hidden sm:block"></span>
+                <span className="hidden sm:block">URL</span>
               </div>
               {results.map((r, i) => (
-                <div key={i} className="grid grid-cols-[auto_1fr_auto_1fr] gap-3 px-4 py-2 text-xs border-b border-border/50 last:border-0 items-center">
+                <div key={i} className="grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_auto_1fr] gap-3 px-4 py-2 text-xs border-b border-border/50 last:border-0 items-center">
                   <span>
                     {r.status === 'added' && <CheckCircle size={13} className="text-green-400" />}
                     {r.status === 'duplicate' && <AlertCircle size={13} className="text-amber-400" />}
                     {r.status === 'failed' && <XCircle size={13} className="text-red-400" />}
                   </span>
-                  <span className="font-medium text-foreground truncate">{r.name || '—'}</span>
+                  <span className="font-medium text-foreground truncate">{r.name || r.reason || '—'}</span>
                   <span className={r.status === 'failed' ? 'text-red-400' : r.status === 'duplicate' ? 'text-amber-400' : 'text-green-400'}>
-                    {r.status === 'duplicate' ? 'Duplicate' : r.status === 'failed' ? (r.reason || 'Failed') : 'Added'}
+                    {r.status === 'duplicate' ? 'Dup' : r.status === 'failed' ? 'Fail' : 'OK'}
                   </span>
-                  <span className="text-muted-foreground truncate">{r.url}</span>
+                  <span className="text-muted-foreground truncate hidden sm:block">{r.url}</span>
                 </div>
               ))}
             </div>

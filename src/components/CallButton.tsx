@@ -15,6 +15,7 @@ const CALL_OUTCOMES = [
   { key: 'busy', label: 'Busy', color: 'hsl(38 95% 55%)', status: 'callback' as LeadStatus },
   { key: 'wrong_number', label: 'Wrong Number', color: 'hsl(0 72% 55%)', status: 'not_interested' as LeadStatus },
   { key: 'callback_later', label: 'Call Back Later', color: 'hsl(213 94% 58%)', status: 'callback' as LeadStatus },
+  { key: 'demo', label: 'Demo 🎨', color: 'hsl(262 83% 65%)', status: 'demo' as LeadStatus },
 ];
 
 const STATUS_OPTIONS: { key: LeadStatus; label: string; color?: string }[] = [
@@ -61,7 +62,20 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
   const handleOutcome = async (outcome: typeof CALL_OUTCOMES[0]) => {
     setSelectedOutcome(outcome);
-    if (outcome.key === 'answered') {
+    if (outcome.key === 'demo') {
+      // Directly update to demo and open the demo brief form
+      try {
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo' });
+        await logActivity(lead.id, 'call', { outcome: 'demo', status: 'demo' });
+        setPendingLead(updated);
+        onUpdate?.(updated);
+        refreshCounts();
+        setStep('idle');
+        setDemoOpen(true);
+      } catch {
+        toast.error('Failed to update status');
+      }
+    } else if (outcome.key === 'answered') {
       setStep('status');
     } else {
       const tomorrow = new Date();
