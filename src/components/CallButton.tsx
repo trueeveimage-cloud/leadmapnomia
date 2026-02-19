@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
+import { DemoFormModal } from './DemoFormModal';
 
 const CALL_OUTCOMES = [
   { key: 'answered', label: 'Answered', color: 'hsl(142 69% 45%)', status: 'answered' as LeadStatus },
@@ -16,14 +17,14 @@ const CALL_OUTCOMES = [
   { key: 'callback_later', label: 'Call Back Later', color: 'hsl(213 94% 58%)', status: 'callback' as LeadStatus },
 ];
 
-const STATUS_OPTIONS: { key: LeadStatus; label: string }[] = [
-  { key: 'interested', label: 'Interested' },
-  { key: 'not_interested', label: 'Not Interested' },
-  { key: 'unsure', label: 'Unsure' },
-  { key: 'contacted', label: 'Contacted' },
-  { key: 'demo', label: 'Demo' },
-  { key: 'closed_won', label: 'Closed Won' },
-  { key: 'closed_lost', label: 'Closed Lost' },
+const STATUS_OPTIONS: { key: LeadStatus; label: string; color?: string }[] = [
+  { key: 'interested', label: 'Interested', color: 'hsl(142 69% 45%)' },
+  { key: 'not_interested', label: 'Not Interested', color: 'hsl(0 72% 55%)' },
+  { key: 'unsure', label: 'Unsure', color: 'hsl(38 95% 55%)' },
+  { key: 'contacted', label: 'Contacted', color: 'hsl(213 94% 58%)' },
+  { key: 'demo', label: 'Demo', color: 'hsl(262 83% 65%)' },
+  { key: 'closed_won', label: 'Closed Won', color: 'hsl(142 69% 55%)' },
+  { key: 'closed_lost', label: 'Closed Lost', color: 'hsl(0 50% 40%)' },
 ];
 
 // Generate hour:minute options every 15 min
@@ -47,6 +48,8 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const [followupDate, setFollowupDate] = useState<Date | undefined>(undefined);
   const [followupHour, setFollowupHour] = useState(9);
   const [followupMinute, setFollowupMinute] = useState(0);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [pendingLead, setPendingLead] = useState<Lead>(lead);
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   const handleCall = () => {
@@ -61,7 +64,6 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
     if (outcome.key === 'answered') {
       setStep('status');
     } else {
-      // Default followup date to tomorrow 9am
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setFollowupDate(tomorrow);
@@ -72,6 +74,21 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   };
 
   const handleStatus = async (status: LeadStatus) => {
+    if (status === 'demo') {
+      // First update status to demo, then open demo form
+      try {
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key });
+        await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status: 'demo' });
+        setPendingLead(updated);
+        onUpdate?.(updated);
+        refreshCounts();
+        setStep('idle');
+        setDemoOpen(true);
+      } catch {
+        toast.error('Failed to update status');
+      }
+      return;
+    }
     const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key });
     await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status });
     onUpdate?.(updated);
@@ -108,8 +125,6 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
   if (!lead.phone) return null;
 
-  const selectedTime = TIME_OPTIONS.find(t => t.h === followupHour && t.m === followupMinute) || TIME_OPTIONS[36]; // 9:00 AM
-
   return (
     <div className="relative">
       {step === 'idle' && (
@@ -132,12 +147,12 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
       {step === 'outcome' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
-          <div className="bg-card border border-border rounded-lg p-5 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-card border border-border rounded-xl p-5 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
             {!isMobile && (
-              <div className="mb-4 p-3 bg-muted rounded-md flex items-center justify-between">
+              <div className="mb-4 p-3 bg-muted rounded-lg flex items-center justify-between">
                 <div>
                   <div className="text-xs text-muted-foreground">Call this number</div>
-                  <div className="text-lg font-mono font-bold text-foreground">{lead.phone}</div>
+                  <div className="text-xl font-mono font-bold text-foreground tracking-wide">{lead.phone}</div>
                   <div className="text-xs text-muted-foreground truncate">{lead.name}</div>
                 </div>
                 <Button size="sm" variant="ghost" onClick={copyNumber} className="shrink-0">
@@ -146,12 +161,12 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
               </div>
             )}
             <div className="text-sm font-semibold text-foreground mb-3">Call outcome</div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {CALL_OUTCOMES.map(o => (
                 <button
                   key={o.key}
                   onClick={() => handleOutcome(o)}
-                  className="w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-muted border border-border/50 hover:border-border"
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors hover:bg-muted border border-border/50 hover:border-border"
                   style={{ color: o.color }}
                 >
                   {o.label}
@@ -167,20 +182,18 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
       {step === 'status' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
-          <div className="bg-card border border-border rounded-lg p-5 w-72 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-card border border-border rounded-xl p-5 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="text-sm font-semibold text-foreground mb-3">Set status</div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {STATUS_OPTIONS.map(s => (
                 <button
                   key={s.key}
                   onClick={() => handleStatus(s.key)}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted border border-border/50 hover:border-border transition-colors",
-                    s.key === 'demo' && 'text-purple-400 border-purple-500/20 hover:bg-purple-500/10'
-                  )}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted border border-border/50 hover:border-border transition-colors"
+                  style={{ color: s.color }}
                 >
                   {s.label}
-                  {s.key === 'demo' && <span className="ml-2 text-xs opacity-70">→ fill demo form</span>}
+                  {s.key === 'demo' && <span className="ml-2 text-xs opacity-60 font-normal">→ fill demo brief</span>}
                 </button>
               ))}
             </div>
@@ -193,7 +206,7 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
       {step === 'followup' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
-          <div className="bg-card border border-border rounded-lg p-5 w-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-card border border-border rounded-xl p-5 w-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="text-sm font-semibold text-foreground mb-1">Schedule follow-up</div>
             <div className="text-xs text-muted-foreground mb-4">Outcome: {selectedOutcome?.label}</div>
 
@@ -239,6 +252,16 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Demo form opens after selecting Demo status */}
+      {demoOpen && (
+        <DemoFormModal
+          lead={pendingLead}
+          open={demoOpen}
+          onClose={() => setDemoOpen(false)}
+          onSave={updated => { onUpdate?.(updated); setDemoOpen(false); }}
+        />
       )}
     </div>
   );

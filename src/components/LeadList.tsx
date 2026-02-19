@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Lead, LeadSection, LeadStatus, fetchLeads, updateLead } from '@/lib/supabase';
+import { Lead, LeadSection, LeadStatus, fetchLeads, updateLead, deleteLead, determineSection, getSetting } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { LeadRow } from './LeadRow';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, SortDesc, ChevronDown, CheckSquare, Square } from 'lucide-react';
+import { Search, SortDesc, ChevronDown, CheckSquare, Square, Zap, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -35,13 +35,15 @@ const SORT_OPTIONS = [
 
 interface LeadListProps {
   section?: LeadSection;
+  /** When true, fetch ALL sections (for the Unsorted overview page) */
+  allSections?: boolean;
   status?: LeadStatus;
   showTriage?: boolean;
   title: string;
   emptyMessage?: string;
 }
 
-export default function LeadList({ section, status, showTriage, title, emptyMessage }: LeadListProps) {
+export default function LeadList({ section, allSections, status, showTriage, title, emptyMessage }: LeadListProps) {
   const { refreshCounts } = useCRM();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,20 +51,21 @@ export default function LeadList({ section, status, showTriage, title, emptyMess
   const [sort, setSort] = useState('newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<LeadStatus | ''>('');
-  const [showBulk, setShowBulk] = useState(false);
   const [filterStatus, setFilterStatus] = useState<LeadStatus | ''>('');
+  const [autoSorting, setAutoSorting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchLeads({ section, status });
+      // If allSections, fetch all leads (no section filter)
+      const data = await fetchLeads(allSections ? { status } : { section, status });
       setLeads(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [section, status]);
+  }, [section, allSections, status]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -130,8 +133,69 @@ export default function LeadList({ section, status, showTriage, title, emptyMess
     }
   };
 
+  const applyBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} lead${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    try {
+      await Promise.all([...selectedIds].map(id => deleteLead(id)));
+      setLeads(prev => prev.filter(l => !selectedIds.has(l.id)));
+      refreshCounts();
+      toast.success(`Deleted ${selectedIds.size} leads`);
+      setSelectedIds(new Set());
+    } catch {
+      toast.error('Bulk delete failed');
+    }
+  };
+
+  /** Auto-sort all visible leads based on their contact info */
+  const handleAutoSort = async () => {
+    const unsortedLeads = filtered.filter(l => l.section === 'unsorted' || allSections);
+    if (unsortedLeads.length === 0) {
+      toast.info('No leads to sort');
+      return;
+    }
+    setAutoSorting(true);
+    try {
+      const gmailRule = await getSetting('gmail_triage_rule') || 'gmail';
+      const updates = await Promise.all(
+        unsortedLeads.map(async lead => {
+          const newSection = determineSection(lead, gmailRule);
+          if (newSection !== lead.section) {
+            const updated = await updateLead(lead.id, { section: newSection });
+            return updated;
+          }
+          return lead;
+        })
+      );
+      setLeads(prev => prev.map(l => {
+        const upd = updates.find(u => u.id === l.id);
+        return upd || l;
+      }));
+      refreshCounts();
+      toast.success(`Auto-sorted ${unsortedLeads.length} leads`);
+    } catch {
+      toast.error('Auto-sort failed');
+    } finally {
+      setAutoSorting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
+      {/* Auto-sort banner */}
+      {showTriage && (
+        <div className="px-4 pt-4 pb-2">
+          <Button
+            onClick={handleAutoSort}
+            disabled={autoSorting}
+            className="w-full h-11 gap-2 text-sm font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+          >
+            <Zap size={16} className={autoSorting ? 'animate-pulse' : ''} />
+            {autoSorting ? 'Sorting...' : 'Auto Sort All Leads'}
+          </Button>
+        </div>
+      )}
+
       {/* Header bar */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
         <div className="flex items-center justify-between mb-2">
@@ -183,7 +247,7 @@ export default function LeadList({ section, status, showTriage, title, emptyMess
 
           {/* Bulk actions */}
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
               <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
               <select
                 value={bulkStatus}
@@ -194,6 +258,15 @@ export default function LeadList({ section, status, showTriage, title, emptyMess
                 {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
               </select>
               <Button size="sm" className="h-7 text-xs" onClick={applyBulkStatus} disabled={!bulkStatus}>Apply</Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs gap-1"
+                onClick={applyBulkDelete}
+              >
+                <Trash2 size={11} />
+                Delete
+              </Button>
             </div>
           )}
         </div>

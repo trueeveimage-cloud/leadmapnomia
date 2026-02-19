@@ -62,7 +62,8 @@ export function determineSection(lead: Partial<Lead>, gmailRule: string = 'gmail
 
 export async function fetchLeads(filter?: { section?: LeadSection; status?: LeadStatus }) {
   let query = supabase.from('leads').select('*').order('created_at', { ascending: false });
-  if (filter?.section) query = query.eq('section', filter.section);
+  // Only filter by section if explicitly provided (undefined = no filter = all sections)
+  if (filter?.section !== undefined) query = query.eq('section', filter.section);
   if (filter?.status) query = query.eq('status', filter.status);
   const { data, error } = await query;
   if (error) throw error;
