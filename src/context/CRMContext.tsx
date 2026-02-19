@@ -22,9 +22,28 @@ interface Counts {
   closed_lost: number;
 }
 
+export interface ImportResult {
+  url: string;
+  status: 'added' | 'duplicate' | 'failed';
+  name?: string;
+  reason?: string;
+}
+
+interface BulkImportState {
+  text: string;
+  loading: boolean;
+  progress: number;
+  total: number;
+  results: ImportResult[];
+}
+
 interface CRMContextValue {
   counts: Counts;
   refreshCounts: () => Promise<void>;
+  bulkImport: BulkImportState;
+  setBulkImport: React.Dispatch<React.SetStateAction<BulkImportState>>;
+  sidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const defaultCounts: Counts = {
@@ -34,13 +53,23 @@ const defaultCounts: Counts = {
   unsure: 0, demo: 0, closed_won: 0, closed_lost: 0,
 };
 
+const defaultBulkImport: BulkImportState = {
+  text: '', loading: false, progress: 0, total: 0, results: [],
+};
+
 const CRMContext = createContext<CRMContextValue>({
   counts: defaultCounts,
   refreshCounts: async () => {},
+  bulkImport: defaultBulkImport,
+  setBulkImport: () => {},
+  sidebarOpen: false,
+  setSidebarOpen: () => {},
 });
 
 export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [counts, setCounts] = useState<Counts>(defaultCounts);
+  const [bulkImport, setBulkImport] = useState<BulkImportState>(defaultBulkImport);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -54,7 +83,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCounts]);
 
   return (
-    <CRMContext.Provider value={{ counts, refreshCounts }}>
+    <CRMContext.Provider value={{ counts, refreshCounts, bulkImport, setBulkImport, sidebarOpen, setSidebarOpen }}>
       {children}
     </CRMContext.Provider>
   );
@@ -63,3 +92,4 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 export function useCRM() {
   return useContext(CRMContext);
 }
+
