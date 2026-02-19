@@ -5,62 +5,133 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/** Follow redirects aggressively to get the final Google Maps URL */
+/** Try multiple strategies to resolve a short/redirect URL to a full Google Maps URL */
 async function resolveUrl(url: string): Promise<string> {
+  const isShortLink = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps');
+
+  // Strategy A: HEAD request — some CDN edges do return Location for HEAD
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const headResp = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'curl/7.88.1', Accept: '*/*' },
+      signal: AbortSignal.timeout(8000),
+    });
+    const loc = headResp.headers.get('location');
+    console.log('HEAD redirect location:', loc?.substring(0, 150));
+    if (loc && loc.includes('google.com/maps')) return loc;
+  } catch (e) {
+    console.log('HEAD failed:', (e as Error).message);
+  }
 
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-    };
+  // Strategy B: GET with curl-like User-Agent — forces HTTP 301/302 on some short link servers
+  try {
+    const getResp = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'curl/7.88.1',
+        Accept: '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    const loc = getResp.headers.get('location');
+    console.log('GET (curl UA) redirect location:', loc?.substring(0, 150));
+    if (loc && loc.includes('google.com/maps')) return loc;
+    // Follow the location if it's a different short link
+    if (loc && loc !== url) {
+      const loc2 = await resolveUrlSingle(loc);
+      if (loc2 && loc2.includes('google.com/maps')) return loc2;
+    }
+  } catch (e) {
+    console.log('GET curl UA failed:', (e as Error).message);
+  }
 
-    // Step 1: Manual redirect to capture Location header
-    const manualResp = await fetch(url, { method: 'GET', redirect: 'manual', signal: controller.signal, headers });
-    const location = manualResp.headers.get('location');
-    console.log('Manual redirect status:', manualResp.status, 'Location:', location?.substring(0, 150));
+  // Strategy C: Follow with browser UA and inspect HTML for embedded Maps URL
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
 
-    if (location && location.includes('google.com/maps')) {
-      clearTimeout(timeout);
-      return location;
+    // Final URL after HTTP redirects
+    if (resp.url && resp.url !== url && resp.url.includes('google.com/maps')) {
+      console.log('Follow-redirect resolved to:', resp.url.substring(0, 150));
+      return resp.url;
     }
 
-    // Step 2: Follow all redirects
-    const response = await fetch(url, { method: 'GET', redirect: 'follow', signal: controller.signal, headers });
-    clearTimeout(timeout);
+    const html = await resp.text();
 
-    if (response.url && response.url !== url && !response.url.includes('maps.app.goo.gl')) {
-      console.log('HTTP follow-redirect resolved to:', response.url.substring(0, 150));
-      return response.url;
-    }
+    // Dump first 2000 chars for debug
+    console.log('HTML snippet:', html.substring(0, 2000));
 
-    // Step 3: Parse HTML body for embedded URLs
-    const html = await response.text();
-
-    const patterns = [
-      /"(?:link|deepLink|url|redirect_url)"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
-      /window\.location(?:\.replace\(|\.href\s*=\s*)["']([^"']+google\.com\/maps[^"']+)["']/,
-      /<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^;]*;\s*url=([^"']+)["']/i,
-      /href=["'](https:\/\/[^"']*google\.com\/maps\/place[^"']*)/,
-      /(https:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^"'\s\\>]+)/,
+    // Parse patterns from HTML — order matters (most specific first)
+    const patterns: RegExp[] = [
+      // og:url meta tag (most reliable for maps.app.goo.gl)
+      /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']*google\.com\/maps[^"']*)["'][^>]+property=["']og:url["']/i,
+      // canonical link
+      /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*google\.com\/maps[^"']*)["']/i,
+      // itemprop url
+      /<[^>]+itemprop=["']url["'][^>]+content=["']([^"']*google\.com\/maps[^"']*)["']/i,
+      // JSON-LD or window variable
+      /"url"\s*:\s*"(https:\/\/[^"]*google\.com\/maps\/place[^"]*)"/i,
+      // Firebase Dynamic Link deepLink field
+      /"deepLink"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
+      /"link"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
+      // meta refresh
+      /<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^;]*;\s*url=([^"'>\s]+)/i,
+      // window.location
+      /window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']*google\.com\/maps[^"']*)["']/i,
+      // Any google.com/maps/place URL in the page
+      /(https:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^\s"'<>\\]+)/i,
     ];
 
     for (const pattern of patterns) {
       const m = html.match(pattern);
       if (m) {
-        const found = m[1].replace(/\\u003d/g, '=').replace(/\\u0026/g, '&').replace(/\\\//g, '/');
-        console.log('Found maps URL in HTML:', found.substring(0, 150));
+        const found = m[1]
+          .replace(/\\u003d/g, '=')
+          .replace(/\\u0026/g, '&')
+          .replace(/\\\//g, '/')
+          .replace(/&amp;/g, '&');
+        console.log('Extracted maps URL from HTML:', found.substring(0, 150));
         return found;
       }
     }
 
-    console.log('Could not resolve URL, using original.');
-    return response.url || url;
+    // Last resort: check if the final URL after follow contains maps data
+    if (resp.url && resp.url.includes('google.com')) {
+      console.log('Using follow-redirect final URL:', resp.url.substring(0, 150));
+      return resp.url;
+    }
   } catch (e) {
-    console.log('URL resolution failed:', (e as Error).message);
-    return url;
+    console.log('HTML parse strategy failed:', (e as Error).message);
+  }
+
+  console.log('All resolution strategies failed, using original URL.');
+  return url;
+}
+
+/** Single-hop redirect resolver (no recursion) */
+async function resolveUrlSingle(url: string): Promise<string | null> {
+  try {
+    const r = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'curl/7.88.1', Accept: '*/*' },
+      signal: AbortSignal.timeout(6000),
+    });
+    return r.headers.get('location');
+  } catch {
+    return null;
   }
 }
 
@@ -167,9 +238,8 @@ serve(async (req) => {
 
     console.log('Input URL:', url.substring(0, 150));
 
-    // Resolve short links / any URL to a full Google Maps URL
-    let resolvedUrl = await resolveUrl(url);
-    console.log('Resolved URL:', resolvedUrl.substring(0, 150));
+    const resolvedUrl = await resolveUrl(url);
+    console.log('Resolved URL:', resolvedUrl.substring(0, 200));
 
     let placeData: any = null;
 
@@ -190,11 +260,12 @@ serve(async (req) => {
       if (!placeData && name && latLng) placeData = await findPlaceFromText(name, apiKey, latLng);
       if (!placeData && name && latLng) placeData = await nearbySearch(latLng.lat, latLng.lng, name, apiKey);
       if (!placeData && name) placeData = await textSearch(name, apiKey);
+      if (!placeData && name) placeData = await findPlaceFromText(name, apiKey);
     }
 
     if (!placeData) {
       return new Response(JSON.stringify({
-        error: 'Could not find this place. Make sure "Places API" is enabled in Google Cloud Console (must include Text Search, Nearby Search, and Find Place), and try copying the full URL from your browser address bar.',
+        error: 'Could not find this place. Two possible fixes: (1) In Google Cloud Console → APIs & Services, enable "Places API" — it must include Text Search, Nearby Search, and Find Place. (2) Copy the full URL directly from your browser address bar instead of the share link.',
       }), {
         status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
