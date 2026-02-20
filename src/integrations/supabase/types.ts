@@ -46,6 +46,128 @@ export type Database = {
           },
         ]
       }
+      finder_candidates: {
+        Row: {
+          address: string | null
+          category: string | null
+          created_at: string
+          has_phone: boolean | null
+          has_website: boolean | null
+          id: string
+          last_fetched_at: string | null
+          maps_url: string | null
+          name: string
+          outcome: string
+          phone: string | null
+          place_id: string
+          rating: number | null
+          reviews_count: number | null
+          run_id: string
+          types: string[] | null
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          has_phone?: boolean | null
+          has_website?: boolean | null
+          id?: string
+          last_fetched_at?: string | null
+          maps_url?: string | null
+          name: string
+          outcome?: string
+          phone?: string | null
+          place_id: string
+          rating?: number | null
+          reviews_count?: number | null
+          run_id: string
+          types?: string[] | null
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          created_at?: string
+          has_phone?: boolean | null
+          has_website?: boolean | null
+          id?: string
+          last_fetched_at?: string | null
+          maps_url?: string | null
+          name?: string
+          outcome?: string
+          phone?: string | null
+          place_id?: string
+          rating?: number | null
+          reviews_count?: number | null
+          run_id?: string
+          types?: string[] | null
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finder_candidates_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "finder_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finder_runs: {
+        Row: {
+          city: string
+          created_at: string
+          id: string
+          keywords: string[]
+          max_candidates: number
+          max_details: number
+          max_pages: number
+          min_rating: number | null
+          min_reviews: number | null
+          mode: string
+          radius: number
+          require_phone: boolean
+          stats: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          max_candidates?: number
+          max_details?: number
+          max_pages?: number
+          min_rating?: number | null
+          min_reviews?: number | null
+          mode?: string
+          radius?: number
+          require_phone?: boolean
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          max_candidates?: number
+          max_details?: number
+          max_pages?: number
+          min_rating?: number | null
+          min_reviews?: number | null
+          mode?: string
+          radius?: number
+          require_phone?: boolean
+          stats?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           address: string | null
@@ -111,6 +233,48 @@ export type Database = {
           status?: string
           tags?: string[] | null
           updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      place_cache: {
+        Row: {
+          address: string | null
+          category: string | null
+          fetched_at: string
+          maps_url: string | null
+          name: string
+          phone: string | null
+          place_id: string
+          rating: number | null
+          reviews_count: number | null
+          types: string[] | null
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          category?: string | null
+          fetched_at?: string
+          maps_url?: string | null
+          name: string
+          phone?: string | null
+          place_id: string
+          rating?: number | null
+          reviews_count?: number | null
+          types?: string[] | null
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          category?: string | null
+          fetched_at?: string
+          maps_url?: string | null
+          name?: string
+          phone?: string | null
+          place_id?: string
+          rating?: number | null
+          reviews_count?: number | null
+          types?: string[] | null
           website?: string | null
         }
         Relationships: []

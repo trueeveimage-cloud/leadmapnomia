@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { fetchLeadCounts } from '@/lib/supabase';
 
 interface Counts {
@@ -35,6 +35,7 @@ interface BulkImportState {
   progress: number;
   total: number;
   results: ImportResult[];
+  stopped: boolean;
 }
 
 interface CRMContextValue {
@@ -42,6 +43,7 @@ interface CRMContextValue {
   refreshCounts: () => Promise<void>;
   bulkImport: BulkImportState;
   setBulkImport: React.Dispatch<React.SetStateAction<BulkImportState>>;
+  bulkStopRef: React.MutableRefObject<boolean>;
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -54,7 +56,7 @@ const defaultCounts: Counts = {
 };
 
 const defaultBulkImport: BulkImportState = {
-  text: '', loading: false, progress: 0, total: 0, results: [],
+  text: '', loading: false, progress: 0, total: 0, results: [], stopped: false,
 };
 
 const CRMContext = createContext<CRMContextValue>({
@@ -62,6 +64,7 @@ const CRMContext = createContext<CRMContextValue>({
   refreshCounts: async () => {},
   bulkImport: defaultBulkImport,
   setBulkImport: () => {},
+  bulkStopRef: { current: false },
   sidebarOpen: false,
   setSidebarOpen: () => {},
 });
@@ -70,6 +73,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [counts, setCounts] = useState<Counts>(defaultCounts);
   const [bulkImport, setBulkImport] = useState<BulkImportState>(defaultBulkImport);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const bulkStopRef = useRef(false);
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -83,7 +87,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCounts]);
 
   return (
-    <CRMContext.Provider value={{ counts, refreshCounts, bulkImport, setBulkImport, sidebarOpen, setSidebarOpen }}>
+    <CRMContext.Provider value={{ counts, refreshCounts, bulkImport, setBulkImport, bulkStopRef, sidebarOpen, setSidebarOpen }}>
       {children}
     </CRMContext.Provider>
   );
@@ -92,4 +96,3 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 export function useCRM() {
   return useContext(CRMContext);
 }
-
