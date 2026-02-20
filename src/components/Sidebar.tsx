@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useCRM } from '@/context/CRMContext';
 import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
-  Calendar, Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight
+  Calendar, Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -161,6 +161,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       <div className="px-3 py-3 space-y-0.5">
         <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
+        <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
       </div>
 
       {/* Total count */}

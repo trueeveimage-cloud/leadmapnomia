@@ -4,24 +4,35 @@ import { Button } from '@/components/ui/button';
 import { fetchPlaceFromUrl } from '@/lib/placesFetch';
 import { addLead } from '@/lib/supabase';
 import { useCRM, ImportResult } from '@/context/CRMContext';
-import { Loader2, CheckCircle, XCircle, AlertCircle, Layers } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, AlertCircle, Layers, Square } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function BulkPage() {
-  const { bulkImport, setBulkImport, refreshCounts } = useCRM();
-  const { text, loading, progress, total, results } = bulkImport;
+  const { bulkImport, setBulkImport, bulkStopRef, refreshCounts } = useCRM();
+  const { text, loading, progress, total, results, stopped } = bulkImport;
 
   const setText = (v: string) => setBulkImport(s => ({ ...s, text: v }));
+
+  const handleStop = () => {
+    bulkStopRef.current = true;
+    setBulkImport(s => ({ ...s, stopped: true }));
+  };
 
   const handleImport = async () => {
     const urls = text.split('\n').map(u => u.trim()).filter(u => u.length > 0);
     if (urls.length === 0) return;
 
-    setBulkImport(s => ({ ...s, loading: true, progress: 0, total: urls.length, results: [] }));
+    bulkStopRef.current = false;
+    setBulkImport(s => ({ ...s, loading: true, progress: 0, total: urls.length, results: [], stopped: false }));
 
     const newResults: ImportResult[] = [];
 
     for (let i = 0; i < urls.length; i++) {
+      if (bulkStopRef.current) {
+        toast.info(`Import stopped at ${i}/${urls.length}`);
+        break;
+      }
+
       const url = urls[i];
 
       if (!url.includes('google.com/maps') && !url.includes('goo.gl') && !url.includes('maps.app')) {
@@ -74,8 +85,10 @@ export default function BulkPage() {
 
     refreshCounts();
     setBulkImport(s => ({ ...s, loading: false }));
-    const added = newResults.filter(r => r.status === 'added').length;
-    toast.success(`Import complete: ${added} added`);
+    if (!bulkStopRef.current) {
+      const added = newResults.filter(r => r.status === 'added').length;
+      toast.success(`Import complete: ${added} added`);
+    }
   };
 
   const added = results.filter(r => r.status === 'added').length;
@@ -104,19 +117,28 @@ export default function BulkPage() {
             {loading ? `Processing ${progress}/${total}…` : 'Import Links'}
           </Button>
           {loading && (
-            <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-primary h-full transition-all duration-300"
-                style={{ width: `${total > 0 ? (progress / total) * 100 : 0}%` }}
-              />
-            </div>
+            <>
+              <Button onClick={handleStop} variant="destructive" size="sm" className="gap-1.5">
+                <Square size={12} /> Stop
+              </Button>
+              <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-primary h-full transition-all duration-300"
+                  style={{ width: `${total > 0 ? (progress / total) * 100 : 0}%` }}
+                />
+              </div>
+            </>
           )}
         </div>
 
         {loading && (
           <p className="text-xs text-muted-foreground mt-2">
-            You can navigate away — progress is saved.
+            You can navigate away — progress is saved. Or press Stop to cancel.
           </p>
+        )}
+
+        {stopped && !loading && (
+          <p className="text-xs text-amber mt-2">Import was stopped early.</p>
         )}
 
         {results.length > 0 && (

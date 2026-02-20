@@ -1,13 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchPlaceFromUrl } from '@/lib/placesFetch';
 import { addLead, determineSection, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-import { Plus, ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 
 export default function AddPage() {
   const [url, setUrl] = useState('');
@@ -18,8 +17,8 @@ export default function AddPage() {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const handleAdd = async () => {
-    const trimmed = url.trim();
+  const handleAdd = async (value?: string) => {
+    const trimmed = (value ?? url).trim();
     if (!trimmed) return;
 
     if (!trimmed.includes('google.com/maps') && !trimmed.includes('goo.gl') && !trimmed.includes('maps.app.goo.gl')) {
@@ -73,28 +72,40 @@ export default function AddPage() {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text').trim();
+    if (pasted && (pasted.includes('google.com/maps') || pasted.includes('goo.gl') || pasted.includes('maps.app'))) {
+      e.preventDefault();
+      setUrl(pasted);
+      // Auto-add after a tick so the UI updates
+      setTimeout(() => handleAdd(pasted), 50);
+    }
+  };
+
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto px-6 pt-12">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Add Lead</h1>
-          <p className="text-sm text-muted-foreground mt-1">Paste a Google Maps business link and press Enter</p>
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Add Lead</h1>
+          <p className="text-sm text-muted-foreground mt-1">Paste a Google Maps link — it auto-adds!</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="relative">
           <Input
             ref={inputRef}
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !loading && handleAdd()}
-            placeholder="https://www.google.com/maps/place/... or maps.app.goo.gl/..."
-            className="flex-1 h-11 text-sm bg-card border-border"
+            onPaste={handlePaste}
+            placeholder="Paste a Google Maps link here..."
+            className="h-11 text-sm bg-card border-border pr-10"
             disabled={loading}
           />
-          <Button onClick={handleAdd} disabled={loading || !url.trim()} className="h-11 px-6 font-medium gap-2">
-            {loading ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-            {loading ? 'Fetching...' : 'Add'}
-          </Button>
+          {loading && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <Loader2 size={16} className="animate-spin text-primary" />
+            </div>
+          )}
         </div>
 
         <div className="mt-3 text-xs text-muted-foreground">
@@ -113,11 +124,13 @@ export default function AddPage() {
             </div>
             <div className="mt-2 flex gap-2">
               <Link to="/unsorted">
-                <Button size="sm" variant="outline" className="h-7 text-xs">View in Unsorted</Button>
+                <button className="h-7 px-3 text-xs rounded-md border border-border text-foreground hover:bg-muted transition-colors">View in Unsorted</button>
               </Link>
               {lastAdded.maps_url && (
                 <a href={lastAdded.maps_url} target="_blank" rel="noreferrer">
-                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1"><ExternalLink size={11} />Maps</Button>
+                  <button className="h-7 px-3 text-xs rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1">
+                    <ExternalLink size={11} />Maps
+                  </button>
                 </a>
               )}
             </div>
