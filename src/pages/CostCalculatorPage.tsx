@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
+import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
 import { Calculator, TrendingUp, Search, MapPin, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
@@ -81,6 +82,7 @@ export default function CostCalculatorPage() {
         <div className="mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
             <Calculator size={20} className="text-primary" /> API Cost Calculator
+            <InfoTip text="Tracks your estimated Google Places API spending. Costs are calculated based on the number of text searches and detail lookups made across all finder runs." />
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Track your Google Places API spending across all finder runs and lead lookups.</p>
         </div>
@@ -92,7 +94,7 @@ export default function CostCalculatorPage() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><DollarSign size={11} /> Total Spent</div>
+                <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><DollarSign size={11} /> Total Spent <InfoTip text="Sum of all estimated API costs from finder runs. Based on Google's published pricing." /></div>
                 <div className="text-xl font-bold text-foreground">${totalSpent.toFixed(2)}</div>
               </div>
               <div className="bg-card border border-border rounded-lg p-4">
@@ -106,7 +108,7 @@ export default function CostCalculatorPage() {
                 <div className="text-[10px] text-muted-foreground">${(totalDetails * PRICING.placeDetails).toFixed(2)}</div>
               </div>
               <div className="bg-card border border-border rounded-lg p-4">
-                <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingUp size={11} /> Cache Savings</div>
+                <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><TrendingUp size={11} /> Cache Savings <InfoTip text="Money saved by reusing cached place details instead of making new API calls. Each cached place saves $0.017." /></div>
                 <div className="text-xl font-bold text-green-400">${estimatedSavings.toFixed(2)}</div>
                 <div className="text-[10px] text-muted-foreground">{placeCache} cached places</div>
               </div>
