@@ -49,6 +49,7 @@ export async function createFinderRun(params: {
   minRating?: number | null;
   minReviews?: number | null;
   requirePhone: boolean;
+  findGmailOnly?: boolean;
 }): Promise<FinderRun> {
   const { data, error } = await supabase.from('finder_runs').insert({
     city: params.city,
@@ -104,6 +105,7 @@ export async function runFinderSearch(runId: string, params: {
   minRating?: number;
   minReviews?: number;
   requirePhone: boolean;
+  findGmailOnly?: boolean;
 }): Promise<any> {
   const { data, error } = await supabase.functions.invoke('finder-search', {
     body: { runId, action: 'search', ...params },

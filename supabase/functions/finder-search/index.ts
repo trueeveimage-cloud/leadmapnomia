@@ -17,6 +17,7 @@ interface SearchRequest {
   minRating?: number;
   minReviews?: number;
   requirePhone: boolean;
+  findGmailOnly?: boolean;
   action: 'search' | 'details' | 'estimate';
 }
 
@@ -79,13 +80,20 @@ async function textSearchPaginated(
 
 /** Stage 2: Get Place Details (selective, cached) */
 async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<any> {
-  const fields = 'place_id,name,formatted_address,types,rating,user_ratings_total,formatted_phone_number,website,url';
+  const fields = 'place_id,name,formatted_address,types,rating,user_ratings_total,formatted_phone_number,website,url,email';
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&language=sv&key=${apiKey}`;
   const res = await fetch(url);
   const data = await res.json();
   if (data.status === 'OK') return data.result;
   console.log(`Details failed for ${placeId}: ${data.status}`);
   return null;
+}
+
+/** Check if a website domain looks like Gmail/free email (no real business domain) */
+function isGmailOnlyWebsite(website: string | null | undefined): boolean {
+  if (!website) return false;
+  const lower = website.toLowerCase();
+  return lower.includes('mail.google.com') || lower.includes('gmail.com');
 }
 
 serve(async (req) => {
@@ -106,7 +114,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: SearchRequest = await req.json();
-    const { runId, city, keywords, radius, maxPages, maxCandidates, maxDetails, minRating, minReviews, requirePhone, action } = body;
+    const { runId, city, keywords, radius, maxPages, maxCandidates, maxDetails, minRating, minReviews, requirePhone, findGmailOnly, action } = body;
 
     // Estimate mode — return counts without doing anything
     if (action === 'estimate') {
@@ -227,7 +235,8 @@ serve(async (req) => {
         // Use cached data — no API call needed
         const hasWebsite = !!(cached.website && cached.website.trim());
         const hasPhone = !!(cached.phone && cached.phone.trim());
-        const outcome = hasWebsite ? 'has_website' : 'no_website';
+        const gmailOnly = isGmailOnlyWebsite(cached.website);
+        const outcome = (!hasWebsite || (findGmailOnly && gmailOnly)) ? 'no_website' : 'has_website';
 
         await supabase.from('finder_candidates').update({
           has_website: hasWebsite,
@@ -252,7 +261,16 @@ serve(async (req) => {
 
       const hasWebsite = !!(details.website && details.website.trim());
       const hasPhone = !!(details.formatted_phone_number && details.formatted_phone_number.trim());
-      const outcome = hasWebsite ? 'has_website' : 'no_website';
+      const gmailOnly = isGmailOnlyWebsite(details.website);
+      // A business is a lead if: no website, OR (findGmailOnly enabled AND website is just gmail)
+      let outcome: string;
+      if (!hasWebsite) {
+        outcome = 'no_website';
+      } else if (findGmailOnly && gmailOnly) {
+        outcome = 'no_website'; // treat gmail-only as "no real website"
+      } else {
+        outcome = 'has_website';
+      }
       const types = (details.types || []).filter((t: string) => !['point_of_interest', 'establishment', 'food'].includes(t));
 
       // Update candidate
