@@ -8,7 +8,7 @@ import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink
+  Plus, Download, MapPin, Star, ExternalLink, Mail
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
@@ -65,7 +65,7 @@ export default function FinderRunPage() {
         rating: candidate.rating,
         reviews_count: candidate.reviews_count,
         phone: candidate.phone,
-        email: null,
+        email: candidate.email || null,
         address: candidate.address,
         website: candidate.website,
         section: 'unsorted',
@@ -102,7 +102,7 @@ export default function FinderRunPage() {
           place_id: c.place_id, maps_url: c.maps_url, name: c.name,
           category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
           rating: c.rating, reviews_count: c.reviews_count,
-          phone: c.phone, email: null, address: c.address, website: c.website,
+          phone: c.phone, email: c.email || null, address: c.address, website: c.website,
           section: 'unsorted', status: 'not_contacted',
           call_outcome_last: null, next_action_at: null, notes: null, tags: [],
         });
@@ -240,6 +240,7 @@ export default function FinderRunPage() {
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs flex-wrap">
                     {c.phone && <span className="text-green-400 flex items-center gap-0.5"><Phone size={10} /> {c.phone}</span>}
+                    {c.email && <span className="text-blue-400 flex items-center gap-0.5"><Mail size={10} /> {c.email}</span>}
                     {c.has_website === false && <span className="text-red-400 flex items-center gap-0.5"><Globe size={10} /> No website</span>}
                     {c.has_website === true && <span className="text-muted-foreground flex items-center gap-0.5"><Globe size={10} /> Has website</span>}
                     {c.address && <span className="text-muted-foreground flex items-center gap-0.5 truncate max-w-[200px]"><MapPin size={10} /> {c.address}</span>}
