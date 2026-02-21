@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
+import InfoTip from '@/components/InfoTip';
 import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, FinderRun, FinderCandidate } from '@/lib/finder';
 import { addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
@@ -139,12 +140,12 @@ export default function FinderRunPage() {
     : tab === 'skipped' ? skipped
     : candidates;
 
-  const tabs: { key: Tab; label: string; count: number; color?: string }[] = [
-    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green-400' },
-    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length },
-    { key: 'duplicates', label: 'In CRM', count: duplicates.length },
-    { key: 'skipped', label: 'Other', count: skipped.length },
-    { key: 'all', label: 'All', count: candidates.length },
+  const tabs: { key: Tab; label: string; count: number; color?: string; tip: string }[] = [
+    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green-400', tip: 'High-priority leads: businesses without a website but with a phone number. Best for cold calling.' },
+    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length, tip: 'Businesses without a website and no phone listed. Harder to contact but still potential leads.' },
+    { key: 'duplicates', label: 'In CRM', count: duplicates.length, tip: 'Businesses already in your CRM. Skipped to avoid duplicate entries.' },
+    { key: 'skipped', label: 'Other', count: skipped.length, tip: 'Businesses that have a website, were skipped due to budget limits, or failed to fetch details.' },
+    { key: 'all', label: 'All', count: candidates.length, tip: 'All candidates found in this run, regardless of outcome.' },
   ];
 
   if (loading) {
@@ -164,7 +165,10 @@ export default function FinderRunPage() {
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><ArrowLeft size={14} /></Button>
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">{run.city} — Finder Run</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-foreground truncate flex items-center gap-1.5">
+              {run.city} — Finder Run
+              <InfoTip text="This page shows all businesses found during this search run, organized by outcome. You can add leads to your CRM, export to CSV, or stop the run if it's still active." />
+            </h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
               {run.status === 'running' && <span className="flex items-center gap-1 text-primary"><Loader2 size={11} className="animate-spin" /> Running…</span>}
               {run.status === 'done' && <span className="flex items-center gap-1 text-green-400"><CheckCircle size={11} /> Done</span>}

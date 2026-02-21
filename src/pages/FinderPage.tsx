@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import InfoTip from '@/components/InfoTip';
 import { createFinderRun, fetchFinderRuns, runFinderSearch, estimateFinderCost, FinderRun } from '@/lib/finder';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
@@ -80,7 +81,6 @@ export default function FinderPage() {
       toast.success('Finder run started!');
       navigate(`/finder/runs/${run.id}`);
 
-      // Fire and forget — the edge function runs in the background
       runFinderSearch(run.id, {
         city: effectiveCity,
         keywords: keywordList,
@@ -106,16 +106,20 @@ export default function FinderPage() {
         <div className="mb-5">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
             <Search size={20} className="text-primary" /> Business Finder
+            <InfoTip text="Search Swedish cities for businesses missing a website or using only Gmail. Great for finding web design leads and email outreach prospects." />
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Search Swedish cities for businesses missing a website or using only Gmail — perfect leads for web design &amp; email outreach.
+            Find businesses without a professional website — perfect leads for outreach.
           </p>
         </div>
 
         <div className="space-y-4">
           {/* City */}
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">City</label>
+            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+              City
+              <InfoTip text="Select which Swedish city to search in. The search uses the city center as the origin point for finding businesses." />
+            </label>
             <div className="flex flex-wrap gap-2">
               {CITIES.map(c => (
                 <button
@@ -149,7 +153,10 @@ export default function FinderPage() {
 
           {/* Keywords */}
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">Niche Keywords <span className="text-muted-foreground font-normal">(one per line)</span></label>
+            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+              Niche Keywords <span className="text-muted-foreground font-normal">(one per line)</span>
+              <InfoTip text="Each keyword becomes a separate Google search like 'frisör i Göteborg'. More keywords = more businesses found, but also more API cost. Use specific business types for best results." />
+            </label>
             <Textarea
               value={keywords}
               onChange={e => setKeywords(e.target.value)}
@@ -160,44 +167,80 @@ export default function FinderPage() {
           </div>
 
           {/* Budget controls */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Radius (m)</label>
-              <Input type="number" value={radius} onChange={e => setRadius(Number(e.target.value))} className="h-9 text-sm" />
+          <div>
+            <div className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
+              Budget Controls
+              <InfoTip text="These settings control how much the search costs. Lower values = cheaper but fewer results. The two-stage pipeline first does cheap text searches, then only fetches expensive details for promising candidates." />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Pages/Query</label>
-              <Input type="number" value={maxPages} onChange={e => setMaxPages(Number(e.target.value))} min={1} max={3} className="h-9 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Candidates</label>
-              <Input type="number" value={maxCandidates} onChange={e => setMaxCandidates(Number(e.target.value))} className="h-9 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Max Detail Lookups</label>
-              <Input type="number" value={maxDetails} onChange={e => setMaxDetails(Number(e.target.value))} className="h-9 text-sm" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Radius (m)
+                  <InfoTip text="Search radius in meters from the city center. 1500m covers the core, 5000m covers suburbs. Larger radius = more results but potentially less relevant." />
+                </label>
+                <Input type="number" value={radius} onChange={e => setRadius(Number(e.target.value))} className="h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Max Pages/Query
+                  <InfoTip text="Each Google search returns ~20 results per page. More pages = more candidates found per keyword, but each extra page costs one additional API request ($0.032)." />
+                </label>
+                <Input type="number" value={maxPages} onChange={e => setMaxPages(Number(e.target.value))} min={1} max={3} className="h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Max Candidates
+                  <InfoTip text="Hard cap on total businesses collected in Stage 1 (cheap text searches). Once reached, no more searches are made. This limits your Stage 1 spending." />
+                </label>
+                <Input type="number" value={maxCandidates} onChange={e => setMaxCandidates(Number(e.target.value))} className="h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Max Detail Lookups
+                  <InfoTip text="Hard cap on Stage 2 detail API calls ($0.017 each). Only candidates not already cached get a detail lookup. This is your main cost control — details reveal if a business has a website, phone, or email." />
+                </label>
+                <Input type="number" value={maxDetails} onChange={e => setMaxDetails(Number(e.target.value))} className="h-9 text-sm" />
+              </div>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Rating</label>
-              <Input type="number" value={minRating} onChange={e => setMinRating(e.target.value)} placeholder="e.g. 3.5" step="0.5" min="0" max="5" className="h-9 text-sm" />
+          <div>
+            <div className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
+              Quality Filters
+              <InfoTip text="Filter out low-quality businesses before spending on detail lookups. Applied during Stage 1 so you don't waste detail calls on businesses that don't meet your criteria." />
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Min Reviews</label>
-              <Input type="number" value={minReviews} onChange={e => setMinReviews(e.target.value)} placeholder="e.g. 5" className="h-9 text-sm" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Min Rating
+                  <InfoTip text="Only include businesses with at least this Google rating (0–5 stars). Higher rating = more established businesses, but fewer results." />
+                </label>
+                <Input type="number" value={minRating} onChange={e => setMinRating(e.target.value)} placeholder="e.g. 3.5" step="0.5" min="0" max="5" className="h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Min Reviews
+                  <InfoTip text="Only include businesses with at least this many Google reviews. More reviews = more active/established business, better lead quality." />
+                </label>
+                <Input type="number" value={minReviews} onChange={e => setMinReviews(e.target.value)} placeholder="e.g. 5" className="h-9 text-sm" />
+              </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between py-1">
-            <label className="text-sm text-foreground">Only include places with phone</label>
+            <div className="flex items-center gap-1.5">
+              <label className="text-sm text-foreground">Only include places with phone</label>
+              <InfoTip text="When enabled, businesses without a phone number listed on Google are skipped. Useful if you plan to cold-call leads." />
+            </div>
             <Switch checked={requirePhone} onCheckedChange={setRequirePhone} />
           </div>
           <div className="flex items-center justify-between py-1">
             <div>
-              <label className="text-sm text-foreground">Also find Gmail-only businesses</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-sm text-foreground">Also find Gmail-only businesses</label>
+                <InfoTip text="Detects businesses whose 'website' is actually just a Gmail link (mail.google.com / gmail.com). These businesses technically have no real website — great leads for web design services." />
+              </div>
               <p className="text-xs text-muted-foreground">Detect businesses using @gmail.com instead of a custom domain email</p>
             </div>
             <Switch checked={findGmailOnly} onCheckedChange={setFindGmailOnly} />
@@ -227,6 +270,7 @@ export default function FinderPage() {
           <div className="mt-8">
             <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
               <History size={14} /> Previous Runs
+              <InfoTip text="History of all your finder searches. Click any run to see its results, add leads to CRM, or export to CSV." />
             </h2>
             <div className="space-y-2">
               {runs.map(run => (
