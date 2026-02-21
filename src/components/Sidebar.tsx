@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useCRM } from '@/context/CRMContext';
 import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
-  Calendar, Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search
+  Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -133,7 +133,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     { label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted },
     { label: 'Contacted', path: '/status/contacted', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(213 94% 58%)' }} />, badge: counts.contacted },
     { label: 'Answered', path: '/status/answered', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.answered },
-    { label: 'Callbacks', path: '/callbacks', icon: <Calendar size={15} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks, color: counts.callbacksDue > 0 ? 'hsl(38 95% 55%)' : undefined },
+    { label: 'Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks, color: counts.callbacksDue > 0 ? 'hsl(38 95% 55%)' : undefined },
     { label: 'Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
     { label: 'Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
     { label: 'Unsure', path: '/status/unsure', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.unsure },
@@ -162,6 +162,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
         <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+        <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
       </div>
 
       {/* Total count */}

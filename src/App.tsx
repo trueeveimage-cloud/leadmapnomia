@@ -11,6 +11,7 @@ import CallbacksPage from "./pages/CallbacksPage";
 import SettingsPage from "./pages/SettingsPage";
 import FinderPage from "./pages/FinderPage";
 import FinderRunPage from "./pages/FinderRunPage";
+import CostCalculatorPage from "./pages/CostCalculatorPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/status/closed-lost" element={<SectionPage status="closed_lost" title="Closed / Lost" />} />
             <Route path="/finder" element={<FinderPage />} />
             <Route path="/finder/runs/:id" element={<FinderRunPage />} />
+            <Route path="/costs" element={<CostCalculatorPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

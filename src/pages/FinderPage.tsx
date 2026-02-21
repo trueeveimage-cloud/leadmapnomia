@@ -35,6 +35,7 @@ export default function FinderPage() {
   const [minRating, setMinRating] = useState('');
   const [minReviews, setMinReviews] = useState('');
   const [requirePhone, setRequirePhone] = useState(false);
+  const [findGmailOnly, setFindGmailOnly] = useState(false);
   const [running, setRunning] = useState(false);
   const [estimate, setEstimate] = useState<string | null>(null);
   const [runs, setRuns] = useState<FinderRun[]>([]);
@@ -73,6 +74,7 @@ export default function FinderPage() {
         minRating: minRating ? parseFloat(minRating) : null,
         minReviews: minReviews ? parseInt(minReviews) : null,
         requirePhone,
+        findGmailOnly,
       });
 
       toast.success('Finder run started!');
@@ -89,6 +91,7 @@ export default function FinderPage() {
         minRating: minRating ? parseFloat(minRating) : undefined,
         minReviews: minReviews ? parseInt(minReviews) : undefined,
         requirePhone,
+        findGmailOnly,
       }).catch(e => console.error('Finder search error:', e));
     } catch (e: any) {
       toast.error(e.message);
@@ -102,10 +105,10 @@ export default function FinderPage() {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6 pb-10">
         <div className="mb-5">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
-            <Search size={20} className="text-primary" /> Find Businesses Without Website
+            <Search size={20} className="text-primary" /> Business Finder
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Search Swedish cities for businesses missing a website — perfect leads for web design.
+            Search Swedish cities for businesses missing a website or using only Gmail — perfect leads for web design &amp; email outreach.
           </p>
         </div>
 
@@ -191,6 +194,13 @@ export default function FinderPage() {
           <div className="flex items-center justify-between py-1">
             <label className="text-sm text-foreground">Only include places with phone</label>
             <Switch checked={requirePhone} onCheckedChange={setRequirePhone} />
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <label className="text-sm text-foreground">Also find Gmail-only businesses</label>
+              <p className="text-xs text-muted-foreground">Detect businesses using @gmail.com instead of a custom domain email</p>
+            </div>
+            <Switch checked={findGmailOnly} onCheckedChange={setFindGmailOnly} />
           </div>
 
           {/* Estimate */}
