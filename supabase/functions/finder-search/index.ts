@@ -233,7 +233,7 @@ serve(async (req) => {
 
       if (cached && new Date(cached.fetched_at).getTime() > Date.now() - cacheTtlMs) {
         // Use cached data — no API call needed
-        const hasWebsite = !!(cached.website && cached.website.trim());
+      const hasWebsite = !!(cached.website && cached.website.trim());
         const hasPhone = !!(cached.phone && cached.phone.trim());
         const gmailOnly = isGmailOnlyWebsite(cached.website);
         const outcome = (!hasWebsite || (findGmailOnly && gmailOnly)) ? 'no_website' : 'has_website';
@@ -242,6 +242,7 @@ serve(async (req) => {
           has_website: hasWebsite,
           has_phone: hasPhone,
           phone: cached.phone,
+          email: cached.email || null,
           website: cached.website,
           outcome,
           last_fetched_at: cached.fetched_at,
@@ -273,11 +274,14 @@ serve(async (req) => {
       }
       const types = (details.types || []).filter((t: string) => !['point_of_interest', 'establishment', 'food'].includes(t));
 
+      const detailEmail = details.email || null;
+
       // Update candidate
       await supabase.from('finder_candidates').update({
         has_website: hasWebsite,
         has_phone: hasPhone,
         phone: details.formatted_phone_number || null,
+        email: detailEmail,
         website: details.website || null,
         maps_url: details.url || candidate.maps_url,
         outcome,
@@ -294,6 +298,7 @@ serve(async (req) => {
         name: details.name,
         address: details.formatted_address || null,
         phone: details.formatted_phone_number || null,
+        email: detailEmail,
         website: details.website || null,
         rating: details.rating || null,
         reviews_count: details.user_ratings_total || 0,

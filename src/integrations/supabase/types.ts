@@ -51,6 +51,7 @@ export type Database = {
           address: string | null
           category: string | null
           created_at: string
+          email: string | null
           has_phone: boolean | null
           has_website: boolean | null
           id: string
@@ -70,6 +71,7 @@ export type Database = {
           address?: string | null
           category?: string | null
           created_at?: string
+          email?: string | null
           has_phone?: boolean | null
           has_website?: boolean | null
           id?: string
@@ -89,6 +91,7 @@ export type Database = {
           address?: string | null
           category?: string | null
           created_at?: string
+          email?: string | null
           has_phone?: boolean | null
           has_website?: boolean | null
           id?: string
@@ -241,6 +244,7 @@ export type Database = {
         Row: {
           address: string | null
           category: string | null
+          email: string | null
           fetched_at: string
           maps_url: string | null
           name: string
@@ -254,6 +258,7 @@ export type Database = {
         Insert: {
           address?: string | null
           category?: string | null
+          email?: string | null
           fetched_at?: string
           maps_url?: string | null
           name: string
@@ -267,6 +272,7 @@ export type Database = {
         Update: {
           address?: string | null
           category?: string | null
+          email?: string | null
           fetched_at?: string
           maps_url?: string | null
           name?: string

@@ -30,6 +30,7 @@ export interface FinderCandidate {
   has_phone: boolean | null;
   has_website: boolean | null;
   phone: string | null;
+  email: string | null;
   website: string | null;
   maps_url: string | null;
   category: string | null;
@@ -128,9 +129,9 @@ export async function estimateFinderCost(params: {
 }
 
 export function candidatesToCsv(candidates: FinderCandidate[]): string {
-  const headers = ['Name', 'Address', 'Phone', 'Website', 'Rating', 'Reviews', 'Category', 'Outcome', 'Maps URL'];
+  const headers = ['Name', 'Address', 'Phone', 'Email', 'Website', 'Rating', 'Reviews', 'Category', 'Outcome', 'Maps URL'];
   const rows = candidates.map(c => [
-    c.name, c.address || '', c.phone || '', c.website || '',
+    c.name, c.address || '', c.phone || '', c.email || '', c.website || '',
     c.rating?.toString() || '', c.reviews_count?.toString() || '',
     c.category || '', c.outcome, c.maps_url || ''
   ]);
