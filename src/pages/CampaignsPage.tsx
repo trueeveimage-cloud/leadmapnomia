@@ -5,7 +5,7 @@ import { fetchCampaigns, Campaign, deleteCampaign } from '@/lib/campaigns';
 import { Link } from 'react-router-dom';
 import { Plus, Play, Pause, Copy, Trash2, Megaphone, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { InfoTip } from '@/components/InfoTip';
+import InfoTip from '@/components/InfoTip';
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);

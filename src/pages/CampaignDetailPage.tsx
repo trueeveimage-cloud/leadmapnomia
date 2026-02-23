@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
 import { Play, Pause, Zap, Download, ArrowLeft, Send, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { InfoTip } from '@/components/InfoTip';
+import InfoTip from '@/components/InfoTip';
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();

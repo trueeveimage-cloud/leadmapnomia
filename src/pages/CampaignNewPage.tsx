@@ -7,7 +7,7 @@ import { createCampaign, countEligibleLeads, AudienceFilter, renderTemplate } fr
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import { InfoTip } from '@/components/InfoTip';
+import InfoTip from '@/components/InfoTip';
 
 const SECTIONS = [
   { value: 'phone', label: 'Has Phone' },

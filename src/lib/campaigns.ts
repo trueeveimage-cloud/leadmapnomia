@@ -48,13 +48,21 @@ export async function fetchCampaign(id: string): Promise<Campaign> {
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
-  const { data, error } = await supabase.from('campaigns').insert(campaign).select().single();
+  const payload = {
+    ...campaign,
+    audience_filter: campaign.audience_filter ? JSON.parse(JSON.stringify(campaign.audience_filter)) : {},
+    variables_used: campaign.variables_used ? JSON.parse(JSON.stringify(campaign.variables_used)) : [],
+  };
+  const { data, error } = await supabase.from('campaigns').insert(payload as any).select().single();
   if (error) throw error;
   return data as Campaign;
 }
 
 export async function updateCampaign(id: string, updates: Partial<Campaign>): Promise<Campaign> {
-  const { data, error } = await supabase.from('campaigns').update(updates).eq('id', id).select().single();
+  const payload: any = { ...updates };
+  if (updates.audience_filter) payload.audience_filter = JSON.parse(JSON.stringify(updates.audience_filter));
+  if (updates.variables_used) payload.variables_used = JSON.parse(JSON.stringify(updates.variables_used));
+  const { data, error } = await supabase.from('campaigns').update(payload).eq('id', id).select().single();
   if (error) throw error;
   return data as Campaign;
 }

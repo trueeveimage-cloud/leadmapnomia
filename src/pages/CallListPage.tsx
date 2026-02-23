@@ -6,7 +6,7 @@ import { useCRM } from '@/context/CRMContext';
 import { Phone, PhoneCall, Check, X, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { InfoTip } from '@/components/InfoTip';
+import InfoTip from '@/components/InfoTip';
 
 const CALL_OUTCOMES = [
   { value: 'answered', label: 'Answered', status: 'answered' },

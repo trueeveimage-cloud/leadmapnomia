@@ -6,7 +6,7 @@ import { useCRM } from '@/context/CRMContext';
 import { Inbox, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { InfoTip } from '@/components/InfoTip';
+import InfoTip from '@/components/InfoTip';
 
 const QUICK_ACTIONS = [
   { status: 'interested', label: 'Interested', color: 'bg-green/15 text-green border-green/30' },
