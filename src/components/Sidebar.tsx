@@ -130,6 +130,7 @@ function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['c
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { counts } = useCRM();
+  const { signOut } = useAuth();
 
   const statusPages: NavItem[] = [
     { label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted },
@@ -181,11 +182,24 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         <NavGroup label="Status">
           {statusPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
+
+        <NavGroup label="Outreach">
+          <NavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
+          <NavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+          <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+        </NavGroup>
       </div>
 
-      {/* Settings */}
-      <div className="px-3 py-3 border-t border-sidebar-border">
+      {/* Settings + Sign out */}
+      <div className="px-3 py-3 border-t border-sidebar-border space-y-0.5">
         <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
+        <button
+          onClick={signOut}
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-100 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground w-full"
+        >
+          <LogOut size={15} className="text-muted-foreground" />
+          <span>Sign out</span>
+        </button>
       </div>
     </aside>
   );
