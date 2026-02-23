@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useCRM } from '@/context/CRMContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
-  Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator
+  Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
+  Megaphone, MessageCircle, PhoneCall, LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
