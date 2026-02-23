@@ -110,7 +110,7 @@ export async function fetchLeadCounts() {
   };
 }
 
-export async function addLead(lead: Omit<Lead, 'id' | 'created_at' | 'updated_at'>): Promise<{ lead?: Lead; duplicate?: Lead; error?: string }> {
+export async function addLead(lead: Partial<Omit<Lead, 'id' | 'created_at' | 'updated_at'>> & { name: string }): Promise<{ lead?: Lead; duplicate?: Lead; error?: string }> {
   // Check for duplicate by place_id
   if (lead.place_id) {
     const { data: existing } = await supabase.from('leads').select('*').eq('place_id', lead.place_id).maybeSingle();
