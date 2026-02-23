@@ -36,6 +36,18 @@ export interface Lead {
   tags: string[];
   created_at: string;
   updated_at: string;
+  // Outreach fields
+  phone_e164: string | null;
+  outreach_opt_out: boolean;
+  last_outbound_at: string | null;
+  last_inbound_at: string | null;
+  has_replied: boolean;
+  needs_call: boolean;
+  call_after_at: string | null;
+  outreach_stage: string;
+  last_message_preview: string | null;
+  last_message_direction: string | null;
+  last_message_status: string | null;
 }
 
 export interface Activity {
