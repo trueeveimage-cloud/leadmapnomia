@@ -1,1 +1,13 @@
 project_id = "olfucdwmegdnczwpgaeg"
+
+[functions.send-campaign-batch]
+verify_jwt = false
+
+[functions.twilio-inbound]
+verify_jwt = false
+
+[functions.twilio-status]
+verify_jwt = false
+
+[functions.check-no-reply]
+verify_jwt = false

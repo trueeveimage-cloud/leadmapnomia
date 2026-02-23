@@ -46,6 +46,89 @@ export type Database = {
           },
         ]
       }
+      campaign_runs: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          notes: string | null
+          started_at: string
+          stats: Json
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          started_at?: string
+          stats?: Json
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          started_at?: string
+          stats?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_runs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          audience_filter: Json
+          batch_cap: number
+          call_after_hours: number
+          cooldown_days: number
+          created_at: string
+          daily_cap: number
+          id: string
+          name: string
+          status: string
+          template_text: string
+          updated_at: string
+          variables_used: Json | null
+        }
+        Insert: {
+          audience_filter?: Json
+          batch_cap?: number
+          call_after_hours?: number
+          cooldown_days?: number
+          created_at?: string
+          daily_cap?: number
+          id?: string
+          name: string
+          status?: string
+          template_text?: string
+          updated_at?: string
+          variables_used?: Json | null
+        }
+        Update: {
+          audience_filter?: Json
+          batch_cap?: number
+          call_after_hours?: number
+          cooldown_days?: number
+          created_at?: string
+          daily_cap?: number
+          id?: string
+          name?: string
+          status?: string
+          template_text?: string
+          updated_at?: string
+          variables_used?: Json | null
+        }
+        Relationships: []
+      }
       finder_candidates: {
         Row: {
           address: string | null
@@ -174,17 +257,28 @@ export type Database = {
       leads: {
         Row: {
           address: string | null
+          call_after_at: string | null
           call_outcome_last: string | null
           category: string | null
           created_at: string
           email: string | null
+          has_replied: boolean
           id: string
+          last_inbound_at: string | null
+          last_message_direction: string | null
+          last_message_preview: string | null
+          last_message_status: string | null
+          last_outbound_at: string | null
           maps_url: string | null
           name: string
+          needs_call: boolean
           next_action_at: string | null
           niche_label: string | null
           notes: string | null
+          outreach_opt_out: boolean
+          outreach_stage: string
           phone: string | null
+          phone_e164: string | null
           place_id: string | null
           rating: number | null
           reviews_count: number | null
@@ -196,17 +290,28 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          call_after_at?: string | null
           call_outcome_last?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
+          has_replied?: boolean
           id?: string
+          last_inbound_at?: string | null
+          last_message_direction?: string | null
+          last_message_preview?: string | null
+          last_message_status?: string | null
+          last_outbound_at?: string | null
           maps_url?: string | null
           name: string
+          needs_call?: boolean
           next_action_at?: string | null
           niche_label?: string | null
           notes?: string | null
+          outreach_opt_out?: boolean
+          outreach_stage?: string
           phone?: string | null
+          phone_e164?: string | null
           place_id?: string | null
           rating?: number | null
           reviews_count?: number | null
@@ -218,17 +323,28 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          call_after_at?: string | null
           call_outcome_last?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
+          has_replied?: boolean
           id?: string
+          last_inbound_at?: string | null
+          last_message_direction?: string | null
+          last_message_preview?: string | null
+          last_message_status?: string | null
+          last_outbound_at?: string | null
           maps_url?: string | null
           name?: string
+          needs_call?: boolean
           next_action_at?: string | null
           niche_label?: string | null
           notes?: string | null
+          outreach_opt_out?: boolean
+          outreach_stage?: string
           phone?: string | null
+          phone_e164?: string | null
           place_id?: string | null
           rating?: number | null
           reviews_count?: number | null
@@ -239,6 +355,65 @@ export type Database = {
           website?: string | null
         }
         Relationships: []
+      }
+      message_logs: {
+        Row: {
+          body: string | null
+          campaign_run_id: string | null
+          channel: string
+          created_at: string
+          direction: string
+          error_code: string | null
+          error_message: string | null
+          from_number: string | null
+          id: string
+          lead_id: string
+          provider: string
+          provider_message_sid: string | null
+          status: string
+          to_number: string | null
+        }
+        Insert: {
+          body?: string | null
+          campaign_run_id?: string | null
+          channel?: string
+          created_at?: string
+          direction: string
+          error_code?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id: string
+          provider?: string
+          provider_message_sid?: string | null
+          status?: string
+          to_number?: string | null
+        }
+        Update: {
+          body?: string | null
+          campaign_run_id?: string | null
+          channel?: string
+          created_at?: string
+          direction?: string
+          error_code?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id?: string
+          provider?: string
+          provider_message_sid?: string | null
+          status?: string
+          to_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       place_cache: {
         Row: {
@@ -282,6 +457,30 @@ export type Database = {
           reviews_count?: number | null
           types?: string[] | null
           website?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
