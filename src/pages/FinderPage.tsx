@@ -14,8 +14,9 @@ import { getSetting, setSetting, addLead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus } from 'lucide-react';
+import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map } from 'lucide-react';
 import { format } from 'date-fns';
+import CityPickerMap from '@/components/CityPickerMap';
 
 const DEFAULT_KEYWORDS = `frisör
 bilverkstad
