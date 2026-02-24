@@ -387,15 +387,31 @@ export default function FinderPage() {
               )}
             </div>
 
-            {/* Map picker toggle */}
-            <button
-              onClick={() => setMapOpen(o => !o)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1.5"
-            >
-              <Map size={12} />
-              {mapOpen ? 'Hide map' : 'Pick cities from map'}
-              <ChevronDown size={10} className={`transition-transform ${mapOpen ? 'rotate-180' : ''}`} />
-            </button>
+            {/* Select all unsearched + Map picker */}
+            <div className="flex items-center gap-2 mt-1.5">
+              <button
+                onClick={() => {
+                  const selectedNames = new Set(selectedCities.map(c => c.name));
+                  const unsearched = SWEDEN_CITIES.filter(c => !cityStats[c.name] && !selectedNames.has(c.name));
+                  if (unsearched.length === 0) { toast.info('All cities have been searched!'); return; }
+                  setSelectedCities(prev => [...prev, ...unsearched]);
+                  toast.success(`Added ${unsearched.length} unsearched cities`);
+                }}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                <Target size={12} />
+                Select all unsearched ({SWEDEN_CITIES.filter(c => !cityStats[c.name] && !selectedCities.some(s => s.name === c.name)).length})
+              </button>
+              <span className="text-muted-foreground/30">·</span>
+              <button
+                onClick={() => setMapOpen(o => !o)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Map size={12} />
+                {mapOpen ? 'Hide map' : 'Pick cities from map'}
+                <ChevronDown size={10} className={`transition-transform ${mapOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
 
             {mapOpen && (
               <div className="h-[350px] mt-2 rounded-lg overflow-hidden border border-border">

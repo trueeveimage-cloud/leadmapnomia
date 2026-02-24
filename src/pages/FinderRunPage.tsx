@@ -3,13 +3,14 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
 import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
-import { addLead, determineSection } from '@/lib/supabase';
+import { addLead, determineSection, updateLead } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw, Play
+  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw, Play, Search
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'unfetched' | 'duplicates' | 'skipped' | 'all';
@@ -27,6 +28,8 @@ export default function FinderRunPage() {
   const [showDiag, setShowDiag] = useState(false);
   const [refetching, setRefetching] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [scrapingEmails, setScrapingEmails] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState<{ done: number; total: number; found: number } | null>(null);
   const autoAddedRef = React.useRef(false);
   const autoResumeRef = React.useRef(false);
 
@@ -148,6 +151,44 @@ export default function FinderRunPage() {
       handleResume();
     }
   }, [run?.status, run?.updated_at, candidates.length]);
+
+  // Scrape emails from leads that have websites but no email
+  const handleScrapeEmails = async () => {
+    const { data: leads } = await supabase.from('leads').select('id, website, email').not('website', 'is', null);
+    const leadsWithWebsite = (leads || []).filter(l => l.website && !l.email);
+    if (leadsWithWebsite.length === 0) {
+      toast.info('No leads with websites missing emails');
+      return;
+    }
+    setScrapingEmails(true);
+    setScrapeProgress({ done: 0, total: leadsWithWebsite.length, found: 0 });
+    let totalFound = 0;
+    for (let i = 0; i < leadsWithWebsite.length; i += 20) {
+      const batch = leadsWithWebsite.slice(i, i + 20).map(l => ({ leadId: l.id, website: l.website! }));
+      try {
+        const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
+        if (!error && data?.results) {
+          for (const r of data.results) {
+            if (r.emails && r.emails.length > 0) {
+              const email = r.emails[0];
+              const { data: lead } = await supabase.from('leads').select('phone, email').eq('id', r.leadId).single();
+              const newSection = determineSection({ ...lead, email } as any);
+              await supabase.from('leads').update({ email, section: newSection }).eq('id', r.leadId);
+              totalFound++;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Scrape batch error:', e);
+      }
+      setScrapeProgress({ done: Math.min(i + 20, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
+    }
+    setScrapingEmails(false);
+    setScrapeProgress(null);
+    refreshCounts();
+    if (totalFound > 0) toast.success(`Found ${totalFound} emails from websites!`);
+    else toast.info('No emails found on any websites');
+  };
 
   const addToCrm = async (candidate: FinderCandidate) => {
     setAddingIds(s => new Set(s).add(candidate.id));
@@ -387,6 +428,19 @@ export default function FinderRunPage() {
             )}
           </div>
         )}
+
+        {/* Email scraping */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          <Button size="sm" variant="outline" onClick={handleScrapeEmails} disabled={scrapingEmails} className="gap-1.5">
+            {scrapingEmails ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+            {scrapingEmails ? `Scraping emails… ${scrapeProgress?.found || 0} found` : 'Scrape Emails from Websites'}
+          </Button>
+          {scrapeProgress && (
+            <span className="text-xs text-muted-foreground self-center">
+              {scrapeProgress.done}/{scrapeProgress.total} checked
+            </span>
+          )}
+        </div>
 
         {/* Actions */}
         {tab === 'no_website_phone' && noWebsitePhone.length > 0 && (
