@@ -64,13 +64,13 @@ export default function FinderPage() {
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<FinderRun[]>([]);
 
-  // Load saved defaults
+  // Load saved defaults + poll active runs
   useEffect(() => {
-    fetchFinderRuns().then(setRuns).catch(() => {});
+    const loadRuns = () => fetchFinderRuns().then(setRuns).catch(() => {});
+    loadRuns();
     getSetting('finder_default_keywords').then(v => { if (v) setKeywords(v); });
     getSetting('finder_default_city').then(v => {
       if (v) {
-        // Support legacy single-city saved value
         const city = findCity(v);
         if (city) setSelectedCities([city]);
       }
@@ -78,7 +78,57 @@ export default function FinderPage() {
     getSetting('finder_default_leads_target').then(v => {
       if (v) setLeadsTarget(parseInt(v));
     });
+    // Poll every 4s to pick up run completions
+    const interval = setInterval(loadRuns, 4000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Auto-add candidates to CRM when a run finishes
+  const autoAddForRun = useCallback(async (run: FinderRun) => {
+    if (autoAddedRunsRef.current.has(run.id)) return;
+    autoAddedRunsRef.current.add(run.id);
+    try {
+      const candidates = await fetchFinderCandidates(run.id);
+      const qualifying = candidates.filter(c =>
+        c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website'
+      );
+      if (qualifying.length === 0) {
+        setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: 0, done: true } }));
+        return;
+      }
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: qualifying.length, done: false } }));
+      let added = 0;
+      for (const c of qualifying) {
+        try {
+          const { lead, duplicate, error } = await addLead({
+            place_id: c.place_id, maps_url: c.maps_url, name: c.name,
+            category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
+            rating: c.rating, reviews_count: c.reviews_count,
+            phone: c.phone, email: c.email || null, address: c.address, website: c.website,
+            section: 'unsorted', status: 'not_contacted',
+            call_outcome_last: null, next_action_at: null, notes: null, tags: [],
+          });
+          if (!duplicate && !error) added++;
+        } catch {}
+        setAutoAddProgress(p => ({ ...p, [run.id]: { added, total: qualifying.length, done: false } }));
+      }
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added, total: qualifying.length, done: true } }));
+      refreshCounts();
+      if (added > 0) toast.success(`${run.city}: auto-added ${added} leads to CRM`);
+    } catch (e: any) {
+      console.error('Auto-add error:', e);
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: 0, done: true } }));
+    }
+  }, [refreshCounts]);
+
+  // Trigger auto-add when runs transition to done/stopped
+  useEffect(() => {
+    for (const run of runs) {
+      if ((run.status === 'done' || run.status === 'stopped') && !autoAddedRunsRef.current.has(run.id)) {
+        autoAddForRun(run);
+      }
+    }
+  }, [runs, autoAddForRun]);
 
   const keywordList = keywords.split('\n').map(k => k.trim()).filter(k => k.length > 0);
 
