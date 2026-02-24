@@ -62,6 +62,7 @@ export default function FinderPage() {
 
   // UI state
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<FinderRun[]>([]);
 
