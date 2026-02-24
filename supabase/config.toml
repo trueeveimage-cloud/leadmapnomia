@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.check-no-reply]
 verify_jwt = false
+
+[functions.fetch-place]
+verify_jwt = false
