@@ -54,6 +54,21 @@ export default function FinderRunPage() {
     setTimeout(load, 1000);
   };
 
+  const handleRefetch = async () => {
+    if (!id) return;
+    setRefetching(true);
+    try {
+      toast.info('Re-fetching failed candidates… this may take a few minutes.');
+      const result = await refetchFailedCandidates(id);
+      toast.success(`Re-fetched ${result?.refetched || 0} candidates. Check updated tabs.`);
+      await load();
+    } catch (e: any) {
+      toast.error(`Refetch failed: ${e.message}`);
+    } finally {
+      setRefetching(false);
+    }
+  };
+
   const addToCrm = async (candidate: FinderCandidate) => {
     setAddingIds(s => new Set(s).add(candidate.id));
     try {
