@@ -254,16 +254,89 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          file_url: string
+          id: string
+          lead_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url: string
+          id?: string
+          lead_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          file_url?: string
+          id?: string
+          lead_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_attachments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_links: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          lead_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          lead_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          lead_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_links_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           address: string | null
           call_after_at: string | null
+          call_attempts: number
           call_outcome_last: string | null
           category: string | null
           created_at: string
           email: string | null
           has_replied: boolean
           id: string
+          last_contact_method: string | null
+          last_contacted_at: string | null
           last_inbound_at: string | null
           last_message_direction: string | null
           last_message_preview: string | null
@@ -291,12 +364,15 @@ export type Database = {
         Insert: {
           address?: string | null
           call_after_at?: string | null
+          call_attempts?: number
           call_outcome_last?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
           has_replied?: boolean
           id?: string
+          last_contact_method?: string | null
+          last_contacted_at?: string | null
           last_inbound_at?: string | null
           last_message_direction?: string | null
           last_message_preview?: string | null
@@ -324,12 +400,15 @@ export type Database = {
         Update: {
           address?: string | null
           call_after_at?: string | null
+          call_attempts?: number
           call_outcome_last?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
           has_replied?: boolean
           id?: string
+          last_contact_method?: string | null
+          last_contacted_at?: string | null
           last_inbound_at?: string | null
           last_message_direction?: string | null
           last_message_preview?: string | null
