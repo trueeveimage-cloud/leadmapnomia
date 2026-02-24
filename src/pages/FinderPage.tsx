@@ -123,7 +123,6 @@ export default function FinderPage() {
       setAutoAddProgress(p => ({ ...p, [run.id]: { added, duplicated, total: qualifying.length, done: true } }));
       refreshCounts();
       if (added > 0) toast.success(`${run.city}: added ${added} new leads`);
-      else if (duplicated > 0) toast.info(`${run.city}: ${duplicated} leads already in CRM`);
     } catch (e: any) {
       console.error('Auto-add error:', e);
       setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, duplicated: 0, total: 0, done: true } }));
@@ -135,8 +134,9 @@ export default function FinderPage() {
 
   // Trigger auto-add only for runs that finish AFTER the page loaded
   useEffect(() => {
-    // On first load, snapshot which runs are already done — skip those
+    // Wait until we actually have fetched runs before taking snapshot
     if (initialDoneRunsRef.current === null) {
+      if (runs.length === 0) return;
       initialDoneRunsRef.current = new Set(
         runs.filter(r => r.status === 'done' || r.status === 'stopped').map(r => r.id)
       );
