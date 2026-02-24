@@ -130,10 +130,22 @@ export default function FinderPage() {
     }
   }, [refreshCounts]);
 
-  // Trigger auto-add when runs transition to done/stopped
+  // Track run IDs that were already done when page first loaded
+  const initialDoneRunsRef = useRef<Set<string> | null>(null);
+
+  // Trigger auto-add only for runs that finish AFTER the page loaded
   useEffect(() => {
+    // On first load, snapshot which runs are already done — skip those
+    if (initialDoneRunsRef.current === null) {
+      initialDoneRunsRef.current = new Set(
+        runs.filter(r => r.status === 'done' || r.status === 'stopped').map(r => r.id)
+      );
+      return;
+    }
     for (const run of runs) {
-      if ((run.status === 'done' || run.status === 'stopped') && !autoAddedRunsRef.current.has(run.id)) {
+      if ((run.status === 'done' || run.status === 'stopped')
+        && !autoAddedRunsRef.current.has(run.id)
+        && !initialDoneRunsRef.current.has(run.id)) {
         autoAddForRun(run);
       }
     }
