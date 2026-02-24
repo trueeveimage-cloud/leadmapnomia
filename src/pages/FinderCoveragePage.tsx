@@ -51,18 +51,30 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
       }
     });
 
+    // Group runs by city for aggregate stats
+    const cityRunMap = new Map<string, { runs: number; candidates: number; noWebPhone: number; noWebEmail: number }>();
+    for (const run of runs) {
+      const key = run.city.toLowerCase();
+      const existing = cityRunMap.get(key) || { runs: 0, candidates: 0, noWebPhone: 0, noWebEmail: 0 };
+      existing.runs++;
+      existing.candidates += (run.stats as any)?.candidatesFound || 0;
+      existing.noWebPhone += (run.stats as any)?.noWebsiteWithPhone || 0;
+      existing.noWebEmail += (run.stats as any)?.noWebsiteEmailOnly || 0;
+      cityRunMap.set(key, existing);
+    }
+
     // Unscanned city dots
     SWEDEN_CITIES
-      .filter(c => !runs.some(r => r.city.toLowerCase() === c.name.toLowerCase()))
+      .filter(c => !cityRunMap.has(c.name.toLowerCase()))
       .forEach(city => {
         L.circleMarker([city.lat, city.lng], {
-          radius: 4,
-          color: 'hsl(215, 15%, 50%)',
-          fillColor: 'hsl(215, 15%, 50%)',
-          fillOpacity: 0.3,
-          weight: 1,
+          radius: 5,
+          color: 'hsl(0, 0%, 40%)',
+          fillColor: 'hsl(0, 0%, 30%)',
+          fillOpacity: 0.5,
+          weight: 1.5,
         })
-          .bindPopup(`<strong>${city.name}</strong><br/>Not yet scanned`)
+          .bindTooltip(`<strong>${city.name}</strong><br/><span style="color:#f87171;">Not yet scanned</span><br/>Pop: ${city.population.toLocaleString()}`, { direction: 'top' })
           .addTo(map);
       });
 
