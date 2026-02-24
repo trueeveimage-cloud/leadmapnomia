@@ -1,21 +1,97 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { getSetting, setSetting } from '@/lib/supabase';
-import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search } from 'lucide-react';
+import { getSetting, setSetting, updateLead, determineSection } from '@/lib/supabase';
+import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import InfoTip from '@/components/InfoTip';
+import { useCRM } from '@/context/CRMContext';
 
 export default function SettingsPage() {
+  const { refreshCounts } = useCRM();
   const { user } = useAuth();
   const [gmailRule, setGmailRule] = React.useState('gmail');
   const [saved, setSaved] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+
+  // Bulk email scrape state
+  const [scraping, setScraping] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState({ done: 0, total: 0, found: 0 });
+  const scrapeStopRef = useRef(false);
+
+  const handleBulkScrapeEmails = async () => {
+    scrapeStopRef.current = false;
+    setScraping(true);
+    setScrapeProgress({ done: 0, total: 0, found: 0 });
+
+    try {
+      // Fetch all leads with website but no email
+      const allLeads: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id, website, phone, section')
+          .not('website', 'is', null)
+          .neq('website', '')
+          .or('email.is.null,email.eq.')
+          .range(from, from + 999);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allLeads.push(...data);
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+
+      if (allLeads.length === 0) {
+        toast.info('No leads need email scraping');
+        setScraping(false);
+        return;
+      }
+
+      setScrapeProgress({ done: 0, total: allLeads.length, found: 0 });
+      let totalFound = 0;
+
+      for (let i = 0; i < allLeads.length; i += 5) {
+        if (scrapeStopRef.current) break;
+        const batch = allLeads.slice(i, i + 5).map((l: any) => ({ leadId: l.id, website: l.website }));
+
+        try {
+          const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
+          if (data?.success && data.results) {
+            for (const r of data.results) {
+              if (r.emails && r.emails.length > 0) {
+                const email = r.emails[0];
+                const lead = allLeads.find((l: any) => l.id === r.leadId);
+                if (lead) {
+                  const newSection = determineSection({ phone: lead.phone, email });
+                  await updateLead(r.leadId, { email, section: newSection });
+                  totalFound++;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Scrape batch error:', e);
+        }
+
+        setScrapeProgress(p => ({ ...p, done: Math.min(i + 5, allLeads.length), found: totalFound }));
+      }
+
+      refreshCounts();
+      toast.success(`Done! Found emails for ${totalFound} leads out of ${allLeads.length}`);
+    } catch (e: any) {
+      console.error('Bulk scrape error:', e);
+      toast.error('Scrape failed: ' + (e.message || 'Unknown error'));
+    } finally {
+      setScraping(false);
+    }
+  };
 
   // Outreach settings
   const [defaultDailyCap, setDefaultDailyCap] = useState('100');
@@ -112,6 +188,42 @@ export default function SettingsPage() {
                 <p className="font-medium">Twilio not connected</p>
                 <p className="text-muted-foreground mt-0.5">Campaigns use mock provider. To connect Twilio, add these secrets in your Lovable Cloud settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER</p>
               </div>
+            </div>
+          </div>
+
+          {/* Bulk Email Scrape */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Mail size={15} /> Bulk Email Scrape
+              <InfoTip text="Scrape websites of all your CRM leads to find email addresses. Only processes leads that have a website but no email yet." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">Scan all lead websites for contact emails. Processes in batches of 5.</p>
+            {scraping && (
+              <div className="mb-3">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>{scrapeProgress.done} / {scrapeProgress.total} checked</span>
+                  <span>{scrapeProgress.found} emails found</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{ width: `${scrapeProgress.total ? (scrapeProgress.done / scrapeProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant={scraping ? 'destructive' : 'outline'}
+                onClick={() => {
+                  if (scraping) { scrapeStopRef.current = true; }
+                  else { handleBulkScrapeEmails(); }
+                }}
+                className="gap-2 h-8 text-sm"
+              >
+                <Mail size={13} />
+                {scraping ? 'Stop Scraping' : 'Scrape All Leads'}
+              </Button>
             </div>
           </div>
 
