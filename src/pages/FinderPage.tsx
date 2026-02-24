@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { createFinderRun, fetchFinderRuns, runFinderSearch, fetchFinderCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
 import { SWEDEN_CITIES, findCity, searchCities, getAreaLabel, CityProfile } from '@/lib/swedenCities';
 import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, PresetConfig, PresetKey } from '@/lib/finderPresets';
-import { getSetting, setSetting, addLead } from '@/lib/supabase';
+import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
@@ -37,7 +37,7 @@ export default function FinderPage() {
 
   // Auto-add tracking
   const autoAddedRunsRef = useRef<Set<string>>(new Set());
-  const [autoAddProgress, setAutoAddProgress] = useState<Record<string, { added: number; total: number; done: boolean }>>({});
+  const [autoAddProgress, setAutoAddProgress] = useState<Record<string, { added: number; duplicated: number; total: number; done: boolean }>>({});
 
   // City selection — multi
   const [citySearch, setCitySearch] = useState('');
@@ -65,6 +65,7 @@ export default function FinderPage() {
   const [mapOpen, setMapOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<FinderRun[]>([]);
+  const [showUnsearchedOnly, setShowUnsearchedOnly] = useState(false);
 
   // Load saved defaults + poll active runs
   useEffect(() => {
@@ -95,31 +96,36 @@ export default function FinderPage() {
         c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website'
       );
       if (qualifying.length === 0) {
-        setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: 0, done: true } }));
+        setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, duplicated: 0, total: 0, done: true } }));
         return;
       }
-      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: qualifying.length, done: false } }));
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, duplicated: 0, total: qualifying.length, done: false } }));
       let added = 0;
+      let duplicated = 0;
       for (const c of qualifying) {
         try {
-          const { lead, duplicate, error } = await addLead({
+          const leadData = {
             place_id: c.place_id, maps_url: c.maps_url, name: c.name,
             category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
             rating: c.rating, reviews_count: c.reviews_count,
             phone: c.phone, email: c.email || null, address: c.address, website: c.website,
-            section: 'unsorted', status: 'not_contacted',
+            status: 'not_contacted' as const,
             call_outcome_last: null, next_action_at: null, notes: null, tags: [],
-          });
+          };
+          const section = determineSection(leadData);
+          const { lead, duplicate, error } = await addLead({ ...leadData, section });
+          if (duplicate) duplicated++;
           if (!duplicate && !error) added++;
         } catch {}
-        setAutoAddProgress(p => ({ ...p, [run.id]: { added, total: qualifying.length, done: false } }));
+        setAutoAddProgress(p => ({ ...p, [run.id]: { added, duplicated, total: qualifying.length, done: false } }));
       }
-      setAutoAddProgress(p => ({ ...p, [run.id]: { added, total: qualifying.length, done: true } }));
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added, duplicated, total: qualifying.length, done: true } }));
       refreshCounts();
-      if (added > 0) toast.success(`${run.city}: auto-added ${added} leads to CRM`);
+      if (added > 0) toast.success(`${run.city}: added ${added} new leads`);
+      else if (duplicated > 0) toast.info(`${run.city}: ${duplicated} leads already in CRM`);
     } catch (e: any) {
       console.error('Auto-add error:', e);
-      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, total: 0, done: true } }));
+      setAutoAddProgress(p => ({ ...p, [run.id]: { added: 0, duplicated: 0, total: 0, done: true } }));
     }
   }, [refreshCounts]);
 
@@ -189,8 +195,19 @@ export default function FinderPage() {
   // City search results — exclude already selected
   const filteredCities = useMemo(() => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
-    return searchCities(citySearch).filter(c => !selectedNames.has(c.name)).slice(0, 15);
-  }, [citySearch, selectedCities]);
+    let results = searchCities(citySearch).filter(c => !selectedNames.has(c.name));
+    if (showUnsearchedOnly) {
+      results = results.filter(c => !cityStats[c.name]);
+    }
+    // Sort: unsearched first
+    results.sort((a, b) => {
+      const aSearched = !!cityStats[a.name];
+      const bSearched = !!cityStats[b.name];
+      if (aSearched !== bSearched) return aSearched ? 1 : -1;
+      return 0;
+    });
+    return results.slice(0, 20);
+  }, [citySearch, selectedCities, showUnsearchedOnly, cityStats]);
 
   const handleSelectCity = (city: CityProfile) => {
     setSelectedCities(prev => [...prev, city]);
@@ -328,6 +345,16 @@ export default function FinderPage() {
               />
               {showCityDropdown && (
                 <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
+                  {/* Filter toggle */}
+                  <div className="sticky top-0 bg-popover border-b border-border px-3 py-2 flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">{filteredCities.filter(c => !cityStats[c.name]).length} unsearched</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowUnsearchedOnly(v => !v); }}
+                      className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${showUnsearchedOnly ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {showUnsearchedOnly ? '✓ Unsearched only' : 'Show unsearched only'}
+                    </button>
+                  </div>
                   {filteredCities.map(city => {
                     const cs = cityStats[city.name];
                     const searched = !!cs;
@@ -601,8 +628,12 @@ export default function FinderPage() {
                         </span>
                       )}
                       {autoAddDone && (
-                        <span className="text-[10px] text-green flex items-center gap-1 shrink-0">
-                          <UserPlus size={10} /> {progress.added} added
+                        <span className="text-[10px] flex items-center gap-1 shrink-0">
+                          {progress.added > 0 ? (
+                            <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
+                          ) : (
+                            <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
+                          )}
                         </span>
                       )}
                     </div>
