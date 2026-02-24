@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Limit batch size
-    const batch = urls.slice(0, 20);
+    // Limit batch size to avoid CPU limits
+    const batch = urls.slice(0, 5);
     const results: { leadId: string; emails: string[]; error?: string }[] = [];
 
     for (const item of batch) {
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
         }
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+        const timeout = setTimeout(() => controller.abort(), 4000);
 
         const resp = await fetch(url, {
           signal: controller.signal,
@@ -65,7 +65,22 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const html = await resp.text();
+        // Only read first 100KB to save CPU
+        const reader = resp.body?.getReader();
+        let html = '';
+        if (reader) {
+          const decoder = new TextDecoder();
+          let bytesRead = 0;
+          const MAX_BYTES = 100_000;
+          while (bytesRead < MAX_BYTES) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            html += decoder.decode(value, { stream: true });
+            bytesRead += value.length;
+          }
+          reader.cancel().catch(() => {});
+        }
+
         const emails = extractEmails(html);
         results.push({ leadId: item.leadId, emails });
       } catch (e: any) {
