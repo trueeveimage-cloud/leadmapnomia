@@ -14,8 +14,9 @@ import { getSetting, setSetting, addLead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus } from 'lucide-react';
+import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map } from 'lucide-react';
 import { format } from 'date-fns';
+import CityPickerMap from '@/components/CityPickerMap';
 
 const DEFAULT_KEYWORDS = `frisör
 bilverkstad
@@ -61,6 +62,7 @@ export default function FinderPage() {
 
   // UI state
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<FinderRun[]>([]);
 
@@ -357,6 +359,27 @@ export default function FinderPage() {
                 </div>
               )}
             </div>
+
+            {/* Map picker toggle */}
+            <button
+              onClick={() => setMapOpen(o => !o)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1.5"
+            >
+              <Map size={12} />
+              {mapOpen ? 'Hide map' : 'Pick cities from map'}
+              <ChevronDown size={10} className={`transition-transform ${mapOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {mapOpen && (
+              <div className="h-[350px] mt-2 rounded-lg overflow-hidden border border-border">
+                <CityPickerMap
+                  selectedCities={selectedCities}
+                  cityStats={cityStats}
+                  onSelectCity={handleSelectCity}
+                  onRemoveCity={handleRemoveCity}
+                />
+              </div>
+            )}
           </div>
 
           {/* Presets */}
