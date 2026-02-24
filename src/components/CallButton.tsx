@@ -262,7 +262,37 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
           <div className="bg-card border border-border rounded-xl p-5 w-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="text-sm font-semibold text-foreground mb-1">Schedule follow-up</div>
-            <div className="text-xs text-muted-foreground mb-4">Outcome: {selectedOutcome?.label}</div>
+            <div className="text-xs text-muted-foreground mb-3">Outcome: {selectedOutcome?.label}</div>
+
+            {/* Quick presets */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {[
+                { label: '1h', fn: () => new Date(Date.now() + 1 * 60 * 60 * 1000) },
+                { label: '3h', fn: () => new Date(Date.now() + 3 * 60 * 60 * 1000) },
+                { label: 'Tomorrow', fn: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; } },
+                { label: '2 days', fn: () => { const d = new Date(); d.setDate(d.getDate() + 2); d.setHours(10, 0, 0, 0); return d; } },
+              ].map(p => (
+                <button
+                  key={p.label}
+                  onClick={async () => {
+                    const dt = p.fn();
+                    const updated = await updateLead(lead.id, {
+                      status: 'callback', call_outcome_last: selectedOutcome?.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+                    } as any);
+                    await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, nextActionAt: dt.toISOString() });
+                    onUpdate?.(updated);
+                    refreshCounts();
+                    setStep('idle');
+                    toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+                  }}
+                  className="px-2.5 py-1.5 rounded text-xs font-medium border border-border text-primary hover:bg-primary/10 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-xs text-muted-foreground mb-2 font-medium">Or pick a date:</div>
 
             <Calendar
               mode="single"
