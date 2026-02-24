@@ -286,8 +286,7 @@ export default function FinderPage() {
                         <span className="text-xs text-muted-foreground">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
                       </button>
                     );
-                  }
-                  ))}
+                  })}
                   {filteredCities.length === 0 && (
                     <div className="px-3 py-2 text-xs text-muted-foreground">No cities match</div>
                   )}
