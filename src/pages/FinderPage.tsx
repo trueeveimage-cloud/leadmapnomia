@@ -114,6 +114,19 @@ export default function FinderPage() {
     return { ...perCity, totalUsd: `$${totalCost.toFixed(2)}`, cityCount: count };
   }, [currentPreset, keywordList.length, selectedCities.length]);
 
+  // City stats from previous runs
+  const cityStats = useMemo(() => {
+    const stats: Record<string, { runs: number; leads: number }> = {};
+    for (const run of runs) {
+      const name = run.city;
+      if (!stats[name]) stats[name] = { runs: 0, leads: 0 };
+      stats[name].runs += 1;
+      const s = run.stats as any;
+      stats[name].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
+    }
+    return stats;
+  }, [runs]);
+
   // City search results — exclude already selected
   const filteredCities = useMemo(() => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
@@ -256,16 +269,24 @@ export default function FinderPage() {
               />
               {showCityDropdown && (
                 <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
-                  {filteredCities.map(city => (
-                    <button
-                      key={city.name}
-                      onClick={() => handleSelectCity(city)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-center justify-between text-sm"
-                    >
-                      <span className="font-medium text-foreground">{city.name}</span>
-                      <span className="text-xs text-muted-foreground">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
-                    </button>
-                  ))}
+                  {filteredCities.map(city => {
+                    const cs = cityStats[city.name];
+                    return (
+                      <button
+                        key={city.name}
+                        onClick={() => handleSelectCity(city)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-center justify-between text-sm"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{city.name}</span>
+                          {cs && (
+                            <span className="text-[10px] text-muted-foreground">{cs.runs} run{cs.runs !== 1 ? 's' : ''} · {cs.leads} lead{cs.leads !== 1 ? 's' : ''}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
+                      </button>
+                    );
+                  })}
                   {filteredCities.length === 0 && (
                     <div className="px-3 py-2 text-xs text-muted-foreground">No cities match</div>
                   )}
