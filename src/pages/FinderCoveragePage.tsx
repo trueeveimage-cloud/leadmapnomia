@@ -78,9 +78,15 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
           .addTo(map);
       });
 
-    // Run circles
+    // Run circles with success rate tooltips
     runsWithCoords.forEach(run => {
+      const cityKey = run.city.toLowerCase();
+      const agg = cityRunMap.get(cityKey);
+      const totalLeads = agg ? agg.noWebPhone + agg.noWebEmail : 0;
+      const totalCands = agg ? agg.candidates : 0;
+      const successRate = totalCands > 0 ? ((totalLeads / totalCands) * 100).toFixed(1) : '0';
       const color = run.status === 'done' ? 'hsl(142, 69%, 45%)' : 'hsl(213, 94%, 58%)';
+
       L.circle([run.lat, run.lng], {
         radius: run.radius || 1500,
         color,
@@ -88,6 +94,14 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
         fillOpacity: 0.15,
         weight: 2,
       })
+        .bindTooltip(`
+          <div style="font-size:12px;line-height:1.5;">
+            <strong style="font-size:13px;">${run.city}</strong><br/>
+            Success rate: <strong>${successRate}%</strong><br/>
+            Leads: ${totalLeads} / ${totalCands} candidates<br/>
+            Runs: ${agg?.runs || 1}
+          </div>
+        `, { direction: 'top', sticky: true })
         .bindPopup(`
           <div style="min-width:180px;font-size:12px;">
             <strong style="font-size:13px;">${run.city}</strong><br/>
@@ -95,6 +109,7 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
             Keywords: ${(run.keywords || []).length}<br/>
             Candidates: ${(run.stats as any)?.candidatesFound || 0}<br/>
             No Web + Phone: ${(run.stats as any)?.noWebsiteWithPhone || 0}<br/>
+            Success rate: <strong>${successRate}%</strong><br/>
             Radius: ${run.radius}m<br/>
             ${format(new Date(run.created_at), 'MMM d, HH:mm')}<br/>
             <a href="/finder/runs/${run.id}" style="color:#60a5fa;">View results →</a>
