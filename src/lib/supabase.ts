@@ -118,7 +118,7 @@ export async function fetchLeadCounts() {
     missing: leads.filter(l => l.section === 'missing').length,
     callbacks: leads.filter(l => l.status === 'callback').length,
     callbacksDue: leads.filter(l => l.status === 'callback' && l.next_action_at && new Date(l.next_action_at) <= now).length,
-    not_contacted: leads.filter(l => l.status === 'not_contacted').length,
+    not_contacted: leads.filter(l => l.status === 'not_contacted' && l.section !== 'missing').length,
     contacted: leads.filter(l => l.status === 'contacted').length,
     answered: leads.filter(l => l.status === 'answered').length,
     interested: leads.filter(l => l.status === 'interested').length,

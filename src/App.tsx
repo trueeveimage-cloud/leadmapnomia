@@ -77,7 +77,7 @@ const App = () => (
                     <Route path="/both" element={<SectionPage section="both" title="Has Both" emptyMessage="No leads with both contact methods" />} />
                     <Route path="/missing" element={<SectionPage section="missing" title="Missing Contact" emptyMessage="No missing contact leads" />} />
                     <Route path="/callbacks" element={<CallbacksPage />} />
-                    <Route path="/status/not-contacted" element={<SectionPage status="not_contacted" title="Not Contacted" />} />
+                    <Route path="/status/not-contacted" element={<SectionPage status="not_contacted" title="Not Contacted" excludeSection="missing" />} />
                     <Route path="/status/contacted" element={<SectionPage status="contacted" title="Contacted" />} />
                     <Route path="/status/answered" element={<SectionPage status="answered" title="Answered" />} />
                     <Route path="/status/callback" element={<SectionPage status="callback" title="Callback" />} />
