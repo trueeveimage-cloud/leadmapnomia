@@ -16,6 +16,8 @@ export interface FinderRun {
   stats: Record<string, any>;
   created_at: string;
   updated_at: string;
+  batch_id: string | null;
+  batch_label: string | null;
 }
 
 export interface FinderCandidate {
@@ -52,6 +54,8 @@ export async function createFinderRun(params: {
   maxReviews?: number | null;
   requirePhone: boolean;
   findGmailOnly?: boolean;
+  batchId?: string | null;
+  batchLabel?: string | null;
 }): Promise<FinderRun> {
   const { data, error } = await supabase.from('finder_runs').insert({
     city: params.city,
@@ -66,9 +70,26 @@ export async function createFinderRun(params: {
     require_phone: params.requirePhone,
     status: 'pending',
     stats: {},
+    batch_id: params.batchId || null,
+    batch_label: params.batchLabel || null,
   } as any).select().single();
   if (error) throw error;
   return data as unknown as FinderRun;
+}
+
+export async function fetchFinderRunsByBatch(batchId: string): Promise<FinderRun[]> {
+  const { data, error } = await supabase.from('finder_runs').select('*').eq('batch_id', batchId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return data as unknown as FinderRun[];
+}
+
+export async function fetchFinderCandidatesByBatch(batchId: string): Promise<FinderCandidate[]> {
+  const { data: runs } = await supabase.from('finder_runs').select('id').eq('batch_id', batchId);
+  if (!runs || runs.length === 0) return [];
+  const runIds = runs.map(r => r.id);
+  const { data, error } = await supabase.from('finder_candidates').select('*').in('run_id', runIds).order('outcome', { ascending: true });
+  if (error) throw error;
+  return data as unknown as FinderCandidate[];
 }
 
 export async function fetchFinderRuns(): Promise<FinderRun[]> {

@@ -12,6 +12,7 @@ import CallbacksPage from "./pages/CallbacksPage";
 import SettingsPage from "./pages/SettingsPage";
 import FinderPage from "./pages/FinderPage";
 import FinderRunPage from "./pages/FinderRunPage";
+import FinderBatchPage from "./pages/FinderBatchPage";
 import FinderCoveragePage from "./pages/FinderCoveragePage";
 import CostCalculatorPage from "./pages/CostCalculatorPage";
 import AuthPage from "./pages/AuthPage";
@@ -90,6 +91,7 @@ const App = () => (
                     <Route path="/finder" element={<FinderPage />} />
                     <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                     <Route path="/finder/runs/:id" element={<FinderRunPage />} />
+                    <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />
                     <Route path="/costs" element={<CostCalculatorPage />} />
                     <Route path="/campaigns" element={<CampaignsPage />} />
                     <Route path="/campaigns/new" element={<CampaignNewPage />} />
