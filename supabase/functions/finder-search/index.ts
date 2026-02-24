@@ -295,6 +295,63 @@ serve(async (req) => {
       });
     }
 
+    // Refetch mode — re-process failed candidates from a previous run
+    if (action === 'refetch' as any) {
+      const { data: failedCandidates } = await supabase.from('finder_candidates')
+        .select('*').eq('run_id', runId).eq('outcome', 'failed');
+      
+      if (!failedCandidates || failedCandidates.length === 0) {
+        return new Response(JSON.stringify({ status: 'done', refetched: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`Refetch: ${failedCandidates.length} failed candidates for run ${runId}`);
+      await supabase.from('finder_runs').update({ status: 'running', stats: { stage: 'refetch', total: failedCandidates.length } }).eq('id', runId);
+
+      // Reset failed candidates to pending
+      await supabase.from('finder_candidates').update({ outcome: 'pending' })
+        .eq('run_id', runId).eq('outcome', 'failed');
+
+      const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
+      const detailsFetched = await fetchDetailsWithConcurrency(
+        failedCandidates, failedCandidates.length, apiKey, supabase, runId, cacheTtlMs, failedCandidates.length, maxReviews
+      );
+
+      // Recompute
+      const { data: allFetched } = await supabase.from('finder_candidates')
+        .select('id, website, phone, has_website, has_phone, outcome, last_fetched_at')
+        .eq('run_id', runId).not('last_fetched_at', 'is', null);
+      if (allFetched) {
+        for (const c of allFetched) {
+          const { hasWebsite, hasPhone, outcome: newOutcome } = computeOutcome(c.website, c.phone);
+          if (c.outcome !== newOutcome || c.has_website !== hasWebsite || c.has_phone !== hasPhone) {
+            await supabase.from('finder_candidates').update({ has_website: hasWebsite, has_phone: hasPhone, outcome: newOutcome }).eq('id', c.id);
+          }
+        }
+      }
+
+      // Final stats
+      const { data: finalCandidates } = await supabase.from('finder_candidates')
+        .select('outcome, has_phone').eq('run_id', runId);
+      const stats = {
+        stage: 'done',
+        candidatesFound: (finalCandidates || []).length,
+        detailsFetched,
+        noWebsiteWithPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website_phone').length,
+        noWebsiteNoPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website_no_phone').length,
+        hasWebsite: (finalCandidates || []).filter(c => c.outcome === 'has_website').length,
+        duplicates: (finalCandidates || []).filter(c => c.outcome === 'duplicate').length,
+        skipped: (finalCandidates || []).filter(c => c.outcome === 'skipped').length,
+        failed: (finalCandidates || []).filter(c => c.outcome === 'failed').length,
+      };
+      await supabase.from('finder_runs').update({ status: 'done', stats }).eq('id', runId);
+
+      return new Response(JSON.stringify({ status: 'done', stats, refetched: detailsFetched }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const coords = getCityCoords(city);
     if (!coords) {
       return new Response(JSON.stringify({ error: `Unknown city "${city}". Supported: ${Object.keys(CITY_COORDS).join(', ')}` }), {
