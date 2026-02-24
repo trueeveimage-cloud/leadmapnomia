@@ -41,6 +41,8 @@ interface LeadListProps {
   showTriage?: boolean;
   title: string;
   emptyMessage?: string;
+  /** Exclude leads from this section (e.g. 'missing' on Not Contacted page) */
+  excludeSection?: LeadSection;
 }
 
 export default function LeadList({ section, allSections, status, showTriage, title, emptyMessage }: LeadListProps) {
