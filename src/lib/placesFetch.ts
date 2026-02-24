@@ -20,18 +20,21 @@ export interface PlaceResult {
 async function resolveShortLinkInBrowser(url: string): Promise<string> {
   if (!url.includes('maps.app.goo.gl') && !url.includes('goo.gl/maps')) return url;
 
+  // Try fetch with redirect:follow — browser can follow HTTP redirects
   try {
     const resp = await fetch(url, { method: 'GET', redirect: 'follow' });
     const finalUrl = resp.url;
-    // Consume body to avoid resource leak
     try { await resp.text(); } catch { /* ignore */ }
     if (finalUrl && finalUrl !== url && finalUrl.includes('google.com/maps')) {
       console.log('[placesFetch] browser fetch resolved to:', finalUrl.substring(0, 120));
       return finalUrl;
     }
   } catch {
-    // CORS or network error — fall through to edge function
+    // CORS or network error — fall through
   }
+
+  // Try opening via a hidden anchor with ping (some browsers resolve differently)
+  // Fall through to edge function which has multiple strategies
   return url;
 }
 
