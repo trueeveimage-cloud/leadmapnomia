@@ -130,6 +130,14 @@ export async function estimateFinderCost(params: {
   return data;
 }
 
+export async function refetchFailedCandidates(runId: string): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('finder-search', {
+    body: { runId, action: 'refetch', city: '', keywords: [], radius: 0, maxPages: 0, maxCandidates: 0, maxDetails: 9999, requirePhone: false },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export function candidatesToCsv(candidates: FinderCandidate[]): string {
   const headers = ['Name', 'Address', 'Phone', 'Email', 'Website', 'Rating', 'Reviews', 'Category', 'Outcome', 'Maps URL'];
   const rows = candidates.map(c => [
