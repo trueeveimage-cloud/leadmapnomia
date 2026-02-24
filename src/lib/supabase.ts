@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type LeadSection = 'unsorted' | 'phone' | 'gmail' | 'email' | 'missing' | 'both';
+export type LeadSection = 'unsorted' | 'phone' | 'email' | 'missing' | 'both';
 export type LeadStatus =
   | 'not_contacted'
   | 'contacted'
@@ -63,14 +63,11 @@ export interface Activity {
 }
 
 /** Determine section from contact info */
-export function determineSection(lead: Partial<Lead>, gmailRule: string = 'gmail'): LeadSection {
+export function determineSection(lead: Partial<Lead>): LeadSection {
   const hasPhone = !!(lead.phone && lead.phone.trim());
-  const hasGmail = !!(lead.email && lead.email.toLowerCase().includes('@gmail.com'));
   const hasEmail = !!(lead.email && lead.email.trim());
 
-  if (hasPhone && hasGmail) return gmailRule === 'both' ? 'both' : 'gmail';
   if (hasPhone && hasEmail) return 'both';
-  if (hasGmail) return 'gmail';
   if (hasEmail) return 'email';
   if (hasPhone) return 'phone';
   return 'missing';
@@ -96,7 +93,6 @@ export async function fetchLeadCounts() {
     total: leads.length,
     unsorted: leads.filter(l => l.section === 'unsorted').length,
     phone: leads.filter(l => l.section === 'phone').length,
-    gmail: leads.filter(l => l.section === 'gmail').length,
     email: leads.filter(l => l.section === 'email').length,
     both: leads.filter(l => l.section === 'both').length,
     missing: leads.filter(l => l.section === 'missing').length,

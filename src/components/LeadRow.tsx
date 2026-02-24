@@ -37,7 +37,6 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 
 const TRIAGE_BUTTONS: { section: LeadSection; label: string; color: string }[] = [
   { section: 'phone', label: 'Has Phone', color: 'hsl(142 69% 45%)' },
-  { section: 'gmail', label: 'Has Gmail', color: 'hsl(0 72% 55%)' },
   { section: 'email', label: 'Has Email', color: 'hsl(213 94% 58%)' },
   { section: 'both', label: 'Both', color: 'hsl(262 83% 65%)' },
   { section: 'missing', label: 'Missing', color: 'hsl(38 95% 55%)' },

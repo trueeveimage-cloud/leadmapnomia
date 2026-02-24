@@ -11,7 +11,6 @@ import InfoTip from '@/components/InfoTip';
 
 const SECTIONS = [
   { value: 'phone', label: 'Has Phone' },
-  { value: 'gmail', label: 'Has Gmail' },
   { value: 'email', label: 'Has Email' },
   { value: 'both', label: 'Both' },
   { value: 'unsorted', label: 'Unsorted' },

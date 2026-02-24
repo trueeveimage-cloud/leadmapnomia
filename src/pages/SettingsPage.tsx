@@ -145,26 +145,10 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Triage Rules */}
+          {/* Triage info */}
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1">Triage Rules</h2>
-            <p className="text-xs text-muted-foreground mb-4">When a lead has both a phone number and Gmail, which section should it go to?</p>
-
-            <div className="space-y-2">
-              {[
-                { value: 'gmail', label: 'Gmail section', desc: 'Prioritize Gmail for outreach' },
-                { value: 'both', label: 'Both section', desc: 'Place in "Has Both" section' },
-                { value: 'phone', label: 'Phone section', desc: 'Prioritize calling' },
-              ].map(opt => (
-                <label key={opt.value} className="flex items-start gap-3 cursor-pointer p-3 rounded-md hover:bg-muted/50 transition-colors border border-transparent hover:border-border">
-                  <input type="radio" name="gmailRule" value={opt.value} checked={gmailRule === opt.value} onChange={() => setGmailRule(opt.value)} className="mt-0.5 accent-primary" />
-                  <div>
-                    <div className="text-sm font-medium text-foreground">{opt.label}</div>
-                    <div className="text-xs text-muted-foreground">{opt.desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">Leads are auto-sorted into sections: Has Phone, Has Email, Both, or Missing — based on available contact info.</p>
           </div>
 
           {/* Save button */}
