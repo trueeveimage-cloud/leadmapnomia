@@ -228,6 +228,13 @@ export default function FinderPage() {
                 </label>
                 <Input type="number" value={minReviews} onChange={e => setMinReviews(e.target.value)} placeholder="e.g. 5" className="h-9 text-sm" />
               </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Max Reviews
+                  <InfoTip text="Exclude businesses with more than this many reviews. Larger businesses (50+ reviews) usually already have websites and marketing. Default: 50." />
+                </label>
+                <Input type="number" value={maxReviews} onChange={e => setMaxReviews(e.target.value)} placeholder="e.g. 50" className="h-9 text-sm" />
+              </div>
             </div>
           </div>
 
