@@ -5,7 +5,6 @@ interface Counts {
   total: number;
   unsorted: number;
   phone: number;
-  gmail: number;
   email: number;
   both: number;
   missing: number;

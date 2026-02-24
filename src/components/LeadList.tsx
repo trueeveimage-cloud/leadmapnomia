@@ -156,10 +156,9 @@ export default function LeadList({ section, allSections, status, showTriage, tit
     }
     setAutoSorting(true);
     try {
-      const gmailRule = await getSetting('gmail_triage_rule') || 'gmail';
       const updates = await Promise.all(
         unsortedLeads.map(async lead => {
-          const newSection = determineSection(lead, gmailRule);
+          const newSection = determineSection(lead);
           if (newSection !== lead.section) {
             const updated = await updateLead(lead.id, { section: newSection });
             return updated;
