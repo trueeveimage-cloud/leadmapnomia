@@ -61,12 +61,17 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
     setStep('outcome');
   };
 
+  const trackingUpdates = () => ({
+    call_attempts: ((lead as any).call_attempts || 0) + 1,
+    last_contacted_at: new Date().toISOString(),
+    last_contact_method: 'call',
+  });
+
   const handleOutcome = async (outcome: typeof CALL_OUTCOMES[0]) => {
     setSelectedOutcome(outcome);
     if (outcome.key === 'demo') {
-      // Directly update to demo and open the demo brief form
       try {
-        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo' });
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo', ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: 'demo', status: 'demo' });
         setPendingLead(updated);
         onUpdate?.(updated);
@@ -78,7 +83,41 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       }
     } else if (outcome.key === 'answered') {
       setStep('status');
+    } else if (outcome.key === 'not_answered') {
+      // Auto-schedule: tomorrow at noon
+      const dt = new Date();
+      dt.setDate(dt.getDate() + 1);
+      dt.setHours(12, 0, 0, 0);
+      const updated = await updateLead(lead.id, {
+        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+    } else if (outcome.key === 'busy') {
+      // Auto-schedule: 3 hours from now
+      const dt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      const updated = await updateLead(lead.id, {
+        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+    } else if (outcome.key === 'wrong_number') {
+      const updated = await updateLead(lead.id, {
+        status: 'not_interested', call_outcome_last: outcome.key, outreach_opt_out: true, ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success('Marked as wrong number');
     } else {
+      // callback_later
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setFollowupDate(tomorrow);
