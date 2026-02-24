@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 export default function AuthPage() {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => localStorage.getItem('savedEmail') || '');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('rememberMe') === 'true');
