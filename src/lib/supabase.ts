@@ -63,14 +63,11 @@ export interface Activity {
 }
 
 /** Determine section from contact info */
-export function determineSection(lead: Partial<Lead>, gmailRule: string = 'gmail'): LeadSection {
+export function determineSection(lead: Partial<Lead>): LeadSection {
   const hasPhone = !!(lead.phone && lead.phone.trim());
-  const hasGmail = !!(lead.email && lead.email.toLowerCase().includes('@gmail.com'));
   const hasEmail = !!(lead.email && lead.email.trim());
 
-  if (hasPhone && hasGmail) return gmailRule === 'both' ? 'both' : 'gmail';
   if (hasPhone && hasEmail) return 'both';
-  if (hasGmail) return 'gmail';
   if (hasEmail) return 'email';
   if (hasPhone) return 'phone';
   return 'missing';
