@@ -23,6 +23,11 @@ export default function SettingsPage() {
   const [defaultCallAfterHours, setDefaultCallAfterHours] = useState('48');
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
 
+  // Finder defaults
+  const [finderDefaultCity, setFinderDefaultCity] = useState('');
+  const [finderDefaultLeadsTarget, setFinderDefaultLeadsTarget] = useState('50');
+  const [finderDefaultKeywords, setFinderDefaultKeywords] = useState('');
+
   React.useEffect(() => {
     getSetting('gmail_triage_rule').then(v => { if (v) setGmailRule(v); });
     getSetting('default_daily_cap').then(v => { if (v) setDefaultDailyCap(v); });
