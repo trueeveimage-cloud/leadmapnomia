@@ -178,19 +178,21 @@ export default function FinderCoveragePage() {
 
         {/* Stats bar */}
         <div className="px-4 sm:px-6 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {[
               { label: 'Total Runs', value: totalRuns, icon: <Search size={13} /> },
+              { label: 'Cities Covered', value: `${scannedCities.size}/${SWEDEN_CITIES.length}`, icon: <MapPin size={13} /> },
+              { label: 'Unsearched', value: unsearchedCount, icon: <MapPin size={13} />, warn: unsearchedCount > 0 },
               { label: 'Candidates', value: totalCandidates, icon: <BarChart2 size={13} /> },
-              { label: 'Details Fetched', value: totalDetails, icon: <Globe size={13} /> },
-              { label: 'No Web + Phone', value: totalNoWebPhone, icon: <Phone size={13} />, highlight: true },
+              { label: 'Leads Found', value: totalLeads, icon: <Phone size={13} />, highlight: true },
+              { label: 'Success Rate', value: `${avgSuccessRate}%`, icon: <CheckCircle size={13} />, highlight: true },
               { label: 'Est. Spend', value: `$${estSpend}`, icon: <span className="text-xs">💰</span> },
             ].map(stat => (
-              <div key={stat.label} className={`p-3 rounded-lg border ${stat.highlight ? 'bg-green/10 border-green/30' : 'bg-card border-border'}`}>
+              <div key={stat.label} className={`p-3 rounded-lg border ${stat.highlight ? 'bg-green/10 border-green/30' : stat.warn ? 'bg-amber/10 border-amber/30' : 'bg-card border-border'}`}>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                   {stat.icon} {stat.label}
                 </div>
-                <div className={`text-lg font-bold ${stat.highlight ? 'text-green' : 'text-foreground'}`}>
+                <div className={`text-lg font-bold ${stat.highlight ? 'text-green' : stat.warn ? 'text-amber' : 'text-foreground'}`}>
                   {stat.value}
                 </div>
               </div>
