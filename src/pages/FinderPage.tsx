@@ -114,6 +114,19 @@ export default function FinderPage() {
     return { ...perCity, totalUsd: `$${totalCost.toFixed(2)}`, cityCount: count };
   }, [currentPreset, keywordList.length, selectedCities.length]);
 
+  // City stats from previous runs
+  const cityStats = useMemo(() => {
+    const stats: Record<string, { runs: number; leads: number }> = {};
+    for (const run of runs) {
+      const name = run.city;
+      if (!stats[name]) stats[name] = { runs: 0, leads: 0 };
+      stats[name].runs += 1;
+      const s = run.stats as any;
+      stats[name].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
+    }
+    return stats;
+  }, [runs]);
+
   // City search results — exclude already selected
   const filteredCities = useMemo(() => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
