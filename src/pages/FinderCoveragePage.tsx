@@ -142,7 +142,12 @@ export default function FinderCoveragePage() {
   const totalCandidates = runs.reduce((s, r) => s + ((r.stats as any)?.candidatesFound || 0), 0);
   const totalDetails = runs.reduce((s, r) => s + ((r.stats as any)?.detailsFetched || 0), 0);
   const totalNoWebPhone = runs.reduce((s, r) => s + ((r.stats as any)?.noWebsiteWithPhone || 0), 0);
+  const totalNoWebEmail = runs.reduce((s, r) => s + ((r.stats as any)?.noWebsiteEmailOnly || 0), 0);
+  const totalLeads = totalNoWebPhone + totalNoWebEmail;
+  const avgSuccessRate = totalCandidates > 0 ? ((totalLeads / totalCandidates) * 100).toFixed(1) : '0';
   const estSpend = (totalDetails * 0.017 + totalRuns * 2 * 0.032).toFixed(2);
+  const scannedCities = new Set(runs.map(r => r.city.toLowerCase()));
+  const unsearchedCount = SWEDEN_CITIES.filter(c => !scannedCities.has(c.name.toLowerCase())).length;
 
   const cityStats = useMemo(() => {
     const map = new Map<string, { runs: number; noWebPhone: number; totalCandidates: number }>();
