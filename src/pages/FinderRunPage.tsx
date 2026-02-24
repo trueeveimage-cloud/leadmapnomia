@@ -65,14 +65,16 @@ export default function FinderRunPage() {
       let added = 0;
       for (const c of qualifying) {
         try {
-          const { lead, duplicate, error } = await addLead({
+          const leadData = {
             place_id: c.place_id, maps_url: c.maps_url, name: c.name,
             category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
             rating: c.rating, reviews_count: c.reviews_count,
             phone: c.phone, email: c.email || null, address: c.address, website: c.website,
-            section: 'unsorted', status: 'not_contacted',
+            status: 'not_contacted' as const,
             call_outcome_last: null, next_action_at: null, notes: null, tags: [],
-          });
+          };
+          const section = determineSection(leadData);
+          const { lead, duplicate, error } = await addLead({ ...leadData, section });
           if (!duplicate && !error) {
             setAddedIds(s => new Set(s).add(c.id));
             added++;
