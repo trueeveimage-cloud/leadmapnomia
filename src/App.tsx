@@ -21,6 +21,7 @@ import CampaignNewPage from "./pages/CampaignNewPage";
 import CampaignDetailPage from "./pages/CampaignDetailPage";
 import InboxPage from "./pages/InboxPage";
 import CallListPage from "./pages/CallListPage";
+import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
