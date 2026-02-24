@@ -48,6 +48,10 @@ export interface Lead {
   last_message_preview: string | null;
   last_message_direction: string | null;
   last_message_status: string | null;
+  // Contact tracking
+  call_attempts: number;
+  last_contacted_at: string | null;
+  last_contact_method: string | null;
 }
 
 export interface Activity {
