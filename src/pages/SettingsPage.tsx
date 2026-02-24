@@ -172,6 +172,28 @@ export default function SettingsPage() {
             {saved ? 'Saved!' : 'Save All Settings'}
           </Button>
 
+          {/* Finder Defaults */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Search size={15} /> Finder Defaults
+              <InfoTip text="Default values used when opening the Business Finder. These are also saved automatically when you run a search." />
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Default City</label>
+                <Input value={finderDefaultCity} onChange={e => setFinderDefaultCity(e.target.value)} placeholder="e.g. Göteborg" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Leads Target/Run</label>
+                <Input value={finderDefaultLeadsTarget} onChange={e => setFinderDefaultLeadsTarget(e.target.value)} placeholder="50" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-xs text-muted-foreground mb-1 block">Default Keywords (one per line)</label>
+              <Textarea value={finderDefaultKeywords} onChange={e => setFinderDefaultKeywords(e.target.value)} placeholder="frisör&#10;bilverkstad" className="h-20 text-sm font-mono resize-none" />
+            </div>
+          </div>
+
           {/* Google Places API */}
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1">Google Places API</h2>
