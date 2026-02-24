@@ -35,6 +35,9 @@ export default function SettingsPage() {
     getSetting('default_cooldown_days').then(v => { if (v) setDefaultCooldownDays(v); });
     getSetting('default_call_after_hours').then(v => { if (v) setDefaultCallAfterHours(v); });
     getSetting('opt_out_keywords').then(v => { if (v) setOptOutKeywords(v); });
+    getSetting('finder_default_city').then(v => { if (v) setFinderDefaultCity(v); });
+    getSetting('finder_default_leads_target').then(v => { if (v) setFinderDefaultLeadsTarget(v); });
+    getSetting('finder_default_keywords').then(v => { if (v) setFinderDefaultKeywords(v); });
   }, []);
 
   const handleSave = async () => {
