@@ -49,6 +49,7 @@ export async function createFinderRun(params: {
   maxDetails: number;
   minRating?: number | null;
   minReviews?: number | null;
+  maxReviews?: number | null;
   requirePhone: boolean;
   findGmailOnly?: boolean;
 }): Promise<FinderRun> {
@@ -105,6 +106,7 @@ export async function runFinderSearch(runId: string, params: {
   maxDetails: number;
   minRating?: number;
   minReviews?: number;
+  maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
 }): Promise<any> {

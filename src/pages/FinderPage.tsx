@@ -35,6 +35,7 @@ export default function FinderPage() {
   const [maxDetails, setMaxDetails] = useState(100);
   const [minRating, setMinRating] = useState('');
   const [minReviews, setMinReviews] = useState('');
+  const [maxReviews, setMaxReviews] = useState('50');
   const [requirePhone, setRequirePhone] = useState(false);
   const [findGmailOnly, setFindGmailOnly] = useState(false);
   const [running, setRunning] = useState(false);
@@ -74,6 +75,7 @@ export default function FinderPage() {
         maxDetails,
         minRating: minRating ? parseFloat(minRating) : null,
         minReviews: minReviews ? parseInt(minReviews) : null,
+        maxReviews: maxReviews ? parseInt(maxReviews) : null,
         requirePhone,
         findGmailOnly,
       });
@@ -90,6 +92,7 @@ export default function FinderPage() {
         maxDetails,
         minRating: minRating ? parseFloat(minRating) : undefined,
         minReviews: minReviews ? parseInt(minReviews) : undefined,
+        maxReviews: maxReviews ? parseInt(maxReviews) : undefined,
         requirePhone,
         findGmailOnly,
       }).catch(e => console.error('Finder search error:', e));
@@ -210,7 +213,7 @@ export default function FinderPage() {
               Quality Filters
               <InfoTip text="Filter out low-quality businesses before spending on detail lookups. Applied during Stage 1 so you don't waste detail calls on businesses that don't meet your criteria." />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   Min Rating
@@ -224,6 +227,13 @@ export default function FinderPage() {
                   <InfoTip text="Only include businesses with at least this many Google reviews. More reviews = more active/established business, better lead quality." />
                 </label>
                 <Input type="number" value={minReviews} onChange={e => setMinReviews(e.target.value)} placeholder="e.g. 5" className="h-9 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                  Max Reviews
+                  <InfoTip text="Exclude businesses with more than this many reviews. Larger businesses (50+ reviews) usually already have websites and marketing. Default: 50." />
+                </label>
+                <Input type="number" value={maxReviews} onChange={e => setMaxReviews(e.target.value)} placeholder="e.g. 50" className="h-9 text-sm" />
               </div>
             </div>
           </div>
