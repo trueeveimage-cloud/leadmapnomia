@@ -117,8 +117,8 @@ export default function FinderBatchPage() {
     setScrapingEmails(true);
     setScrapeProgress({ done: 0, total: leadsWithWebsite.length, found: 0 });
     let totalFound = 0;
-    for (let i = 0; i < leadsWithWebsite.length; i += 20) {
-      const batch = leadsWithWebsite.slice(i, i + 20).map(l => ({ leadId: l.id, website: l.website! }));
+    for (let i = 0; i < leadsWithWebsite.length; i += 5) {
+      const batch = leadsWithWebsite.slice(i, i + 5).map(l => ({ leadId: l.id, website: l.website! }));
       try {
         const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
         if (!error && data?.results) {
@@ -133,7 +133,7 @@ export default function FinderBatchPage() {
           }
         }
       } catch {}
-      setScrapeProgress({ done: Math.min(i + 20, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
+      setScrapeProgress({ done: Math.min(i + 5, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
     }
     setScrapingEmails(false);
     setScrapeProgress(null);
