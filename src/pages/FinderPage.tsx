@@ -359,6 +359,27 @@ export default function FinderPage() {
                 </div>
               )}
             </div>
+
+            {/* Map picker toggle */}
+            <button
+              onClick={() => setMapOpen(o => !o)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1.5"
+            >
+              <Map size={12} />
+              {mapOpen ? 'Hide map' : 'Pick cities from map'}
+              <ChevronDown size={10} className={`transition-transform ${mapOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {mapOpen && (
+              <div className="h-[350px] mt-2 rounded-lg overflow-hidden border border-border">
+                <CityPickerMap
+                  selectedCities={selectedCities}
+                  cityStats={cityStats}
+                  onSelectCity={handleSelectCity}
+                  onRemoveCity={handleRemoveCity}
+                />
+              </div>
+            )}
           </div>
 
           {/* Presets */}
