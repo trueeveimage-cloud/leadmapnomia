@@ -12,6 +12,7 @@ import CallbacksPage from "./pages/CallbacksPage";
 import SettingsPage from "./pages/SettingsPage";
 import FinderPage from "./pages/FinderPage";
 import FinderRunPage from "./pages/FinderRunPage";
+import FinderCoveragePage from "./pages/FinderCoveragePage";
 import CostCalculatorPage from "./pages/CostCalculatorPage";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -86,6 +87,7 @@ const App = () => (
                     <Route path="/status/closed-won" element={<SectionPage status="closed_won" title="Closed / Won" />} />
                     <Route path="/status/closed-lost" element={<SectionPage status="closed_lost" title="Closed / Lost" />} />
                     <Route path="/finder" element={<FinderPage />} />
+                    <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                     <Route path="/finder/runs/:id" element={<FinderRunPage />} />
                     <Route path="/costs" element={<CostCalculatorPage />} />
                     <Route path="/campaigns" element={<CampaignsPage />} />

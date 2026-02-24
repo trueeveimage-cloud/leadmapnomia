@@ -12,7 +12,7 @@ import {
   Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 
-type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
+type Tab = 'no_website_phone' | 'no_website_no_phone' | 'unfetched' | 'duplicates' | 'skipped' | 'all';
 
 export default function FinderRunPage() {
   const { id } = useParams<{ id: string }>();
@@ -151,6 +151,7 @@ export default function FinderRunPage() {
   const noWebsiteNoPhone = candidates.filter(c => 
     c.outcome === 'no_website_no_phone' || (c.outcome === 'no_website' && c.has_phone === false)
   );
+  const unfetched = candidates.filter(c => c.outcome === 'pending' || (!c.last_fetched_at && c.outcome !== 'duplicate'));
   const duplicates = candidates.filter(c => c.outcome === 'duplicate');
   const other = candidates.filter(c => 
     c.outcome === 'skipped' || c.outcome === 'failed' || c.outcome === 'has_website'
@@ -158,13 +159,15 @@ export default function FinderRunPage() {
 
   const filtered = tab === 'no_website_phone' ? noWebsitePhone
     : tab === 'no_website_no_phone' ? noWebsiteNoPhone
+    : tab === 'unfetched' ? unfetched
     : tab === 'duplicates' ? duplicates
     : tab === 'skipped' ? other
     : candidates;
 
   const tabs: { key: Tab; label: string; count: number; color?: string; tip: string }[] = [
-    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green-400', tip: 'Businesses without a real website but WITH a phone number. Best leads for cold outreach.' },
-    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length, tip: 'Businesses without a website and no phone listed. Harder to contact.' },
+    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green', tip: 'Businesses without a real website but WITH a phone number. Best leads for cold outreach.' },
+    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length, tip: 'Businesses without a website and no phone listed.' },
+    { key: 'unfetched', label: 'Unfetched', count: unfetched.length, color: 'text-amber', tip: 'Candidates whose details have not been fetched yet.' },
     { key: 'duplicates', label: 'In CRM', count: duplicates.length, tip: 'Already in your CRM.' },
     { key: 'skipped', label: 'Other', count: other.length, tip: 'Has a real website, skipped, or failed to fetch details.' },
     { key: 'all', label: 'All', count: candidates.length, tip: 'All candidates from this run.' },

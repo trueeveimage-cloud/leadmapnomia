@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { getSetting, setSetting } from '@/lib/supabase';
-import { Settings, Save, Download, Check, AlertTriangle, Megaphone } from 'lucide-react';
+import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/lib/supabase';
@@ -23,6 +24,11 @@ export default function SettingsPage() {
   const [defaultCallAfterHours, setDefaultCallAfterHours] = useState('48');
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
 
+  // Finder defaults
+  const [finderDefaultCity, setFinderDefaultCity] = useState('');
+  const [finderDefaultLeadsTarget, setFinderDefaultLeadsTarget] = useState('50');
+  const [finderDefaultKeywords, setFinderDefaultKeywords] = useState('');
+
   React.useEffect(() => {
     getSetting('gmail_triage_rule').then(v => { if (v) setGmailRule(v); });
     getSetting('default_daily_cap').then(v => { if (v) setDefaultDailyCap(v); });
@@ -30,6 +36,9 @@ export default function SettingsPage() {
     getSetting('default_cooldown_days').then(v => { if (v) setDefaultCooldownDays(v); });
     getSetting('default_call_after_hours').then(v => { if (v) setDefaultCallAfterHours(v); });
     getSetting('opt_out_keywords').then(v => { if (v) setOptOutKeywords(v); });
+    getSetting('finder_default_city').then(v => { if (v) setFinderDefaultCity(v); });
+    getSetting('finder_default_leads_target').then(v => { if (v) setFinderDefaultLeadsTarget(v); });
+    getSetting('finder_default_keywords').then(v => { if (v) setFinderDefaultKeywords(v); });
   }, []);
 
   const handleSave = async () => {
@@ -40,6 +49,9 @@ export default function SettingsPage() {
       setSetting('default_cooldown_days', defaultCooldownDays),
       setSetting('default_call_after_hours', defaultCallAfterHours),
       setSetting('opt_out_keywords', optOutKeywords),
+      setSetting('finder_default_city', finderDefaultCity),
+      setSetting('finder_default_leads_target', finderDefaultLeadsTarget),
+      setSetting('finder_default_keywords', finderDefaultKeywords),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -160,6 +172,28 @@ export default function SettingsPage() {
             {saved ? <Check size={13} /> : <Save size={13} />}
             {saved ? 'Saved!' : 'Save All Settings'}
           </Button>
+
+          {/* Finder Defaults */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Search size={15} /> Finder Defaults
+              <InfoTip text="Default values used when opening the Business Finder. These are also saved automatically when you run a search." />
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Default City</label>
+                <Input value={finderDefaultCity} onChange={e => setFinderDefaultCity(e.target.value)} placeholder="e.g. Göteborg" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Leads Target/Run</label>
+                <Input value={finderDefaultLeadsTarget} onChange={e => setFinderDefaultLeadsTarget(e.target.value)} placeholder="50" className="h-8 text-sm" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-xs text-muted-foreground mb-1 block">Default Keywords (one per line)</label>
+              <Textarea value={finderDefaultKeywords} onChange={e => setFinderDefaultKeywords(e.target.value)} placeholder="frisör&#10;bilverkstad" className="h-20 text-sm font-mono resize-none" />
+            </div>
+          </div>
 
           {/* Google Places API */}
           <div className="bg-card border border-border rounded-lg p-5">
