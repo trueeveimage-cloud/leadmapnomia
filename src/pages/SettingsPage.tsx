@@ -48,6 +48,9 @@ export default function SettingsPage() {
       setSetting('default_cooldown_days', defaultCooldownDays),
       setSetting('default_call_after_hours', defaultCallAfterHours),
       setSetting('opt_out_keywords', optOutKeywords),
+      setSetting('finder_default_city', finderDefaultCity),
+      setSetting('finder_default_leads_target', finderDefaultLeadsTarget),
+      setSetting('finder_default_keywords', finderDefaultKeywords),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
