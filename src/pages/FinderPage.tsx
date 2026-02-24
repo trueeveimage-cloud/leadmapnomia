@@ -339,8 +339,8 @@ export default function FinderPage() {
             </div>
             <div className="flex items-center justify-between py-1">
               <div>
-                <label className="text-sm text-foreground">Also find Gmail-only businesses</label>
-                <p className="text-[10px] text-muted-foreground">Detect businesses using @gmail.com instead of a custom domain</p>
+                <label className="text-sm text-foreground">Also find email-only businesses</label>
+                <p className="text-[10px] text-muted-foreground">Include businesses that only have an email (any @domain) but no website</p>
               </div>
               <Switch checked={findGmailOnly} onCheckedChange={setFindGmailOnly} />
             </div>

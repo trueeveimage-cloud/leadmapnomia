@@ -93,7 +93,6 @@ export async function fetchLeadCounts() {
     total: leads.length,
     unsorted: leads.filter(l => l.section === 'unsorted').length,
     phone: leads.filter(l => l.section === 'phone').length,
-    gmail: leads.filter(l => l.section === 'gmail').length,
     email: leads.filter(l => l.section === 'email').length,
     both: leads.filter(l => l.section === 'both').length,
     missing: leads.filter(l => l.section === 'missing').length,

@@ -70,7 +70,6 @@ function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['c
 
   const subsections: NavItem[] = [
     { label: 'Has Phone', path: '/phone', icon: <Phone size={13} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
-    { label: 'Has Gmail', path: '/gmail', icon: <AtSign size={13} />, badge: counts.gmail, color: 'hsl(0 72% 55%)' },
     { label: 'Has Email', path: '/email', icon: <Mail size={13} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
     { label: 'Both', path: '/both', icon: <Zap size={13} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
     { label: 'Missing', path: '/missing', icon: <AlertCircle size={13} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },

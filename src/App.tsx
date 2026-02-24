@@ -72,8 +72,8 @@ const App = () => (
                     <Route path="/bulk" element={<BulkPage />} />
                     <Route path="/unsorted" element={<SectionPage allSections title="Unsorted Inbox" showTriage emptyMessage="No unsorted leads — add some above!" />} />
                     <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
-                    <Route path="/gmail" element={<SectionPage section="gmail" title="Has Gmail" emptyMessage="No Gmail leads yet" />} />
                     <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
+                    <Route path="/gmail" element={<Navigate to="/email" replace />} />
                     <Route path="/both" element={<SectionPage section="both" title="Has Both" emptyMessage="No leads with both contact methods" />} />
                     <Route path="/missing" element={<SectionPage section="missing" title="Missing Contact" emptyMessage="No missing contact leads" />} />
                     <Route path="/callbacks" element={<CallbacksPage />} />
