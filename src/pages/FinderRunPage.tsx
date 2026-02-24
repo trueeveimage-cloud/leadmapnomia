@@ -223,6 +223,12 @@ export default function FinderRunPage() {
               <Square size={12} /> Stop
             </Button>
           )}
+          {run.status === 'done' && candidates.some(c => c.outcome === 'failed') && (
+            <Button variant="outline" size="sm" onClick={handleRefetch} disabled={refetching} className="gap-1.5 shrink-0">
+              {refetching ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Re-fetch Failed ({candidates.filter(c => c.outcome === 'failed').length})
+            </Button>
+          )}
         </div>
 
         {/* Live progress bar */}
