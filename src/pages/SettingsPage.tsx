@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getSetting, setSetting } from '@/lib/supabase';
-import { Settings, Save, Download, Check, AlertTriangle, Megaphone } from 'lucide-react';
+import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/lib/supabase';
