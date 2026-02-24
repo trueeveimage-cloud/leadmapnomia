@@ -68,6 +68,7 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   'mora': { lat: 61.0064, lng: 14.5430 },
   'katrineholm': { lat: 58.9960, lng: 16.2079 },
   'borlänge': { lat: 60.4858, lng: 15.4365 },
+  'tumba': { lat: 59.1990, lng: 17.8310 },
 };
 
 function getCityCoords(city: string): { lat: number; lng: number } | null {
