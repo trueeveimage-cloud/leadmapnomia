@@ -35,6 +35,7 @@ export default function FinderPage() {
   const [maxDetails, setMaxDetails] = useState(100);
   const [minRating, setMinRating] = useState('');
   const [minReviews, setMinReviews] = useState('');
+  const [maxReviews, setMaxReviews] = useState('50');
   const [requirePhone, setRequirePhone] = useState(false);
   const [findGmailOnly, setFindGmailOnly] = useState(false);
   const [running, setRunning] = useState(false);
