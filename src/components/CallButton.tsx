@@ -162,7 +162,8 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       status: 'callback',
       call_outcome_last: selectedOutcome?.key,
       next_action_at: nextActionAt,
-    });
+      ...trackingUpdates(),
+    } as any);
     await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, nextActionAt });
     onUpdate?.(updated);
     refreshCounts();
