@@ -41,7 +41,7 @@ function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: bool
           'text-xs px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center',
           active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
         )}>
-          {item.badge > 999 ? '999+' : item.badge}
+          {item.badge.toLocaleString()}
         </span>
       )}
     </Link>
@@ -100,7 +100,7 @@ function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['c
               'text-xs px-1.5 py-0.5 rounded-full font-medium min-w-[20px] text-center',
               isUnsortedActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
             )}>
-              {counts.unsorted > 999 ? '999+' : counts.unsorted}
+              {counts.unsorted.toLocaleString()}
             </span>
           )}
         </Link>

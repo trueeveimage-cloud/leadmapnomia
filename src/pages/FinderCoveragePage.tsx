@@ -51,24 +51,42 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
       }
     });
 
+    // Group runs by city for aggregate stats
+    const cityRunMap = new Map<string, { runs: number; candidates: number; noWebPhone: number; noWebEmail: number }>();
+    for (const run of runs) {
+      const key = run.city.toLowerCase();
+      const existing = cityRunMap.get(key) || { runs: 0, candidates: 0, noWebPhone: 0, noWebEmail: 0 };
+      existing.runs++;
+      existing.candidates += (run.stats as any)?.candidatesFound || 0;
+      existing.noWebPhone += (run.stats as any)?.noWebsiteWithPhone || 0;
+      existing.noWebEmail += (run.stats as any)?.noWebsiteEmailOnly || 0;
+      cityRunMap.set(key, existing);
+    }
+
     // Unscanned city dots
     SWEDEN_CITIES
-      .filter(c => !runs.some(r => r.city.toLowerCase() === c.name.toLowerCase()))
+      .filter(c => !cityRunMap.has(c.name.toLowerCase()))
       .forEach(city => {
         L.circleMarker([city.lat, city.lng], {
-          radius: 4,
-          color: 'hsl(215, 15%, 50%)',
-          fillColor: 'hsl(215, 15%, 50%)',
-          fillOpacity: 0.3,
-          weight: 1,
+          radius: 5,
+          color: 'hsl(0, 0%, 40%)',
+          fillColor: 'hsl(0, 0%, 30%)',
+          fillOpacity: 0.5,
+          weight: 1.5,
         })
-          .bindPopup(`<strong>${city.name}</strong><br/>Not yet scanned`)
+          .bindTooltip(`<strong>${city.name}</strong><br/><span style="color:#f87171;">Not yet scanned</span><br/>Pop: ${city.population.toLocaleString()}`, { direction: 'top' })
           .addTo(map);
       });
 
-    // Run circles
+    // Run circles with success rate tooltips
     runsWithCoords.forEach(run => {
+      const cityKey = run.city.toLowerCase();
+      const agg = cityRunMap.get(cityKey);
+      const totalLeads = agg ? agg.noWebPhone + agg.noWebEmail : 0;
+      const totalCands = agg ? agg.candidates : 0;
+      const successRate = totalCands > 0 ? ((totalLeads / totalCands) * 100).toFixed(1) : '0';
       const color = run.status === 'done' ? 'hsl(142, 69%, 45%)' : 'hsl(213, 94%, 58%)';
+
       L.circle([run.lat, run.lng], {
         radius: run.radius || 1500,
         color,
@@ -76,6 +94,14 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
         fillOpacity: 0.15,
         weight: 2,
       })
+        .bindTooltip(`
+          <div style="font-size:12px;line-height:1.5;">
+            <strong style="font-size:13px;">${run.city}</strong><br/>
+            Success rate: <strong>${successRate}%</strong><br/>
+            Leads: ${totalLeads} / ${totalCands} candidates<br/>
+            Runs: ${agg?.runs || 1}
+          </div>
+        `, { direction: 'top', sticky: true })
         .bindPopup(`
           <div style="min-width:180px;font-size:12px;">
             <strong style="font-size:13px;">${run.city}</strong><br/>
@@ -83,6 +109,7 @@ function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[];
             Keywords: ${(run.keywords || []).length}<br/>
             Candidates: ${(run.stats as any)?.candidatesFound || 0}<br/>
             No Web + Phone: ${(run.stats as any)?.noWebsiteWithPhone || 0}<br/>
+            Success rate: <strong>${successRate}%</strong><br/>
             Radius: ${run.radius}m<br/>
             ${format(new Date(run.created_at), 'MMM d, HH:mm')}<br/>
             <a href="/finder/runs/${run.id}" style="color:#60a5fa;">View results →</a>
@@ -115,20 +142,26 @@ export default function FinderCoveragePage() {
   const totalCandidates = runs.reduce((s, r) => s + ((r.stats as any)?.candidatesFound || 0), 0);
   const totalDetails = runs.reduce((s, r) => s + ((r.stats as any)?.detailsFetched || 0), 0);
   const totalNoWebPhone = runs.reduce((s, r) => s + ((r.stats as any)?.noWebsiteWithPhone || 0), 0);
+  const totalNoWebEmail = runs.reduce((s, r) => s + ((r.stats as any)?.noWebsiteEmailOnly || 0), 0);
+  const totalLeads = totalNoWebPhone + totalNoWebEmail;
+  const avgSuccessRate = totalCandidates > 0 ? ((totalLeads / totalCandidates) * 100).toFixed(1) : '0';
   const estSpend = (totalDetails * 0.017 + totalRuns * 2 * 0.032).toFixed(2);
+  const scannedCities = new Set(runs.map(r => r.city.toLowerCase()));
+  const unsearchedCount = SWEDEN_CITIES.filter(c => !scannedCities.has(c.name.toLowerCase())).length;
 
   const cityStats = useMemo(() => {
-    const map = new Map<string, { runs: number; noWebPhone: number; totalCandidates: number }>();
+    const map = new Map<string, { runs: number; noWebPhone: number; noWebEmail: number; totalCandidates: number }>();
     for (const run of runs) {
       const key = run.city;
-      const existing = map.get(key) || { runs: 0, noWebPhone: 0, totalCandidates: 0 };
+      const existing = map.get(key) || { runs: 0, noWebPhone: 0, noWebEmail: 0, totalCandidates: 0 };
       existing.runs++;
       existing.noWebPhone += (run.stats as any)?.noWebsiteWithPhone || 0;
+      existing.noWebEmail += (run.stats as any)?.noWebsiteEmailOnly || 0;
       existing.totalCandidates += (run.stats as any)?.candidatesFound || 0;
       map.set(key, existing);
     }
     return Array.from(map.entries())
-      .map(([city, stats]) => ({ city, ...stats }))
+      .map(([city, stats]) => ({ city, ...stats, successRate: stats.totalCandidates > 0 ? ((stats.noWebPhone + stats.noWebEmail) / stats.totalCandidates * 100).toFixed(1) : '0' }))
       .sort((a, b) => b.noWebPhone - a.noWebPhone);
   }, [runs]);
 
@@ -145,19 +178,21 @@ export default function FinderCoveragePage() {
 
         {/* Stats bar */}
         <div className="px-4 sm:px-6 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {[
               { label: 'Total Runs', value: totalRuns, icon: <Search size={13} /> },
+              { label: 'Cities Covered', value: `${scannedCities.size}/${SWEDEN_CITIES.length}`, icon: <MapPin size={13} /> },
+              { label: 'Unsearched', value: unsearchedCount, icon: <MapPin size={13} />, warn: unsearchedCount > 0 },
               { label: 'Candidates', value: totalCandidates, icon: <BarChart2 size={13} /> },
-              { label: 'Details Fetched', value: totalDetails, icon: <Globe size={13} /> },
-              { label: 'No Web + Phone', value: totalNoWebPhone, icon: <Phone size={13} />, highlight: true },
+              { label: 'Leads Found', value: totalLeads, icon: <Phone size={13} />, highlight: true },
+              { label: 'Success Rate', value: `${avgSuccessRate}%`, icon: <CheckCircle size={13} />, highlight: true },
               { label: 'Est. Spend', value: `$${estSpend}`, icon: <span className="text-xs">💰</span> },
             ].map(stat => (
-              <div key={stat.label} className={`p-3 rounded-lg border ${stat.highlight ? 'bg-green/10 border-green/30' : 'bg-card border-border'}`}>
+              <div key={stat.label} className={`p-3 rounded-lg border ${stat.highlight ? 'bg-green/10 border-green/30' : stat.warn ? 'bg-amber/10 border-amber/30' : 'bg-card border-border'}`}>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                   {stat.icon} {stat.label}
                 </div>
-                <div className={`text-lg font-bold ${stat.highlight ? 'text-green' : 'text-foreground'}`}>
+                <div className={`text-lg font-bold ${stat.highlight ? 'text-green' : stat.warn ? 'text-amber' : 'text-foreground'}`}>
                   {stat.value}
                 </div>
               </div>
@@ -185,7 +220,8 @@ export default function FinderCoveragePage() {
                     <th className="text-left px-4 py-2.5 font-medium">City</th>
                     <th className="text-center px-3 py-2.5 font-medium">Runs</th>
                     <th className="text-center px-3 py-2.5 font-medium">Candidates</th>
-                    <th className="text-center px-3 py-2.5 font-medium">No Web + Phone</th>
+                    <th className="text-center px-3 py-2.5 font-medium">Leads</th>
+                    <th className="text-center px-3 py-2.5 font-medium">Success Rate</th>
                     <th className="text-center px-3 py-2.5 font-medium">Coverage</th>
                   </tr>
                 </thead>
@@ -194,6 +230,8 @@ export default function FinderCoveragePage() {
                     const cityProfile = findCity(cs.city);
                     const coverageScore = cs.totalCandidates > 200 ? 'Good' : cs.totalCandidates > 50 ? 'Partial' : 'Low';
                     const coverageColor = coverageScore === 'Good' ? 'text-green' : coverageScore === 'Partial' ? 'text-amber' : 'text-muted-foreground';
+                    const rateNum = parseFloat(cs.successRate);
+                    const rateColor = rateNum >= 30 ? 'text-green' : rateNum >= 15 ? 'text-amber' : 'text-muted-foreground';
                     return (
                       <tr key={cs.city} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-2.5 font-medium text-foreground">
@@ -206,7 +244,8 @@ export default function FinderCoveragePage() {
                         </td>
                         <td className="text-center px-3 py-2.5 text-muted-foreground">{cs.runs}</td>
                         <td className="text-center px-3 py-2.5 text-muted-foreground">{cs.totalCandidates}</td>
-                        <td className="text-center px-3 py-2.5 font-medium text-green">{cs.noWebPhone}</td>
+                        <td className="text-center px-3 py-2.5 font-medium text-green">{cs.noWebPhone + cs.noWebEmail}</td>
+                        <td className={`text-center px-3 py-2.5 text-xs font-bold ${rateColor}`}>{cs.successRate}%</td>
                         <td className={`text-center px-3 py-2.5 text-xs font-medium ${coverageColor}`}>{coverageScore}</td>
                       </tr>
                     );
