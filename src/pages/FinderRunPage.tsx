@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
-import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
+import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
 import { addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
