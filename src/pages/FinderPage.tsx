@@ -172,13 +172,14 @@ export default function FinderPage() {
 
   // City stats from previous runs
   const cityStats = useMemo(() => {
-    const stats: Record<string, { runs: number; leads: number }> = {};
+    const stats: Record<string, { runs: number; leads: number; candidates: number }> = {};
     for (const run of runs) {
       const name = run.city;
-      if (!stats[name]) stats[name] = { runs: 0, leads: 0 };
+      if (!stats[name]) stats[name] = { runs: 0, leads: 0, candidates: 0 };
       stats[name].runs += 1;
       const s = run.stats as any;
       stats[name].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
+      stats[name].candidates += (s?.candidatesFound ?? 0);
     }
     return stats;
   }, [runs]);
