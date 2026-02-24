@@ -213,7 +213,7 @@ export default function FinderPage() {
               Quality Filters
               <InfoTip text="Filter out low-quality businesses before spending on detail lookups. Applied during Stage 1 so you don't waste detail calls on businesses that don't meet your criteria." />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                   Min Rating
