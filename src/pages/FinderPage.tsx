@@ -328,19 +328,26 @@ export default function FinderPage() {
                 <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                   {filteredCities.map(city => {
                     const cs = cityStats[city.name];
+                    const searched = !!cs;
+                    const successRate = cs && cs.candidates > 0 ? ((cs.leads / cs.candidates) * 100).toFixed(0) : null;
                     return (
                       <button
                         key={city.name}
                         onClick={() => handleSelectCity(city)}
-                        className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-center justify-between text-sm"
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors flex items-center justify-between text-sm gap-2"
                       >
-                        <div className="flex flex-col">
-                          <span className="font-medium text-foreground">{city.name}</span>
-                          {cs && (
-                            <span className="text-[10px] text-muted-foreground">{cs.runs} run{cs.runs !== 1 ? 's' : ''} · {cs.leads} lead{cs.leads !== 1 ? 's' : ''}</span>
-                          )}
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${searched ? 'bg-green' : 'bg-muted-foreground/40'}`} />
+                            <span className="font-medium text-foreground">{city.name}</span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground ml-3">
+                            {searched
+                              ? `${cs.runs} run${cs.runs !== 1 ? 's' : ''} · ${cs.leads} leads · ${successRate}% success`
+                              : 'Not yet searched'}
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
                       </button>
                     );
                   })}
