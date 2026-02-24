@@ -45,7 +45,7 @@ interface LeadListProps {
   excludeSection?: LeadSection;
 }
 
-export default function LeadList({ section, allSections, status, showTriage, title, emptyMessage }: LeadListProps) {
+export default function LeadList({ section, allSections, status, showTriage, title, emptyMessage, excludeSection }: LeadListProps) {
   const { refreshCounts } = useCRM();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,14 +60,17 @@ export default function LeadList({ section, allSections, status, showTriage, tit
     setLoading(true);
     try {
       // If allSections, fetch all leads (no section filter)
-      const data = await fetchLeads(allSections ? { status } : { section, status });
+      let data = await fetchLeads(allSections ? { status } : { section, status });
+      if (excludeSection) {
+        data = data.filter(l => l.section !== excludeSection);
+      }
       setLeads(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [section, allSections, status]);
+  }, [section, allSections, status, excludeSection]);
 
   useEffect(() => { load(); }, [load]);
 

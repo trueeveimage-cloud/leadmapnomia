@@ -11,9 +11,10 @@ interface SectionPageProps {
   title: string;
   showTriage?: boolean;
   emptyMessage?: string;
+  excludeSection?: LeadSection;
 }
 
-export default function SectionPage({ section, allSections, status, title, showTriage, emptyMessage }: SectionPageProps) {
+export default function SectionPage({ section, allSections, status, title, showTriage, emptyMessage, excludeSection }: SectionPageProps) {
   return (
     <AppLayout>
       <div className="flex flex-col h-full">
@@ -24,6 +25,7 @@ export default function SectionPage({ section, allSections, status, title, showT
           showTriage={showTriage}
           title={title}
           emptyMessage={emptyMessage}
+          excludeSection={excludeSection}
         />
       </div>
     </AppLayout>
