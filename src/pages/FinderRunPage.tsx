@@ -12,7 +12,7 @@ import {
   Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 
-type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
+type Tab = 'no_website_phone' | 'no_website_no_phone' | 'unfetched' | 'duplicates' | 'skipped' | 'all';
 
 export default function FinderRunPage() {
   const { id } = useParams<{ id: string }>();
