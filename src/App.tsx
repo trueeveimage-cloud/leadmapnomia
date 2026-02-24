@@ -96,6 +96,7 @@ const App = () => (
                     <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
+                    <Route path="/next" element={<NextLeadPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
