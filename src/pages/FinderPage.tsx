@@ -13,7 +13,7 @@ import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, Preset
 import { getSetting, setSetting } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap } from 'lucide-react';
+import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 const DEFAULT_KEYWORDS = `frisör
@@ -32,10 +32,9 @@ const LEADS_TARGETS = [25, 50, 100, 200, 400];
 export default function FinderPage() {
   const navigate = useNavigate();
 
-  // City selection
+  // City selection — multi
   const [citySearch, setCitySearch] = useState('');
-  const [selectedCity, setSelectedCity] = useState<CityProfile | null>(null);
-  const [customCity, setCustomCity] = useState('');
+  const [selectedCities, setSelectedCities] = useState<CityProfile[]>([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
 
   // Preset + settings
@@ -65,8 +64,9 @@ export default function FinderPage() {
     getSetting('finder_default_keywords').then(v => { if (v) setKeywords(v); });
     getSetting('finder_default_city').then(v => {
       if (v) {
+        // Support legacy single-city saved value
         const city = findCity(v);
-        if (city) setSelectedCity(city);
+        if (city) setSelectedCities([city]);
       }
     });
     getSetting('finder_default_leads_target').then(v => {
@@ -75,13 +75,15 @@ export default function FinderPage() {
   }, []);
 
   const keywordList = keywords.split('\n').map(k => k.trim()).filter(k => k.length > 0);
-  const effectiveCity = selectedCity?.name || customCity;
+
+  // Use first selected city for preset computation (presets shown based on first city)
+  const primaryCity = selectedCities[0] || null;
 
   // Compute presets when city changes
   const presets = useMemo(() => {
-    if (!selectedCity) return null;
-    return computeAllPresets(selectedCity);
-  }, [selectedCity]);
+    if (!primaryCity) return null;
+    return computeAllPresets(primaryCity);
+  }, [primaryCity]);
 
   // Apply preset + leads target
   const currentPreset = useMemo(() => {
@@ -103,65 +105,90 @@ export default function FinderPage() {
     setRequirePhone(currentPreset.requirePhone);
   }, [currentPreset]);
 
-  // Cost estimate
+  // Cost estimate (per city × number of cities)
   const costEstimate = useMemo(() => {
     if (!currentPreset) return null;
-    return estimateCostFromPreset(currentPreset, keywordList.length);
-  }, [currentPreset, keywordList.length]);
+    const perCity = estimateCostFromPreset(currentPreset, keywordList.length);
+    const count = selectedCities.length || 1;
+    const totalCost = (parseFloat(perCity.totalUsd.replace('$', '')) * count);
+    return { ...perCity, totalUsd: `$${totalCost.toFixed(2)}`, cityCount: count };
+  }, [currentPreset, keywordList.length, selectedCities.length]);
 
-  // City search results
+  // City search results — exclude already selected
   const filteredCities = useMemo(() => {
-    return searchCities(citySearch).slice(0, 15);
-  }, [citySearch]);
+    const selectedNames = new Set(selectedCities.map(c => c.name));
+    return searchCities(citySearch).filter(c => !selectedNames.has(c.name)).slice(0, 15);
+  }, [citySearch, selectedCities]);
 
   const handleSelectCity = (city: CityProfile) => {
-    setSelectedCity(city);
+    setSelectedCities(prev => [...prev, city]);
     setCitySearch('');
     setShowCityDropdown(false);
   };
 
+  const handleRemoveCity = (name: string) => {
+    setSelectedCities(prev => prev.filter(c => c.name !== name));
+  };
+
   const handleRun = async () => {
-    if (!effectiveCity.trim()) { toast.error('Select a city'); return; }
+    if (selectedCities.length === 0) { toast.error('Select at least one city'); return; }
     if (keywordList.length === 0) { toast.error('Add at least one keyword'); return; }
 
     // Save defaults
-    setSetting('finder_default_city', effectiveCity);
+    setSetting('finder_default_city', selectedCities[0].name);
     setSetting('finder_default_keywords', keywords);
     setSetting('finder_default_leads_target', String(leadsTarget));
 
     setRunning(true);
     try {
-      const run = await createFinderRun({
-        city: effectiveCity,
-        mode: 'niche',
-        keywords: keywordList,
-        radius,
-        maxPages,
-        maxCandidates,
-        maxDetails,
-        minRating: minRating ? parseFloat(minRating) : null,
-        minReviews: minReviews ? parseInt(minReviews) : null,
-        maxReviews: maxReviews ? parseInt(maxReviews) : null,
-        requirePhone,
-        findGmailOnly,
-      });
+      // Create a run for each selected city
+      const createdRuns: { id: string; city: string }[] = [];
+      for (const city of selectedCities) {
+        // Compute city-specific preset
+        const cityPresets = computeAllPresets(city);
+        const cityBase = cityPresets.find(p => p.key === activePreset) || cityPresets[0];
+        const cityPreset = adjustForLeadsTarget(cityBase, leadsTarget);
 
-      toast.success('Finder run started!');
-      navigate(`/finder/runs/${run.id}`);
+        const run = await createFinderRun({
+          city: city.name,
+          mode: 'niche',
+          keywords: keywordList,
+          radius: cityPreset.radius,
+          maxPages: cityPreset.maxPages,
+          maxCandidates: cityPreset.maxCandidates,
+          maxDetails: cityPreset.maxDetails,
+          minRating: cityPreset.minRating || null,
+          minReviews: cityPreset.minReviews || null,
+          maxReviews: cityPreset.maxReviews || null,
+          requirePhone: cityPreset.requirePhone,
+          findGmailOnly,
+        });
+        createdRuns.push({ id: run.id, city: city.name });
 
-      runFinderSearch(run.id, {
-        city: effectiveCity,
-        keywords: keywordList,
-        radius,
-        maxPages,
-        maxCandidates,
-        maxDetails,
-        minRating: minRating ? parseFloat(minRating) : undefined,
-        minReviews: minReviews ? parseInt(minReviews) : undefined,
-        maxReviews: maxReviews ? parseInt(maxReviews) : undefined,
-        requirePhone,
-        findGmailOnly,
-      }).catch(e => console.error('Finder search error:', e));
+        // Fire & forget the search
+        runFinderSearch(run.id, {
+          city: city.name,
+          keywords: keywordList,
+          radius: cityPreset.radius,
+          maxPages: cityPreset.maxPages,
+          maxCandidates: cityPreset.maxCandidates,
+          maxDetails: cityPreset.maxDetails,
+          minRating: cityPreset.minRating || undefined,
+          minReviews: cityPreset.minReviews || undefined,
+          maxReviews: cityPreset.maxReviews || undefined,
+          requirePhone: cityPreset.requirePhone,
+          findGmailOnly,
+        }).catch(e => console.error(`Finder search error (${city.name}):`, e));
+      }
+
+      if (createdRuns.length === 1) {
+        toast.success('Finder run started!');
+        navigate(`/finder/runs/${createdRuns[0].id}`);
+      } else {
+        toast.success(`${createdRuns.length} finder runs started!`);
+        // Refresh the runs list so user can see them
+        fetchFinderRuns().then(setRuns).catch(() => {});
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -189,25 +216,45 @@ export default function FinderPage() {
         </div>
 
         <div className="space-y-5">
-          {/* City Selector */}
+          {/* City Selector — Multi */}
           <div>
             <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
-              <MapPin size={13} /> City / Area
-              <InfoTip text="Select a Swedish city. Settings will auto-adjust based on city size and density." />
+              <MapPin size={13} /> Cities / Areas
+              <InfoTip text="Select one or more Swedish cities. Settings will auto-adjust based on city size. A separate run is created per city." />
             </label>
+
+            {/* Selected city chips */}
+            {selectedCities.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {selectedCities.map(city => (
+                  <span
+                    key={city.name}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 border border-primary/30 text-primary"
+                  >
+                    {city.name}
+                    <button
+                      onClick={() => handleRemoveCity(city.name)}
+                      className="hover:text-destructive transition-colors"
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="relative">
               <Input
-                value={selectedCity ? selectedCity.name : citySearch}
+                value={citySearch}
                 onChange={e => {
                   setCitySearch(e.target.value);
-                  setSelectedCity(null);
                   setShowCityDropdown(true);
                 }}
                 onFocus={() => setShowCityDropdown(true)}
-                placeholder="Search Swedish cities…"
+                placeholder={selectedCities.length > 0 ? 'Add another city…' : 'Search Swedish cities…'}
                 className="h-10"
               />
-              {showCityDropdown && !selectedCity && (
+              {showCityDropdown && (
                 <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-popover border border-border rounded-lg shadow-lg">
                   {filteredCities.map(city => (
                     <button
@@ -219,28 +266,12 @@ export default function FinderPage() {
                       <span className="text-xs text-muted-foreground">{city.type} · {city.density === 'HIGH' ? '🔴' : city.density === 'MED' ? '🟡' : '🟢'} {city.density}</span>
                     </button>
                   ))}
-                  <button
-                    onClick={() => { setShowCityDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:bg-muted/50 border-t border-border"
-                  >
-                    Type a custom city name and press Enter…
-                  </button>
+                  {filteredCities.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No cities match</div>
+                  )}
                 </div>
               )}
             </div>
-            {/* Area profile badge */}
-            {selectedCity && (
-              <div className="mt-2 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
-                  selectedCity.density === 'HIGH' ? 'bg-red/10 border-red/30 text-red' :
-                  selectedCity.density === 'MED' ? 'bg-amber/10 border-amber/30 text-amber' :
-                  'bg-green/10 border-green/30 text-green'
-                }`}>
-                  <MapPin size={10} />
-                  {selectedCity.name} — {getAreaLabel(selectedCity)}
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Presets */}
@@ -248,7 +279,7 @@ export default function FinderPage() {
             <div>
               <label className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
                 <Target size={13} /> Strategy Preset
-                <InfoTip text="Presets auto-scale radius, candidate limits, and filters based on city size. Bigger cities get wider searches with more results." />
+                <InfoTip text="Presets auto-scale radius, candidate limits, and filters based on city size. Each city gets its own optimized settings." />
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {presets.map(preset => {
@@ -270,8 +301,8 @@ export default function FinderPage() {
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{preset.description}</p>
                       <div className="mt-2 space-y-0.5">
-                        <div className="text-[10px] text-muted-foreground">~{adjusted.maxDetails} details</div>
-                        <div className="text-[10px] font-medium text-primary">{cost.totalUsd}</div>
+                        <div className="text-[10px] text-muted-foreground">~{adjusted.maxDetails} details/city</div>
+                        <div className="text-[10px] font-medium text-primary">{cost.totalUsd}/city</div>
                       </div>
                     </button>
                   );
@@ -284,7 +315,7 @@ export default function FinderPage() {
           <div>
             <label className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
               <Zap size={13} /> Leads Target
-              <InfoTip text="How many call-ready leads do you want from this run? Adjusts detail lookups automatically. Actual results depend on your market." />
+              <InfoTip text="How many call-ready leads do you want per city? Adjusts detail lookups automatically." />
             </label>
             <div className="space-y-3">
               <Slider
@@ -309,7 +340,9 @@ export default function FinderPage() {
             {costEstimate && (
               <div className="mt-2 p-2.5 bg-muted/50 rounded-lg flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
-                  ~{maxDetails} detail lookups · {keywordList.length * maxPages} searches
+                  {selectedCities.length > 1
+                    ? `${selectedCities.length} cities · ~${maxDetails} details each`
+                    : `~${maxDetails} detail lookups · ${keywordList.length * maxPages} searches`}
                 </span>
                 <span className="font-medium text-primary">{costEstimate.totalUsd}</span>
               </div>
@@ -404,12 +437,18 @@ export default function FinderPage() {
           <div className="flex gap-2 pt-2">
             <Button
               onClick={handleRun}
-              disabled={running || !effectiveCity.trim() || keywordList.length === 0}
+              disabled={running || selectedCities.length === 0 || keywordList.length === 0}
               className="gap-1.5 flex-1 h-11"
               size="lg"
             >
               {running ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-              {running ? 'Starting…' : `Run Finder — ${effectiveCity || 'Select city'}`}
+              {running
+                ? 'Starting…'
+                : selectedCities.length === 0
+                  ? 'Select cities to run'
+                  : selectedCities.length === 1
+                    ? `Run Finder — ${selectedCities[0].name}`
+                    : `Run Finder — ${selectedCities.length} cities`}
             </Button>
           </div>
         </div>
