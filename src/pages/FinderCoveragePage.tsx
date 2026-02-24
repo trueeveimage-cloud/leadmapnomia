@@ -150,17 +150,18 @@ export default function FinderCoveragePage() {
   const unsearchedCount = SWEDEN_CITIES.filter(c => !scannedCities.has(c.name.toLowerCase())).length;
 
   const cityStats = useMemo(() => {
-    const map = new Map<string, { runs: number; noWebPhone: number; totalCandidates: number }>();
+    const map = new Map<string, { runs: number; noWebPhone: number; noWebEmail: number; totalCandidates: number }>();
     for (const run of runs) {
       const key = run.city;
-      const existing = map.get(key) || { runs: 0, noWebPhone: 0, totalCandidates: 0 };
+      const existing = map.get(key) || { runs: 0, noWebPhone: 0, noWebEmail: 0, totalCandidates: 0 };
       existing.runs++;
       existing.noWebPhone += (run.stats as any)?.noWebsiteWithPhone || 0;
+      existing.noWebEmail += (run.stats as any)?.noWebsiteEmailOnly || 0;
       existing.totalCandidates += (run.stats as any)?.candidatesFound || 0;
       map.set(key, existing);
     }
     return Array.from(map.entries())
-      .map(([city, stats]) => ({ city, ...stats }))
+      .map(([city, stats]) => ({ city, ...stats, successRate: stats.totalCandidates > 0 ? ((stats.noWebPhone + stats.noWebEmail) / stats.totalCandidates * 100).toFixed(1) : '0' }))
       .sort((a, b) => b.noWebPhone - a.noWebPhone);
   }, [runs]);
 
