@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
   Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
-  Megaphone, MessageCircle, PhoneCall, LogOut
+  Megaphone, MessageCircle, PhoneCall, LogOut, MapPin
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
