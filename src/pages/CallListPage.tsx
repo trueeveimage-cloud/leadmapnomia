@@ -47,6 +47,9 @@ export default function CallListPage() {
         needs_call: false,
         outreach_stage: 'called',
         call_outcome_last: outcome,
+        call_attempts: ((lead as any).call_attempts || 0) + 1,
+        last_contacted_at: new Date().toISOString(),
+        last_contact_method: 'call',
       } as any);
       setLeads(ls => ls.filter(l => l.id !== lead.id));
       setActiveId(null);

@@ -57,15 +57,21 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
     if (isMobile) {
       window.location.href = `tel:${lead.phone}`;
     }
+    // Track the call attempt immediately
     setStep('outcome');
   };
+
+  const trackingUpdates = () => ({
+    call_attempts: ((lead as any).call_attempts || 0) + 1,
+    last_contacted_at: new Date().toISOString(),
+    last_contact_method: 'call',
+  });
 
   const handleOutcome = async (outcome: typeof CALL_OUTCOMES[0]) => {
     setSelectedOutcome(outcome);
     if (outcome.key === 'demo') {
-      // Directly update to demo and open the demo brief form
       try {
-        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo' });
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo', ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: 'demo', status: 'demo' });
         setPendingLead(updated);
         onUpdate?.(updated);
@@ -77,7 +83,41 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       }
     } else if (outcome.key === 'answered') {
       setStep('status');
+    } else if (outcome.key === 'not_answered') {
+      // Auto-schedule: tomorrow at noon
+      const dt = new Date();
+      dt.setDate(dt.getDate() + 1);
+      dt.setHours(12, 0, 0, 0);
+      const updated = await updateLead(lead.id, {
+        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+    } else if (outcome.key === 'busy') {
+      // Auto-schedule: 3 hours from now
+      const dt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      const updated = await updateLead(lead.id, {
+        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+    } else if (outcome.key === 'wrong_number') {
+      const updated = await updateLead(lead.id, {
+        status: 'not_interested', call_outcome_last: outcome.key, outreach_opt_out: true, ...trackingUpdates(),
+      } as any);
+      await logActivity(lead.id, 'call', { outcome: outcome.key });
+      onUpdate?.(updated);
+      refreshCounts();
+      setStep('idle');
+      toast.success('Marked as wrong number');
     } else {
+      // callback_later
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setFollowupDate(tomorrow);
@@ -89,9 +129,8 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
   const handleStatus = async (status: LeadStatus) => {
     if (status === 'demo') {
-      // First update status to demo, then open demo form
       try {
-        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key });
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status: 'demo' });
         setPendingLead(updated);
         onUpdate?.(updated);
@@ -103,7 +142,7 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       }
       return;
     }
-    const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key });
+    const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
     await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status });
     onUpdate?.(updated);
     refreshCounts();
@@ -123,7 +162,8 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       status: 'callback',
       call_outcome_last: selectedOutcome?.key,
       next_action_at: nextActionAt,
-    });
+      ...trackingUpdates(),
+    } as any);
     await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, nextActionAt });
     onUpdate?.(updated);
     refreshCounts();
@@ -222,7 +262,37 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
           <div className="bg-card border border-border rounded-xl p-5 w-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="text-sm font-semibold text-foreground mb-1">Schedule follow-up</div>
-            <div className="text-xs text-muted-foreground mb-4">Outcome: {selectedOutcome?.label}</div>
+            <div className="text-xs text-muted-foreground mb-3">Outcome: {selectedOutcome?.label}</div>
+
+            {/* Quick presets */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {[
+                { label: '1h', fn: () => new Date(Date.now() + 1 * 60 * 60 * 1000) },
+                { label: '3h', fn: () => new Date(Date.now() + 3 * 60 * 60 * 1000) },
+                { label: 'Tomorrow', fn: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(10, 0, 0, 0); return d; } },
+                { label: '2 days', fn: () => { const d = new Date(); d.setDate(d.getDate() + 2); d.setHours(10, 0, 0, 0); return d; } },
+              ].map(p => (
+                <button
+                  key={p.label}
+                  onClick={async () => {
+                    const dt = p.fn();
+                    const updated = await updateLead(lead.id, {
+                      status: 'callback', call_outcome_last: selectedOutcome?.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+                    } as any);
+                    await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, nextActionAt: dt.toISOString() });
+                    onUpdate?.(updated);
+                    refreshCounts();
+                    setStep('idle');
+                    toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+                  }}
+                  className="px-2.5 py-1.5 rounded text-xs font-medium border border-border text-primary hover:bg-primary/10 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-xs text-muted-foreground mb-2 font-medium">Or pick a date:</div>
 
             <Calendar
               mode="single"

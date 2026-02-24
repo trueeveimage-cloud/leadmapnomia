@@ -117,6 +117,11 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
               {lead.rating} ({lead.reviews_count?.toLocaleString()})
             </span>
           )}
+          {lead.call_attempts > 0 && (
+            <span className="flex items-center gap-1" title={lead.last_contacted_at ? `Last: ${format(new Date(lead.last_contacted_at), 'MMM d h:mma')}` : ''}>
+              📞 {lead.call_attempts}
+            </span>
+          )}
           {lead.phone && (
             <span className="flex items-center gap-1 text-green-400/80">
               <Phone size={10} />

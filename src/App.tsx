@@ -21,6 +21,7 @@ import CampaignNewPage from "./pages/CampaignNewPage";
 import CampaignDetailPage from "./pages/CampaignDetailPage";
 import InboxPage from "./pages/InboxPage";
 import CallListPage from "./pages/CallListPage";
+import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,7 +37,7 @@ function GlobalHotkeys() {
       const isInput = tag === 'input' || tag === 'textarea';
       if (e.key === 'n' && !isInput && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        navigate('/add');
+        navigate('/next');
       }
     };
     window.addEventListener('keydown', handler);
@@ -95,6 +96,7 @@ const App = () => (
                     <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
+                    <Route path="/next" element={<NextLeadPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>

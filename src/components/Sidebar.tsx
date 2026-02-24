@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
   Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
-  Megaphone, MessageCircle, PhoneCall, LogOut, MapPin
+  Megaphone, MessageCircle, PhoneCall, LogOut, MapPin, ChevronRight as NextIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -162,6 +162,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Add links */}
       <div className="px-3 py-3 space-y-0.5">
+        <NavLink item={{ label: 'Next Lead', path: '/next', icon: <NextIcon size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
         <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
