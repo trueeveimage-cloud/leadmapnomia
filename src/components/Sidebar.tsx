@@ -165,6 +165,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
         <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+        <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
       </div>
 
