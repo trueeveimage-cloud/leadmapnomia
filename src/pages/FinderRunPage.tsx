@@ -26,6 +26,8 @@ export default function FinderRunPage() {
   const [bulkAdding, setBulkAdding] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [refetching, setRefetching] = useState(false);
+  const autoAddedRef = React.useRef(false);
+
   const load = useCallback(async () => {
     if (!id) return;
     try {
@@ -46,6 +48,40 @@ export default function FinderRunPage() {
     }, 3000);
     return () => clearInterval(interval);
   }, [load, run?.status]);
+
+  // Auto-add qualifying candidates to CRM when run finishes
+  useEffect(() => {
+    if (!run || run.status !== 'done' && run.status !== 'stopped') return;
+    if (autoAddedRef.current || bulkAdding) return;
+    const qualifying = candidates.filter(c =>
+      (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') && !addedIds.has(c.id)
+    );
+    if (qualifying.length === 0) return;
+    autoAddedRef.current = true;
+    (async () => {
+      setBulkAdding(true);
+      let added = 0;
+      for (const c of qualifying) {
+        try {
+          const { lead, duplicate, error } = await addLead({
+            place_id: c.place_id, maps_url: c.maps_url, name: c.name,
+            category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
+            rating: c.rating, reviews_count: c.reviews_count,
+            phone: c.phone, email: c.email || null, address: c.address, website: c.website,
+            section: 'unsorted', status: 'not_contacted',
+            call_outcome_last: null, next_action_at: null, notes: null, tags: [],
+          });
+          if (!duplicate && !error) {
+            setAddedIds(s => new Set(s).add(c.id));
+            added++;
+          }
+        } catch {}
+      }
+      refreshCounts();
+      setBulkAdding(false);
+      if (added > 0) toast.success(`Auto-added ${added} leads to CRM`);
+    })();
+  }, [run?.status, candidates.length]);
 
   const handleStop = async () => {
     if (!id) return;
