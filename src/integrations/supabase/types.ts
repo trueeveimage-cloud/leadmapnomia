@@ -202,6 +202,8 @@ export type Database = {
       }
       finder_runs: {
         Row: {
+          batch_id: string | null
+          batch_label: string | null
           city: string
           created_at: string
           id: string
@@ -219,6 +221,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch_id?: string | null
+          batch_label?: string | null
           city: string
           created_at?: string
           id?: string
@@ -236,6 +240,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch_id?: string | null
+          batch_label?: string | null
           city?: string
           created_at?: string
           id?: string

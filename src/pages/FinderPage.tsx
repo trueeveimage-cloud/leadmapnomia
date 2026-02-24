@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import InfoTip from '@/components/InfoTip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createFinderRun, fetchFinderRuns, runFinderSearch, fetchFinderCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
+// batch_id generated via crypto.randomUUID()
 import { SWEDEN_CITIES, findCity, searchCities, getAreaLabel, CityProfile } from '@/lib/swedenCities';
 import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, PresetConfig, PresetKey } from '@/lib/finderPresets';
 import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabase';
@@ -230,10 +231,12 @@ export default function FinderPage() {
 
     setRunning(true);
     try {
-      // Create a run for each selected city
+      // Generate shared batch_id for multi-city runs
+      const batchId = selectedCities.length > 1 ? crypto.randomUUID() : null;
+      const batchLabel = selectedCities.length > 1 ? selectedCities.map(c => c.name).join(', ') : null;
+
       const createdRuns: { id: string; city: string }[] = [];
       for (const city of selectedCities) {
-        // Compute city-specific preset
         const cityPresets = computeAllPresets(city);
         const cityBase = cityPresets.find(p => p.key === activePreset) || cityPresets[0];
         const cityPreset = adjustForLeadsTarget(cityBase, leadsTarget);
@@ -251,10 +254,11 @@ export default function FinderPage() {
           maxReviews: cityPreset.maxReviews || null,
           requirePhone: cityPreset.requirePhone,
           findGmailOnly,
+          batchId,
+          batchLabel,
         });
         createdRuns.push({ id: run.id, city: city.name });
 
-        // Fire & forget the search
         runFinderSearch(run.id, {
           city: city.name,
           keywords: keywordList,
@@ -270,13 +274,12 @@ export default function FinderPage() {
         }).catch(e => console.error(`Finder search error (${city.name}):`, e));
       }
 
-      if (createdRuns.length === 1) {
+      if (batchId && createdRuns.length > 1) {
+        toast.success(`${createdRuns.length} city batch started!`);
+        navigate(`/finder/batch/${batchId}`);
+      } else if (createdRuns.length === 1) {
         toast.success('Finder run started!');
         navigate(`/finder/runs/${createdRuns[0].id}`);
-      } else {
-        toast.success(`${createdRuns.length} finder runs started!`);
-        // Refresh the runs list so user can see them
-        fetchFinderRuns().then(setRuns).catch(() => {});
       }
     } catch (e: any) {
       toast.error(e.message);
@@ -611,60 +614,121 @@ export default function FinderPage() {
               <History size={14} /> Previous Runs
             </h2>
             <div className="space-y-2">
-              {runs.map(run => {
-                const progress = autoAddProgress[run.id];
-                const isAutoAdding = progress && !progress.done;
-                const autoAddDone = progress?.done && progress.total > 0;
-                return (
-                  <Link
-                    key={run.id}
-                    to={`/finder/runs/${run.id}`}
-                    className="block p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="shrink-0">
-                        {run.status === 'done' && <CheckCircle size={14} className="text-green" />}
-                        {run.status === 'running' && <Loader2 size={14} className="animate-spin text-primary" />}
-                        {run.status === 'stopped' && <Square size={14} className="text-amber" />}
-                        {run.status === 'failed' && <XCircle size={14} className="text-red" />}
-                        {run.status === 'pending' && <Clock size={14} className="text-muted-foreground" />}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-foreground truncate">
-                          {run.city} — {(run.keywords || []).slice(0, 3).join(', ')}{(run.keywords || []).length > 3 ? '…' : ''}
+              {(() => {
+                // Group runs: batched runs show as one entry, solo runs show individually
+                const batches: Record<string, FinderRun[]> = {};
+                const soloRuns: FinderRun[] = [];
+                for (const run of runs) {
+                  if (run.batch_id) {
+                    if (!batches[run.batch_id]) batches[run.batch_id] = [];
+                    batches[run.batch_id].push(run);
+                  } else {
+                    soloRuns.push(run);
+                  }
+                }
+                // Merge into display items sorted by newest first
+                type DisplayItem = { type: 'batch'; batchId: string; runs: FinderRun[]; created_at: string } | { type: 'solo'; run: FinderRun; created_at: string };
+                const items: DisplayItem[] = [
+                  ...Object.entries(batches).map(([batchId, bRuns]) => ({
+                    type: 'batch' as const,
+                    batchId,
+                    runs: bRuns,
+                    created_at: bRuns[0].created_at,
+                  })),
+                  ...soloRuns.map(run => ({ type: 'solo' as const, run, created_at: run.created_at })),
+                ];
+                items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+                return items.map(item => {
+                  if (item.type === 'batch') {
+                    const bRuns = item.runs;
+                    const cities = bRuns.map(r => r.city);
+                    const doneCount = bRuns.filter(r => r.status === 'done').length;
+                    const runningCount = bRuns.filter(r => r.status === 'running' || r.status === 'pending').length;
+                    const totalLeads = bRuns.reduce((sum, r) => sum + ((r.stats as any)?.noWebsiteWithPhone ?? 0) + ((r.stats as any)?.noWebsiteEmailOnly ?? 0), 0);
+                    const allDone = doneCount === bRuns.length;
+                    const anyRunning = runningCount > 0;
+
+                    return (
+                      <Link
+                        key={item.batchId}
+                        to={`/finder/batch/${item.batchId}`}
+                        className="block p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="shrink-0">
+                            {allDone && <CheckCircle size={14} className="text-green" />}
+                            {anyRunning && <Loader2 size={14} className="animate-spin text-primary" />}
+                            {!allDone && !anyRunning && <Clock size={14} className="text-amber" />}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {cities.length} cities — {cities.slice(0, 4).join(', ')}{cities.length > 4 ? ` +${cities.length - 4}` : ''}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(item.created_at), 'MMM d, HH:mm')} · {doneCount}/{bRuns.length} done
+                              {totalLeads > 0 && ` · ${totalLeads} leads`}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {format(new Date(run.created_at), 'MMM d, HH:mm')} · {run.status}
-                          {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
-                        </div>
-                      </div>
-                      {isAutoAdding && (
-                        <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
-                          <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
-                        </span>
-                      )}
-                      {autoAddDone && (
-                        <span className="text-[10px] flex items-center gap-1 shrink-0">
-                          {progress.added > 0 ? (
-                            <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
-                          ) : (
-                            <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
+                      </Link>
+                    );
+                  } else {
+                    const run = item.run;
+                    const progress = autoAddProgress[run.id];
+                    const isAutoAdding = progress && !progress.done;
+                    const autoAddDone = progress?.done && progress.total > 0;
+                    return (
+                      <Link
+                        key={run.id}
+                        to={`/finder/runs/${run.id}`}
+                        className="block p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="shrink-0">
+                            {run.status === 'done' && <CheckCircle size={14} className="text-green" />}
+                            {run.status === 'running' && <Loader2 size={14} className="animate-spin text-primary" />}
+                            {run.status === 'stopped' && <Square size={14} className="text-amber" />}
+                            {run.status === 'failed' && <XCircle size={14} className="text-red" />}
+                            {run.status === 'pending' && <Clock size={14} className="text-muted-foreground" />}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {run.city} — {(run.keywords || []).slice(0, 3).join(', ')}{(run.keywords || []).length > 3 ? '…' : ''}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(run.created_at), 'MMM d, HH:mm')} · {run.status}
+                              {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
+                            </div>
+                          </div>
+                          {isAutoAdding && (
+                            <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
+                              <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
+                            </span>
                           )}
-                        </span>
-                      )}
-                    </div>
-                    {/* Auto-add progress bar */}
-                    {isAutoAdding && (
-                      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all duration-300"
-                          style={{ width: `${(progress.added / progress.total) * 100}%` }}
-                        />
-                      </div>
-                    )}
-                  </Link>
-                );
-              })}
+                          {autoAddDone && (
+                            <span className="text-[10px] flex items-center gap-1 shrink-0">
+                              {progress.added > 0 ? (
+                                <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
+                              ) : (
+                                <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {isAutoAdding && (
+                          <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-300"
+                              style={{ width: `${(progress.added / progress.total) * 100}%` }}
+                            />
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  }
+                });
+              })()}
             </div>
           </div>
         )}
