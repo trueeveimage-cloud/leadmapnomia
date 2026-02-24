@@ -37,7 +37,7 @@ function GlobalHotkeys() {
       const isInput = tag === 'input' || tag === 'textarea';
       if (e.key === 'n' && !isInput && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        navigate('/add');
+        navigate('/next');
       }
     };
     window.addEventListener('keydown', handler);
