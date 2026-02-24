@@ -57,6 +57,7 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
     if (isMobile) {
       window.location.href = `tel:${lead.phone}`;
     }
+    // Track the call attempt immediately
     setStep('outcome');
   };
 
