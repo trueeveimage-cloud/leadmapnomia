@@ -94,9 +94,19 @@ export async function fetchLeads(filter?: { section?: LeadSection; status?: Lead
 }
 
 export async function fetchLeadCounts() {
-  const { data, error } = await supabase.from('leads').select('section, status, next_action_at');
-  if (error) throw error;
-  const leads = data as Pick<Lead, 'section' | 'status' | 'next_action_at'>[];
+  // Fetch all rows via pagination to avoid 1000-row cap
+  const allData: any[] = [];
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase.from('leads').select('section, status, next_action_at').range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at'>[];
   const now = new Date();
 
   return {
