@@ -75,12 +75,22 @@ export function determineSection(lead: Partial<Lead>): LeadSection {
 
 export async function fetchLeads(filter?: { section?: LeadSection; status?: LeadStatus }) {
   let query = supabase.from('leads').select('*').order('created_at', { ascending: false });
-  // Only filter by section if explicitly provided (undefined = no filter = all sections)
   if (filter?.section !== undefined) query = query.eq('section', filter.section);
   if (filter?.status) query = query.eq('status', filter.status);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data as Lead[];
+
+  // Fetch all rows (no 1000 limit) via pagination
+  const allData: any[] = [];
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  while (true) {
+    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData as Lead[];
 }
 
 export async function fetchLeadCounts() {
