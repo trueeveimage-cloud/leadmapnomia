@@ -92,6 +92,7 @@ export default function FinderPage() {
         maxDetails,
         minRating: minRating ? parseFloat(minRating) : undefined,
         minReviews: minReviews ? parseInt(minReviews) : undefined,
+        maxReviews: maxReviews ? parseInt(maxReviews) : undefined,
         requirePhone,
         findGmailOnly,
       }).catch(e => console.error('Finder search error:', e));
