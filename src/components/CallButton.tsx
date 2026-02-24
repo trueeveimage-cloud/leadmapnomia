@@ -129,9 +129,8 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
   const handleStatus = async (status: LeadStatus) => {
     if (status === 'demo') {
-      // First update status to demo, then open demo form
       try {
-        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key });
+        const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status: 'demo' });
         setPendingLead(updated);
         onUpdate?.(updated);
@@ -143,7 +142,7 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
       }
       return;
     }
-    const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key });
+    const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
     await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status });
     onUpdate?.(updated);
     refreshCounts();
