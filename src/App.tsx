@@ -12,6 +12,7 @@ import CallbacksPage from "./pages/CallbacksPage";
 import SettingsPage from "./pages/SettingsPage";
 import FinderPage from "./pages/FinderPage";
 import FinderRunPage from "./pages/FinderRunPage";
+import FinderCoveragePage from "./pages/FinderCoveragePage";
 import CostCalculatorPage from "./pages/CostCalculatorPage";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
