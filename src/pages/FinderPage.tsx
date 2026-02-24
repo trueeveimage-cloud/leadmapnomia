@@ -32,6 +32,11 @@ const LEADS_TARGETS = [25, 50, 100, 200, 400];
 
 export default function FinderPage() {
   const navigate = useNavigate();
+  const { refreshCounts } = useCRM();
+
+  // Auto-add tracking
+  const autoAddedRunsRef = useRef<Set<string>>(new Set());
+  const [autoAddProgress, setAutoAddProgress] = useState<Record<string, { added: number; total: number; done: boolean }>>({});
 
   // City selection — multi
   const [citySearch, setCitySearch] = useState('');
