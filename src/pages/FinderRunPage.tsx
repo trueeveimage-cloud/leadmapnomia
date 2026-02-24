@@ -26,7 +26,9 @@ export default function FinderRunPage() {
   const [bulkAdding, setBulkAdding] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [refetching, setRefetching] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const autoAddedRef = React.useRef(false);
+  const autoResumeRef = React.useRef(false);
 
   const load = useCallback(async () => {
     if (!id) return;
