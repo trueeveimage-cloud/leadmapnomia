@@ -116,6 +116,17 @@ export default function AuthPage() {
                 />
               </div>
             )}
+            {mode === 'login' && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  className="rounded border-border"
+                />
+                Remember me
+              </label>
+            )}
             <Button type="submit" disabled={loading} className="w-full h-9 gap-2 text-sm">
               {loading ? 'Loading...' : mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
               <ArrowRight size={14} />
