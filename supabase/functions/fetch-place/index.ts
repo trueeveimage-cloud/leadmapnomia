@@ -10,7 +10,7 @@ const corsHeaders = {
 async function resolveUrl(url: string): Promise<string> {
   const isShortLink = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps');
 
-  // Strategy A: HEAD request — some CDN edges do return Location for HEAD
+  // Strategy A: HEAD request with curl UA
   try {
     const headResp = await fetch(url, {
       method: 'HEAD',
@@ -25,7 +25,34 @@ async function resolveUrl(url: string): Promise<string> {
     console.log('HEAD failed:', (e as Error).message);
   }
 
-  // Strategy B: GET with curl-like User-Agent — forces HTTP 301/302 on some short link servers
+  // Strategy B: GET with redirect:follow — check resp.url after all redirects
+  try {
+    const followResp = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (followResp.url && followResp.url !== url && followResp.url.includes('google.com/maps')) {
+      console.log('Googlebot follow resolved to:', followResp.url.substring(0, 150));
+      try { await followResp.text(); } catch { /* consume */ }
+      return followResp.url;
+    }
+    // Check HTML for embedded URLs
+    const html = await followResp.text();
+    const mapsUrl = extractMapsUrlFromHtml(html);
+    if (mapsUrl) {
+      console.log('Extracted maps URL from Googlebot HTML:', mapsUrl.substring(0, 150));
+      return mapsUrl;
+    }
+  } catch (e) {
+    console.log('Googlebot follow failed:', (e as Error).message);
+  }
+
+  // Strategy C: GET with curl UA and manual redirect
   try {
     const getResp = await fetch(url, {
       method: 'GET',
@@ -40,7 +67,6 @@ async function resolveUrl(url: string): Promise<string> {
     const loc = getResp.headers.get('location');
     console.log('GET (curl UA) redirect location:', loc?.substring(0, 150));
     if (loc && loc.includes('google.com/maps')) return loc;
-    // Follow the location if it's a different short link
     if (loc && loc !== url) {
       const loc2 = await resolveUrlSingle(loc);
       if (loc2 && loc2.includes('google.com/maps')) return loc2;
@@ -49,7 +75,25 @@ async function resolveUrl(url: string): Promise<string> {
     console.log('GET curl UA failed:', (e as Error).message);
   }
 
-  // Strategy C: Follow with browser UA and inspect HTML for embedded Maps URL
+  // Strategy D: Retry HEAD after a short delay (intermittent Google behavior)
+  if (isShortLink) {
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const retryResp = await fetch(url, {
+        method: 'HEAD',
+        redirect: 'manual',
+        headers: { 'User-Agent': 'Wget/1.21', Accept: '*/*' },
+        signal: AbortSignal.timeout(8000),
+      });
+      const loc = retryResp.headers.get('location');
+      console.log('Retry HEAD (Wget) location:', loc?.substring(0, 150));
+      if (loc && loc.includes('google.com/maps')) return loc;
+    } catch (e) {
+      console.log('Retry HEAD failed:', (e as Error).message);
+    }
+  }
+
+  // Strategy E: Browser-like GET with full HTML parsing
   try {
     const resp = await fetch(url, {
       method: 'GET',
@@ -62,53 +106,16 @@ async function resolveUrl(url: string): Promise<string> {
       signal: AbortSignal.timeout(12000),
     });
 
-    // Final URL after HTTP redirects
     if (resp.url && resp.url !== url && resp.url.includes('google.com/maps')) {
       console.log('Follow-redirect resolved to:', resp.url.substring(0, 150));
       return resp.url;
     }
 
     const html = await resp.text();
-
-    // Dump first 2000 chars for debug
     console.log('HTML snippet:', html.substring(0, 2000));
+    const mapsUrl = extractMapsUrlFromHtml(html);
+    if (mapsUrl) return mapsUrl;
 
-    // Parse patterns from HTML — order matters (most specific first)
-    const patterns: RegExp[] = [
-      // og:url meta tag (most reliable for maps.app.goo.gl)
-      /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']*google\.com\/maps[^"']*)["'][^>]+property=["']og:url["']/i,
-      // canonical link
-      /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*google\.com\/maps[^"']*)["']/i,
-      // itemprop url
-      /<[^>]+itemprop=["']url["'][^>]+content=["']([^"']*google\.com\/maps[^"']*)["']/i,
-      // JSON-LD or window variable
-      /"url"\s*:\s*"(https:\/\/[^"]*google\.com\/maps\/place[^"]*)"/i,
-      // Firebase Dynamic Link deepLink field
-      /"deepLink"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
-      /"link"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
-      // meta refresh
-      /<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^;]*;\s*url=([^"'>\s]+)/i,
-      // window.location
-      /window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']*google\.com\/maps[^"']*)["']/i,
-      // Any google.com/maps/place URL in the page
-      /(https:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^\s"'<>\\]+)/i,
-    ];
-
-    for (const pattern of patterns) {
-      const m = html.match(pattern);
-      if (m) {
-        const found = m[1]
-          .replace(/\\u003d/g, '=')
-          .replace(/\\u0026/g, '&')
-          .replace(/\\\//g, '/')
-          .replace(/&amp;/g, '&');
-        console.log('Extracted maps URL from HTML:', found.substring(0, 150));
-        return found;
-      }
-    }
-
-    // Last resort: check if the final URL after follow contains maps data
     if (resp.url && resp.url.includes('google.com')) {
       console.log('Using follow-redirect final URL:', resp.url.substring(0, 150));
       return resp.url;
@@ -119,6 +126,36 @@ async function resolveUrl(url: string): Promise<string> {
 
   console.log('All resolution strategies failed, using original URL.');
   return url;
+}
+
+/** Extract a Google Maps URL from HTML content */
+function extractMapsUrlFromHtml(html: string): string | null {
+  const patterns: RegExp[] = [
+    /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+google\.com\/maps[^"']*)["']/i,
+    /<meta[^>]+content=["']([^"']*google\.com\/maps[^"']*)["'][^>]+property=["']og:url["']/i,
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']*google\.com\/maps[^"']*)["']/i,
+    /<[^>]+itemprop=["']url["'][^>]+content=["']([^"']*google\.com\/maps[^"']*)["']/i,
+    /"url"\s*:\s*"(https:\/\/[^"]*google\.com\/maps\/place[^"]*)"/i,
+    /"deepLink"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
+    /"link"\s*:\s*"(https:\/\/[^"]*google\.com\/maps[^"]*)"/i,
+    /<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^;]*;\s*url=([^"'>\s]+)/i,
+    /window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']*google\.com\/maps[^"']*)["']/i,
+    /(https:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^\s"'<>\\]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const m = html.match(pattern);
+    if (m) {
+      const found = m[1]
+        .replace(/\\u003d/g, '=')
+        .replace(/\\u0026/g, '&')
+        .replace(/\\\//g, '/')
+        .replace(/&amp;/g, '&');
+      console.log('Extracted maps URL from HTML:', found.substring(0, 150));
+      return found;
+    }
+  }
+  return null;
 }
 
 /** Single-hop redirect resolver (no recursion) */
