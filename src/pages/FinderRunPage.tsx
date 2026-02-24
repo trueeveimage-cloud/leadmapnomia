@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
-import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, FinderRun, FinderCandidate } from '@/lib/finder';
+import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
 import { addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp
+  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
@@ -25,7 +25,7 @@ export default function FinderRunPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [bulkAdding, setBulkAdding] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
-
+  const [refetching, setRefetching] = useState(false);
   const load = useCallback(async () => {
     if (!id) return;
     try {
@@ -52,6 +52,21 @@ export default function FinderRunPage() {
     await stopFinderRun(id);
     toast.info('Stopping run…');
     setTimeout(load, 1000);
+  };
+
+  const handleRefetch = async () => {
+    if (!id) return;
+    setRefetching(true);
+    try {
+      toast.info('Re-fetching failed candidates… this may take a few minutes.');
+      const result = await refetchFailedCandidates(id);
+      toast.success(`Re-fetched ${result?.refetched || 0} candidates. Check updated tabs.`);
+      await load();
+    } catch (e: any) {
+      toast.error(`Refetch failed: ${e.message}`);
+    } finally {
+      setRefetching(false);
+    }
   };
 
   const addToCrm = async (candidate: FinderCandidate) => {
@@ -206,6 +221,12 @@ export default function FinderRunPage() {
           {(run.status === 'running' || run.status === 'pending') && (
             <Button variant="destructive" size="sm" onClick={handleStop} className="gap-1.5 shrink-0">
               <Square size={12} /> Stop
+            </Button>
+          )}
+          {run.status === 'done' && candidates.some(c => c.outcome === 'failed') && (
+            <Button variant="outline" size="sm" onClick={handleRefetch} disabled={refetching} className="gap-1.5 shrink-0">
+              {refetching ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Re-fetch Failed ({candidates.filter(c => c.outcome === 'failed').length})
             </Button>
           )}
         </div>
