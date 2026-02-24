@@ -107,7 +107,47 @@ export default function FinderRunPage() {
     }
   };
 
-  const addToCrm = async (candidate: FinderCandidate) => {
+  const handleResume = async () => {
+    if (!id || resuming) return;
+    setResuming(true);
+    try {
+      toast.info('Resuming detail fetching…');
+      const result = await resumeFinderRun(id);
+      if (result?.remaining > 0) {
+        toast.info(`Fetched ${result.resumed} more details. ${result.remaining} still pending — resuming again…`);
+        // Auto-resume again after a short delay
+        setTimeout(() => handleResume(), 2000);
+        await load();
+        return;
+      }
+      toast.success(`Resume complete! Fetched ${result?.resumed || 0} details.`);
+      await load();
+    } catch (e: any) {
+      toast.error(`Resume failed: ${e.message}`);
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  // Auto-resume stuck runs (status=running but no progress for 30s)
+  useEffect(() => {
+    if (!run || autoResumeRef.current || resuming) return;
+    if (run.status !== 'running') return;
+    // If the run has pending candidates and stats haven't updated (stuck), auto-resume
+    const pendingCount = candidates.filter(c => c.outcome === 'pending').length;
+    if (pendingCount === 0) return;
+    
+    // Check if stats are stale (updated_at hasn't changed in 30s)
+    const updatedAt = new Date(run.updated_at).getTime();
+    const staleSince = Date.now() - updatedAt;
+    if (staleSince > 30000) {
+      autoResumeRef.current = true;
+      toast.info('Run appears stuck — auto-resuming…');
+      handleResume();
+    }
+  }, [run?.status, run?.updated_at, candidates.length]);
+
+
     setAddingIds(s => new Set(s).add(candidate.id));
     try {
       const { lead, duplicate, error } = await addLead({
