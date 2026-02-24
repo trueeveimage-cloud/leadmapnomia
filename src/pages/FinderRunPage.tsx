@@ -147,7 +147,7 @@ export default function FinderRunPage() {
     }
   }, [run?.status, run?.updated_at, candidates.length]);
 
-
+  const addToCrm = async (candidate: FinderCandidate) => {
     setAddingIds(s => new Set(s).add(candidate.id));
     try {
       const { lead, duplicate, error } = await addLead({
