@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
-import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, FinderRun, FinderCandidate } from '@/lib/finder';
+import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
 import { addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp
+  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
