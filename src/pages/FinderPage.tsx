@@ -75,6 +75,7 @@ export default function FinderPage() {
         maxDetails,
         minRating: minRating ? parseFloat(minRating) : null,
         minReviews: minReviews ? parseInt(minReviews) : null,
+        maxReviews: maxReviews ? parseInt(maxReviews) : null,
         requirePhone,
         findGmailOnly,
       });
