@@ -106,6 +106,7 @@ export async function runFinderSearch(runId: string, params: {
   maxDetails: number;
   minRating?: number;
   minReviews?: number;
+  maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
 }): Promise<any> {
