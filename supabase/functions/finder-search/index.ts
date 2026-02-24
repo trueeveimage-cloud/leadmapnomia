@@ -19,7 +19,7 @@ interface SearchRequest {
   maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
-  action: 'search' | 'details' | 'estimate';
+  action: 'search' | 'details' | 'estimate' | 'resume';
 }
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
