@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { getSetting, setSetting } from '@/lib/supabase';
 import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search } from 'lucide-react';
 import { toast } from 'sonner';
