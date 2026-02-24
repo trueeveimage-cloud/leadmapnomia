@@ -299,9 +299,19 @@ export default function FinderRunPage() {
               {pendingCount > 0 && <><span>·</span><span className="text-amber-400">{pendingCount} pending</span></>}
             </div>
           </div>
-          {(run.status === 'running' || run.status === 'pending') && (
+          {(run.status === 'running' || run.status === 'pending') && !resuming && (
             <Button variant="destructive" size="sm" onClick={handleStop} className="gap-1.5 shrink-0">
               <Square size={12} /> Stop
+            </Button>
+          )}
+          {resuming && (
+            <Button variant="outline" size="sm" disabled className="gap-1.5 shrink-0">
+              <Loader2 size={12} className="animate-spin" /> Resuming…
+            </Button>
+          )}
+          {(run.status === 'running' || run.status === 'done' || run.status === 'stopped') && pendingCount > 0 && !resuming && (
+            <Button variant="default" size="sm" onClick={handleResume} className="gap-1.5 shrink-0">
+              <Play size={12} /> Resume ({pendingCount})
             </Button>
           )}
           {run.status === 'done' && candidates.some(c => c.outcome === 'failed') && (
