@@ -19,7 +19,7 @@ interface SearchRequest {
   maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
-  action: 'search' | 'details' | 'estimate';
+  action: 'search' | 'details' | 'estimate' | 'resume';
 }
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -324,6 +324,93 @@ serve(async (req) => {
         maxStage2Details: maxStage2,
         estimatedCost: `Stage 1: ~${stage1Requests} text searches. Stage 2: up to ${maxStage2} detail lookups.`,
       }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Resume mode — continue detail fetching for pending candidates from a timed-out run
+    if (action === 'resume' as any) {
+      const { data: pendingCandidates } = await supabase.from('finder_candidates')
+        .select('*').eq('run_id', runId).eq('outcome', 'pending');
+      
+      if (!pendingCandidates || pendingCandidates.length === 0) {
+        // No pending left — finalize the run
+        const { data: finalCandidates } = await supabase.from('finder_candidates')
+          .select('outcome, has_phone').eq('run_id', runId);
+        const prevDetailsFetched = (finalCandidates || []).filter((c: any) => c.outcome !== 'pending' && c.outcome !== 'duplicate').length;
+        const stats = {
+          stage: 'done',
+          candidatesFound: (finalCandidates || []).length,
+          detailsFetched: prevDetailsFetched,
+          noWebsiteWithPhone: (finalCandidates || []).filter((c: any) => c.outcome === 'no_website_phone').length,
+          noWebsiteNoPhone: (finalCandidates || []).filter((c: any) => c.outcome === 'no_website_no_phone').length,
+          hasWebsite: (finalCandidates || []).filter((c: any) => c.outcome === 'has_website').length,
+          duplicates: (finalCandidates || []).filter((c: any) => c.outcome === 'duplicate').length,
+          skipped: (finalCandidates || []).filter((c: any) => c.outcome === 'skipped').length,
+          failed: (finalCandidates || []).filter((c: any) => c.outcome === 'failed').length,
+        };
+        await supabase.from('finder_runs').update({ status: 'done', stats }).eq('id', runId);
+        return new Response(JSON.stringify({ status: 'done', stats, resumed: 0, remaining: 0 }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`Resume: ${pendingCandidates.length} pending candidates for run ${runId}`);
+      const totalCandidates = await supabase.from('finder_candidates').select('id', { count: 'exact' }).eq('run_id', runId);
+      const allCount = totalCandidates.count || pendingCandidates.length;
+      
+      await supabase.from('finder_runs').update({ 
+        status: 'running', 
+        stats: { stage: 'details', candidatesFound: allCount, detailsFetched: allCount - pendingCandidates.length, resuming: true } 
+      }).eq('id', runId);
+
+      const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
+      // Use maxDetails from the run itself, minus already fetched
+      const { data: runData } = await supabase.from('finder_runs').select('max_details').eq('id', runId).single();
+      const alreadyFetched = allCount - pendingCandidates.length;
+      const remainingBudget = Math.min(pendingCandidates.length, (runData?.max_details || 9999) - alreadyFetched);
+      
+      const detailsFetched = await fetchDetailsWithConcurrency(
+        pendingCandidates, Math.max(remainingBudget, 0), apiKey, supabase, runId, cacheTtlMs, allCount, maxReviews
+      );
+
+      // Recompute outcomes
+      const { data: allFetched } = await supabase.from('finder_candidates')
+        .select('id, website, phone, has_website, has_phone, outcome, last_fetched_at')
+        .eq('run_id', runId).not('last_fetched_at', 'is', null);
+      if (allFetched) {
+        for (const c of allFetched) {
+          const { hasWebsite, hasPhone, outcome: newOutcome } = computeOutcome(c.website, c.phone);
+          if (c.outcome !== newOutcome || c.has_website !== hasWebsite || c.has_phone !== hasPhone) {
+            await supabase.from('finder_candidates').update({ has_website: hasWebsite, has_phone: hasPhone, outcome: newOutcome }).eq('id', c.id);
+          }
+        }
+      }
+
+      // Check if there are still pending candidates (timed out again)
+      const { data: stillPending } = await supabase.from('finder_candidates')
+        .select('id', { count: 'exact' }).eq('run_id', runId).eq('outcome', 'pending');
+      const remaining = stillPending?.length || 0;
+
+      // Final stats
+      const { data: finalCandidates } = await supabase.from('finder_candidates')
+        .select('outcome, has_phone').eq('run_id', runId);
+      const finalStatus = remaining > 0 ? 'running' : 'done';
+      const stats = {
+        stage: remaining > 0 ? 'details' : 'done',
+        candidatesFound: (finalCandidates || []).length,
+        detailsFetched: detailsFetched + alreadyFetched,
+        noWebsiteWithPhone: (finalCandidates || []).filter((c: any) => c.outcome === 'no_website_phone').length,
+        noWebsiteNoPhone: (finalCandidates || []).filter((c: any) => c.outcome === 'no_website_no_phone').length,
+        hasWebsite: (finalCandidates || []).filter((c: any) => c.outcome === 'has_website').length,
+        duplicates: (finalCandidates || []).filter((c: any) => c.outcome === 'duplicate').length,
+        skipped: (finalCandidates || []).filter((c: any) => c.outcome === 'skipped').length,
+        failed: (finalCandidates || []).filter((c: any) => c.outcome === 'failed').length,
+        remaining,
+      };
+      await supabase.from('finder_runs').update({ status: finalStatus, stats }).eq('id', runId);
+
+      return new Response(JSON.stringify({ status: finalStatus, stats, resumed: detailsFetched, remaining }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
-import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
+import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
 import { addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw
+  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp, RefreshCw, Play
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'unfetched' | 'duplicates' | 'skipped' | 'all';
@@ -26,7 +26,9 @@ export default function FinderRunPage() {
   const [bulkAdding, setBulkAdding] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [refetching, setRefetching] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const autoAddedRef = React.useRef(false);
+  const autoResumeRef = React.useRef(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -104,6 +106,46 @@ export default function FinderRunPage() {
       setRefetching(false);
     }
   };
+
+  const handleResume = async () => {
+    if (!id || resuming) return;
+    setResuming(true);
+    try {
+      toast.info('Resuming detail fetching…');
+      const result = await resumeFinderRun(id);
+      if (result?.remaining > 0) {
+        toast.info(`Fetched ${result.resumed} more details. ${result.remaining} still pending — resuming again…`);
+        // Auto-resume again after a short delay
+        setTimeout(() => handleResume(), 2000);
+        await load();
+        return;
+      }
+      toast.success(`Resume complete! Fetched ${result?.resumed || 0} details.`);
+      await load();
+    } catch (e: any) {
+      toast.error(`Resume failed: ${e.message}`);
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  // Auto-resume stuck runs (status=running but no progress for 30s)
+  useEffect(() => {
+    if (!run || autoResumeRef.current || resuming) return;
+    if (run.status !== 'running') return;
+    // If the run has pending candidates and stats haven't updated (stuck), auto-resume
+    const pendingCount = candidates.filter(c => c.outcome === 'pending').length;
+    if (pendingCount === 0) return;
+    
+    // Check if stats are stale (updated_at hasn't changed in 30s)
+    const updatedAt = new Date(run.updated_at).getTime();
+    const staleSince = Date.now() - updatedAt;
+    if (staleSince > 30000) {
+      autoResumeRef.current = true;
+      toast.info('Run appears stuck — auto-resuming…');
+      handleResume();
+    }
+  }, [run?.status, run?.updated_at, candidates.length]);
 
   const addToCrm = async (candidate: FinderCandidate) => {
     setAddingIds(s => new Set(s).add(candidate.id));
@@ -257,9 +299,19 @@ export default function FinderRunPage() {
               {pendingCount > 0 && <><span>·</span><span className="text-amber-400">{pendingCount} pending</span></>}
             </div>
           </div>
-          {(run.status === 'running' || run.status === 'pending') && (
+          {(run.status === 'running' || run.status === 'pending') && !resuming && (
             <Button variant="destructive" size="sm" onClick={handleStop} className="gap-1.5 shrink-0">
               <Square size={12} /> Stop
+            </Button>
+          )}
+          {resuming && (
+            <Button variant="outline" size="sm" disabled className="gap-1.5 shrink-0">
+              <Loader2 size={12} className="animate-spin" /> Resuming…
+            </Button>
+          )}
+          {(run.status === 'running' || run.status === 'done' || run.status === 'stopped') && pendingCount > 0 && !resuming && (
+            <Button variant="default" size="sm" onClick={handleResume} className="gap-1.5 shrink-0">
+              <Play size={12} /> Resume ({pendingCount})
             </Button>
           )}
           {run.status === 'done' && candidates.some(c => c.outcome === 'failed') && (
