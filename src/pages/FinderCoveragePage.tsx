@@ -220,7 +220,8 @@ export default function FinderCoveragePage() {
                     <th className="text-left px-4 py-2.5 font-medium">City</th>
                     <th className="text-center px-3 py-2.5 font-medium">Runs</th>
                     <th className="text-center px-3 py-2.5 font-medium">Candidates</th>
-                    <th className="text-center px-3 py-2.5 font-medium">No Web + Phone</th>
+                    <th className="text-center px-3 py-2.5 font-medium">Leads</th>
+                    <th className="text-center px-3 py-2.5 font-medium">Success Rate</th>
                     <th className="text-center px-3 py-2.5 font-medium">Coverage</th>
                   </tr>
                 </thead>
@@ -229,6 +230,8 @@ export default function FinderCoveragePage() {
                     const cityProfile = findCity(cs.city);
                     const coverageScore = cs.totalCandidates > 200 ? 'Good' : cs.totalCandidates > 50 ? 'Partial' : 'Low';
                     const coverageColor = coverageScore === 'Good' ? 'text-green' : coverageScore === 'Partial' ? 'text-amber' : 'text-muted-foreground';
+                    const rateNum = parseFloat(cs.successRate);
+                    const rateColor = rateNum >= 30 ? 'text-green' : rateNum >= 15 ? 'text-amber' : 'text-muted-foreground';
                     return (
                       <tr key={cs.city} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-2.5 font-medium text-foreground">
@@ -241,7 +244,8 @@ export default function FinderCoveragePage() {
                         </td>
                         <td className="text-center px-3 py-2.5 text-muted-foreground">{cs.runs}</td>
                         <td className="text-center px-3 py-2.5 text-muted-foreground">{cs.totalCandidates}</td>
-                        <td className="text-center px-3 py-2.5 font-medium text-green">{cs.noWebPhone}</td>
+                        <td className="text-center px-3 py-2.5 font-medium text-green">{cs.noWebPhone + cs.noWebEmail}</td>
+                        <td className={`text-center px-3 py-2.5 text-xs font-bold ${rateColor}`}>{cs.successRate}%</td>
                         <td className={`text-center px-3 py-2.5 text-xs font-medium ${coverageColor}`}>{coverageScore}</td>
                       </tr>
                     );
