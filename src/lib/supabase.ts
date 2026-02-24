@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type LeadSection = 'unsorted' | 'phone' | 'gmail' | 'email' | 'missing' | 'both';
+export type LeadSection = 'unsorted' | 'phone' | 'email' | 'missing' | 'both';
 export type LeadStatus =
   | 'not_contacted'
   | 'contacted'
