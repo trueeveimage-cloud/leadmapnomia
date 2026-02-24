@@ -25,7 +25,7 @@ export default function FinderRunPage() {
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [bulkAdding, setBulkAdding] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
-
+  const [refetching, setRefetching] = useState(false);
   const load = useCallback(async () => {
     if (!id) return;
     try {
