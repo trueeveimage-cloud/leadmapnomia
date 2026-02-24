@@ -16,6 +16,7 @@ interface SearchRequest {
   maxDetails: number;
   minRating?: number;
   minReviews?: number;
+  maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
   action: 'search' | 'details' | 'estimate';
@@ -40,6 +41,29 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
 function getCityCoords(city: string): { lat: number; lng: number } | null {
   const normalized = city.toLowerCase().trim();
   return CITY_COORDS[normalized] || null;
+}
+
+/** Social media / free-site domains that don't count as a real website */
+const FAKE_WEBSITE_PATTERNS = [
+  'facebook.com', 'fb.com', 'fb.me',
+  'instagram.com', 'instagr.am',
+  'tiktok.com',
+  'twitter.com', 'x.com',
+  'youtube.com', 'youtu.be',
+  'linkedin.com',
+  'mail.google.com', 'gmail.com',
+  'outlook.com', 'hotmail.com',
+  'yahoo.com',
+  'linktr.ee', 'linktree.com',
+  'bit.ly',
+];
+
+/** Check if a website is NOT a real business website */
+function isFakeWebsite(website: string | null | undefined): boolean {
+  if (!website) return true;
+  const lower = website.toLowerCase().trim();
+  if (!lower) return true;
+  return FAKE_WEBSITE_PATTERNS.some(pattern => lower.includes(pattern));
 }
 
 /** Stage 1: Text Search to get candidates (cheap) */
@@ -69,7 +93,6 @@ async function textSearchPaginated(
     pageToken = data.next_page_token || null;
     if (!pageToken) break;
 
-    // Google requires a short delay before using next_page_token
     if (page < maxPages - 1 && pageToken) {
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -78,9 +101,9 @@ async function textSearchPaginated(
   return allResults;
 }
 
-/** Stage 2: Get Place Details (selective, cached) */
+/** Stage 2: Get Place Details — only valid fields, NO 'email' */
 async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<any> {
-  const fields = 'place_id,name,formatted_address,types,rating,user_ratings_total,formatted_phone_number,website,url,email';
+  const fields = 'place_id,name,formatted_address,types,rating,user_ratings_total,formatted_phone_number,international_phone_number,website,url';
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&language=sv&key=${apiKey}`;
   const res = await fetch(url);
   const data = await res.json();
@@ -89,11 +112,154 @@ async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<any> 
   return null;
 }
 
-/** Check if a website domain looks like Gmail/free email (no real business domain) */
-function isGmailOnlyWebsite(website: string | null | undefined): boolean {
-  if (!website) return false;
-  const lower = website.toLowerCase();
-  return lower.includes('mail.google.com') || lower.includes('gmail.com');
+/** Compute outcome from details */
+function computeOutcome(website: string | null | undefined, phone: string | null | undefined): { hasWebsite: boolean; hasPhone: boolean; outcome: string } {
+  const hasPhone = !!(phone && phone.trim());
+  const hasRealWebsite = !!(website && website.trim()) && !isFakeWebsite(website);
+  
+  let outcome: string;
+  if (!hasRealWebsite && hasPhone) {
+    outcome = 'no_website_phone';
+  } else if (!hasRealWebsite && !hasPhone) {
+    outcome = 'no_website_no_phone';
+  } else {
+    outcome = 'has_website';
+  }
+  
+  return { hasWebsite: hasRealWebsite, hasPhone, outcome };
+}
+
+/** Batch fetch with concurrency limit */
+async function fetchDetailsWithConcurrency(
+  candidates: any[],
+  maxDetails: number,
+  apiKey: string,
+  supabase: any,
+  runId: string,
+  cacheTtlMs: number,
+  allCandidatesCount: number,
+  maxReviews?: number,
+): Promise<number> {
+  let detailsFetched = 0;
+  const CONCURRENCY = 4;
+  let idx = 0;
+
+  while (idx < candidates.length) {
+    if (detailsFetched >= maxDetails) {
+      // Mark remaining as skipped
+      const remaining = candidates.slice(idx).map(c => c.place_id);
+      if (remaining.length > 0) {
+        for (let i = 0; i < remaining.length; i += 50) {
+          await supabase.from('finder_candidates').update({ outcome: 'skipped' })
+            .eq('run_id', runId).in('place_id', remaining.slice(i, i + 50)).eq('outcome', 'pending');
+        }
+      }
+      break;
+    }
+
+    // Check if run was stopped every 10 fetches
+    if (detailsFetched % 10 === 0 && detailsFetched > 0) {
+      const { data: runCheck } = await supabase.from('finder_runs').select('status').eq('id', runId).single();
+      if (runCheck?.status === 'stopped') {
+        await supabase.from('finder_candidates').update({ outcome: 'skipped' })
+          .eq('run_id', runId).eq('outcome', 'pending');
+        return detailsFetched;
+      }
+    }
+
+    // Process batch
+    const batch = candidates.slice(idx, idx + CONCURRENCY);
+    idx += CONCURRENCY;
+
+    const promises = batch.map(async (candidate: any) => {
+      if (detailsFetched >= maxDetails) return;
+
+      // Check cache first
+      const { data: cached } = await supabase.from('place_cache')
+        .select('*').eq('place_id', candidate.place_id).single();
+
+      if (cached && new Date(cached.fetched_at).getTime() > Date.now() - cacheTtlMs) {
+        const phone = cached.phone;
+        const { hasWebsite, hasPhone, outcome } = computeOutcome(cached.website, phone);
+        
+        await supabase.from('finder_candidates').update({
+          has_website: hasWebsite,
+          has_phone: hasPhone,
+          phone: cached.phone,
+          email: cached.email || null,
+          website: cached.website,
+          outcome,
+          last_fetched_at: cached.fetched_at,
+        }).eq('run_id', runId).eq('place_id', candidate.place_id);
+        return; // cached — no API call
+      }
+
+      // Fetch from API
+      const details = await fetchPlaceDetails(candidate.place_id, apiKey);
+      detailsFetched++;
+
+      if (!details) {
+        await supabase.from('finder_candidates').update({ outcome: 'failed' })
+          .eq('run_id', runId).eq('place_id', candidate.place_id);
+        return;
+      }
+
+      // Apply max reviews filter
+      if (maxReviews && (details.user_ratings_total || 0) > maxReviews) {
+        await supabase.from('finder_candidates').update({ outcome: 'skipped' })
+          .eq('run_id', runId).eq('place_id', candidate.place_id);
+        return;
+      }
+
+      const phone = details.formatted_phone_number || details.international_phone_number || null;
+      const website = details.website || null;
+      const { hasWebsite, hasPhone, outcome } = computeOutcome(website, phone);
+      const types = (details.types || []).filter((t: string) => !['point_of_interest', 'establishment', 'food'].includes(t));
+
+      // IMPORTANT: details.url is Google Maps URL, NOT the business website
+      await supabase.from('finder_candidates').update({
+        has_website: hasWebsite,
+        has_phone: hasPhone,
+        phone: phone,
+        email: null,
+        website: website,
+        maps_url: details.url || candidate.maps_url,
+        outcome,
+        last_fetched_at: new Date().toISOString(),
+        name: details.name || candidate.name,
+        address: details.formatted_address || candidate.address,
+        rating: details.rating ?? candidate.rating,
+        reviews_count: details.user_ratings_total ?? candidate.reviews_count,
+      }).eq('run_id', runId).eq('place_id', candidate.place_id);
+
+      // Upsert to cache
+      await supabase.from('place_cache').upsert({
+        place_id: details.place_id,
+        name: details.name,
+        address: details.formatted_address || null,
+        phone: phone,
+        email: null,
+        website: website,
+        rating: details.rating || null,
+        reviews_count: details.user_ratings_total || 0,
+        types,
+        maps_url: details.url || null,
+        category: types.map((t: string) => t.replace(/_/g, ' ')).join(', ') || null,
+        fetched_at: new Date().toISOString(),
+      }, { onConflict: 'place_id' });
+    });
+
+    await Promise.all(promises);
+
+    // Update stats periodically
+    if (detailsFetched % 5 === 0) {
+      await supabase.from('finder_runs').update({
+        stats: { stage: 'details', candidatesFound: allCandidatesCount, detailsFetched },
+      }).eq('id', runId);
+    }
+  }
+
+  return detailsFetched;
 }
 
 serve(async (req) => {
@@ -114,9 +280,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: SearchRequest = await req.json();
-    const { runId, city, keywords, radius, maxPages, maxCandidates, maxDetails, minRating, minReviews, requirePhone, findGmailOnly, action } = body;
+    const { runId, city, keywords, radius, maxPages, maxCandidates, maxDetails, minRating, minReviews, maxReviews, requirePhone, findGmailOnly, action } = body;
 
-    // Estimate mode — return counts without doing anything
+    // Estimate mode
     if (action === 'estimate') {
       const stage1Requests = keywords.length * maxPages;
       const maxStage2 = Math.min(maxCandidates, maxDetails);
@@ -148,10 +314,8 @@ serve(async (req) => {
     const existingPlaceIds = new Set((existingLeads || []).map(l => l.place_id));
 
     for (const keyword of keywords) {
-      // Check if run was stopped
       const { data: runCheck } = await supabase.from('finder_runs').select('status').eq('id', runId).single();
       if (runCheck?.status === 'stopped') {
-        console.log('Run was stopped by user');
         return new Response(JSON.stringify({ status: 'stopped', candidatesFound: allCandidates.length }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -166,9 +330,9 @@ serve(async (req) => {
         if (seenPlaceIds.has(place.place_id)) continue;
         seenPlaceIds.add(place.place_id);
 
-        // Apply filters on Stage 1 data
         if (minRating && (place.rating || 0) < minRating) continue;
         if (minReviews && (place.user_ratings_total || 0) < minReviews) continue;
+        if (maxReviews && (place.user_ratings_total || 0) > maxReviews) continue;
 
         const isExisting = existingPlaceIds.has(place.place_id);
         const types = (place.types || []).filter((t: string) => !['point_of_interest', 'establishment', 'food'].includes(t));
@@ -187,7 +351,6 @@ serve(async (req) => {
         });
       }
 
-      // Update stats
       await supabase.from('finder_runs').update({
         stats: { stage: 'search', candidatesFound: allCandidates.length, keywordsProcessed: keywords.indexOf(keyword) + 1 },
       }).eq('id', runId);
@@ -201,122 +364,31 @@ serve(async (req) => {
       }
     }
 
-    // --- STAGE 2: Selective Details ---
+    // --- STAGE 2: Details with concurrency ---
     const pendingCandidates = allCandidates.filter(c => c.outcome === 'pending');
-    let detailsFetched = 0;
-    const cacheTtlMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
+    
+    const detailsFetched = await fetchDetailsWithConcurrency(
+      pendingCandidates, maxDetails, apiKey, supabase, runId, cacheTtlMs, allCandidates.length, maxReviews
+    );
 
-    for (const candidate of pendingCandidates) {
-      if (detailsFetched >= maxDetails) {
-        // Mark remaining as skipped
-        await supabase.from('finder_candidates').update({ outcome: 'skipped' })
-          .eq('run_id', runId).eq('place_id', candidate.place_id).eq('outcome', 'pending');
-        continue;
-      }
+    // --- RECOMPUTE STEP: ensure all fetched candidates have correct outcome ---
+    const { data: allFetched } = await supabase.from('finder_candidates')
+      .select('id, website, phone, has_website, has_phone, outcome, last_fetched_at')
+      .eq('run_id', runId)
+      .not('last_fetched_at', 'is', null);
 
-      // Check if run was stopped
-      if (detailsFetched % 10 === 0) {
-        const { data: runCheck } = await supabase.from('finder_runs').select('status').eq('id', runId).single();
-        if (runCheck?.status === 'stopped') {
-          // Mark remaining as skipped
-          await supabase.from('finder_candidates').update({ outcome: 'skipped' })
-            .eq('run_id', runId).eq('outcome', 'pending');
-          return new Response(JSON.stringify({ status: 'stopped', candidatesFound: allCandidates.length, detailsFetched }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+    if (allFetched && allFetched.length > 0) {
+      for (const c of allFetched) {
+        const { hasWebsite, hasPhone, outcome } = computeOutcome(c.website, c.phone);
+        if (c.outcome !== outcome || c.has_website !== hasWebsite || c.has_phone !== hasPhone) {
+          await supabase.from('finder_candidates').update({
+            has_website: hasWebsite,
+            has_phone: hasPhone,
+            outcome,
+          }).eq('id', c.id);
         }
       }
-
-      // Check cache first
-      const { data: cached } = await supabase.from('place_cache')
-        .select('*').eq('place_id', candidate.place_id).single();
-
-      if (cached && new Date(cached.fetched_at).getTime() > Date.now() - cacheTtlMs) {
-        // Use cached data — no API call needed
-      const hasWebsite = !!(cached.website && cached.website.trim());
-        const hasPhone = !!(cached.phone && cached.phone.trim());
-        const gmailOnly = isGmailOnlyWebsite(cached.website);
-        const outcome = (!hasWebsite || (findGmailOnly && gmailOnly)) ? 'no_website' : 'has_website';
-
-        await supabase.from('finder_candidates').update({
-          has_website: hasWebsite,
-          has_phone: hasPhone,
-          phone: cached.phone,
-          email: cached.email || null,
-          website: cached.website,
-          outcome,
-          last_fetched_at: cached.fetched_at,
-        }).eq('run_id', runId).eq('place_id', candidate.place_id);
-        continue; // Don't count cached as a detail fetch
-      }
-
-      // Fetch details from API
-      const details = await fetchPlaceDetails(candidate.place_id, apiKey);
-      detailsFetched++;
-
-      if (!details) {
-        await supabase.from('finder_candidates').update({ outcome: 'failed' })
-          .eq('run_id', runId).eq('place_id', candidate.place_id);
-        continue;
-      }
-
-      const hasWebsite = !!(details.website && details.website.trim());
-      const hasPhone = !!(details.formatted_phone_number && details.formatted_phone_number.trim());
-      const gmailOnly = isGmailOnlyWebsite(details.website);
-      // A business is a lead if: no website, OR (findGmailOnly enabled AND website is just gmail)
-      let outcome: string;
-      if (!hasWebsite) {
-        outcome = 'no_website';
-      } else if (findGmailOnly && gmailOnly) {
-        outcome = 'no_website'; // treat gmail-only as "no real website"
-      } else {
-        outcome = 'has_website';
-      }
-      const types = (details.types || []).filter((t: string) => !['point_of_interest', 'establishment', 'food'].includes(t));
-
-      const detailEmail = details.email || null;
-
-      // Update candidate
-      await supabase.from('finder_candidates').update({
-        has_website: hasWebsite,
-        has_phone: hasPhone,
-        phone: details.formatted_phone_number || null,
-        email: detailEmail,
-        website: details.website || null,
-        maps_url: details.url || candidate.maps_url,
-        outcome,
-        last_fetched_at: new Date().toISOString(),
-        name: details.name || candidate.name,
-        address: details.formatted_address || candidate.address,
-        rating: details.rating || candidate.rating,
-        reviews_count: details.user_ratings_total || candidate.reviews_count,
-      }).eq('run_id', runId).eq('place_id', candidate.place_id);
-
-      // Upsert to cache
-      await supabase.from('place_cache').upsert({
-        place_id: details.place_id,
-        name: details.name,
-        address: details.formatted_address || null,
-        phone: details.formatted_phone_number || null,
-        email: detailEmail,
-        website: details.website || null,
-        rating: details.rating || null,
-        reviews_count: details.user_ratings_total || 0,
-        types,
-        maps_url: details.url || null,
-        category: types.map((t: string) => t.replace(/_/g, ' ')).join(', ') || null,
-        fetched_at: new Date().toISOString(),
-      }, { onConflict: 'place_id' });
-
-      // Update stats periodically
-      if (detailsFetched % 5 === 0) {
-        await supabase.from('finder_runs').update({
-          stats: { stage: 'details', candidatesFound: allCandidates.length, detailsFetched },
-        }).eq('id', runId);
-      }
-
-      // Rate limiting: ~5 req/sec
-      await new Promise(r => setTimeout(r, 200));
     }
 
     // Final stats
@@ -327,8 +399,8 @@ serve(async (req) => {
       stage: 'done',
       candidatesFound: allCandidates.length,
       detailsFetched,
-      noWebsiteWithPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website' && c.has_phone).length,
-      noWebsiteNoPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website' && !c.has_phone).length,
+      noWebsiteWithPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website_phone').length,
+      noWebsiteNoPhone: (finalCandidates || []).filter(c => c.outcome === 'no_website_no_phone').length,
       hasWebsite: (finalCandidates || []).filter(c => c.outcome === 'has_website').length,
       duplicates: (finalCandidates || []).filter(c => c.outcome === 'duplicate').length,
       skipped: (finalCandidates || []).filter(c => c.outcome === 'skipped').length,

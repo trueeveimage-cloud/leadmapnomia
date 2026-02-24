@@ -9,7 +9,7 @@ import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Loader2, CheckCircle, XCircle, Square, Phone, Globe,
-  Plus, Download, MapPin, Star, ExternalLink, Mail
+  Plus, Download, MapPin, Star, ExternalLink, Mail, Bug, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 type Tab = 'no_website_phone' | 'no_website_no_phone' | 'duplicates' | 'skipped' | 'all';
@@ -24,6 +24,7 @@ export default function FinderRunPage() {
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [bulkAdding, setBulkAdding] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -40,7 +41,6 @@ export default function FinderRunPage() {
 
   useEffect(() => {
     load();
-    // Poll while running
     const interval = setInterval(() => {
       if (run?.status === 'running' || run?.status === 'pending') load();
     }, 3000);
@@ -129,24 +129,41 @@ export default function FinderRunPage() {
     URL.revokeObjectURL(url);
   };
 
-  const noWebsitePhone = candidates.filter(c => c.outcome === 'no_website' && c.has_phone);
-  const noWebsiteNoPhone = candidates.filter(c => c.outcome === 'no_website' && !c.has_phone);
+  // Updated filters matching new outcome values
+  const noWebsitePhone = candidates.filter(c => 
+    c.outcome === 'no_website_phone' || (c.outcome === 'no_website' && c.has_phone === true)
+  );
+  const noWebsiteNoPhone = candidates.filter(c => 
+    c.outcome === 'no_website_no_phone' || (c.outcome === 'no_website' && c.has_phone === false)
+  );
   const duplicates = candidates.filter(c => c.outcome === 'duplicate');
-  const skipped = candidates.filter(c => c.outcome === 'skipped' || c.outcome === 'failed' || c.outcome === 'has_website');
+  const other = candidates.filter(c => 
+    c.outcome === 'skipped' || c.outcome === 'failed' || c.outcome === 'has_website'
+  );
 
   const filtered = tab === 'no_website_phone' ? noWebsitePhone
     : tab === 'no_website_no_phone' ? noWebsiteNoPhone
     : tab === 'duplicates' ? duplicates
-    : tab === 'skipped' ? skipped
+    : tab === 'skipped' ? other
     : candidates;
 
   const tabs: { key: Tab; label: string; count: number; color?: string; tip: string }[] = [
-    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green-400', tip: 'High-priority leads: businesses without a website but with a phone number. Best for cold calling.' },
-    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length, tip: 'Businesses without a website and no phone listed. Harder to contact but still potential leads.' },
-    { key: 'duplicates', label: 'In CRM', count: duplicates.length, tip: 'Businesses already in your CRM. Skipped to avoid duplicate entries.' },
-    { key: 'skipped', label: 'Other', count: skipped.length, tip: 'Businesses that have a website, were skipped due to budget limits, or failed to fetch details.' },
-    { key: 'all', label: 'All', count: candidates.length, tip: 'All candidates found in this run, regardless of outcome.' },
+    { key: 'no_website_phone', label: 'No Website + Phone', count: noWebsitePhone.length, color: 'text-green-400', tip: 'Businesses without a real website but WITH a phone number. Best leads for cold outreach.' },
+    { key: 'no_website_no_phone', label: 'No Website Only', count: noWebsiteNoPhone.length, tip: 'Businesses without a website and no phone listed. Harder to contact.' },
+    { key: 'duplicates', label: 'In CRM', count: duplicates.length, tip: 'Already in your CRM.' },
+    { key: 'skipped', label: 'Other', count: other.length, tip: 'Has a real website, skipped, or failed to fetch details.' },
+    { key: 'all', label: 'All', count: candidates.length, tip: 'All candidates from this run.' },
   ];
+
+  // Diagnostics: sample 5 candidates with details fetched
+  const diagSample = candidates
+    .filter(c => c.last_fetched_at)
+    .slice(0, 5);
+
+  // Live progress
+  const totalFound = candidates.length;
+  const detailsFetched = candidates.filter(c => c.last_fetched_at).length;
+  const pendingCount = candidates.filter(c => c.outcome === 'pending').length;
 
   if (loading) {
     return <AppLayout><div className="flex items-center justify-center pt-20"><Loader2 className="animate-spin text-primary" size={24} /></div></AppLayout>;
@@ -155,6 +172,9 @@ export default function FinderRunPage() {
   if (!run) {
     return <AppLayout><div className="text-center pt-20 text-muted-foreground">Run not found</div></AppLayout>;
   }
+
+  const isAddable = (c: FinderCandidate) => 
+    (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') && !addedIds.has(c.id);
 
   return (
     <AppLayout>
@@ -167,7 +187,7 @@ export default function FinderRunPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-foreground truncate flex items-center gap-1.5">
               {run.city} — Finder Run
-              <InfoTip text="This page shows all businesses found during this search run, organized by outcome. You can add leads to your CRM, export to CSV, or stop the run if it's still active." />
+              <InfoTip text="Results organized by outcome. Social media profiles (Facebook, Instagram, TikTok) are NOT counted as real websites." />
             </h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
               {run.status === 'running' && <span className="flex items-center gap-1 text-primary"><Loader2 size={11} className="animate-spin" /> Running…</span>}
@@ -176,8 +196,11 @@ export default function FinderRunPage() {
               {run.status === 'failed' && <span className="flex items-center gap-1 text-red-400"><XCircle size={11} /> Failed</span>}
               <span>·</span>
               <span>{(run.keywords || []).length} keywords</span>
-              {run.stats?.candidatesFound != null && <><span>·</span><span>{run.stats.candidatesFound} found</span></>}
-              {run.stats?.detailsFetched != null && <><span>·</span><span>{run.stats.detailsFetched} details fetched</span></>}
+              <span>·</span>
+              <span>{totalFound} found</span>
+              <span>·</span>
+              <span>{detailsFetched} details</span>
+              {pendingCount > 0 && <><span>·</span><span className="text-amber-400">{pendingCount} pending</span></>}
             </div>
           </div>
           {(run.status === 'running' || run.status === 'pending') && (
@@ -186,6 +209,19 @@ export default function FinderRunPage() {
             </Button>
           )}
         </div>
+
+        {/* Live progress bar */}
+        {(run.status === 'running' || run.status === 'pending') && run.stats?.detailsFetched != null && (
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span>Details: {run.stats.detailsFetched || 0}</span>
+              <span>Stage: {run.stats.stage || 'starting'}</span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(100, ((run.stats.detailsFetched || 0) / (run.max_details || 100)) * 100)}%` }} />
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1 mb-4 -mx-1 px-1">
@@ -204,6 +240,39 @@ export default function FinderRunPage() {
             </button>
           ))}
         </div>
+
+        {/* Diagnostics panel */}
+        <button
+          onClick={() => setShowDiag(!showDiag)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3 transition-colors"
+        >
+          <Bug size={12} />
+          Diagnostics
+          {showDiag ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+        {showDiag && (
+          <div className="mb-4 p-3 bg-muted/50 border border-border rounded-lg text-xs space-y-2">
+            <div className="font-medium text-foreground">Sample raw fields (5 fetched candidates):</div>
+            {diagSample.length === 0 ? (
+              <div className="text-muted-foreground">No detail-fetched candidates yet.</div>
+            ) : (
+              <div className="space-y-1.5">
+                {diagSample.map(c => (
+                  <div key={c.id} className="p-2 bg-card rounded border border-border">
+                    <div className="font-medium text-foreground">{c.name}</div>
+                    <div className="text-muted-foreground space-y-0.5 mt-1">
+                      <div>website: <code className="text-foreground">{c.website || 'null'}</code></div>
+                      <div>phone: <code className="text-foreground">{c.phone || 'null'}</code></div>
+                      <div>hasWebsite: <code className={c.has_website ? 'text-green-400' : 'text-red-400'}>{String(c.has_website)}</code></div>
+                      <div>hasPhone: <code className={c.has_phone ? 'text-green-400' : 'text-red-400'}>{String(c.has_phone)}</code></div>
+                      <div>outcome: <code className="text-primary">{c.outcome}</code></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         {tab === 'no_website_phone' && noWebsitePhone.length > 0 && (
@@ -247,6 +316,9 @@ export default function FinderRunPage() {
                     {c.email && <span className="text-blue-400 flex items-center gap-0.5"><Mail size={10} /> {c.email}</span>}
                     {c.has_website === false && <span className="text-red-400 flex items-center gap-0.5"><Globe size={10} /> No website</span>}
                     {c.has_website === true && <span className="text-muted-foreground flex items-center gap-0.5"><Globe size={10} /> Has website</span>}
+                    {c.website && c.has_website === false && (
+                      <span className="text-amber-400 text-[10px]">(social: {c.website.replace(/https?:\/\/(www\.)?/, '').split('/')[0]})</span>
+                    )}
                     {c.address && <span className="text-muted-foreground flex items-center gap-0.5 truncate max-w-[200px]"><MapPin size={10} /> {c.address}</span>}
                   </div>
                 </div>
@@ -256,7 +328,7 @@ export default function FinderRunPage() {
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><ExternalLink size={12} /></Button>
                     </a>
                   )}
-                  {c.outcome === 'no_website' && !addedIds.has(c.id) && (
+                  {isAddable(c) && (
                     <Button
                       size="sm"
                       onClick={() => addToCrm(c)}
