@@ -537,30 +537,56 @@ export default function FinderPage() {
               <History size={14} /> Previous Runs
             </h2>
             <div className="space-y-2">
-              {runs.map(run => (
-                <Link
-                  key={run.id}
-                  to={`/finder/runs/${run.id}`}
-                  className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors"
-                >
-                  <span className="shrink-0">
-                    {run.status === 'done' && <CheckCircle size={14} className="text-green" />}
-                    {run.status === 'running' && <Loader2 size={14} className="animate-spin text-primary" />}
-                    {run.status === 'stopped' && <Square size={14} className="text-amber" />}
-                    {run.status === 'failed' && <XCircle size={14} className="text-red" />}
-                    {run.status === 'pending' && <Clock size={14} className="text-muted-foreground" />}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
-                      {run.city} — {(run.keywords || []).slice(0, 3).join(', ')}{(run.keywords || []).length > 3 ? '…' : ''}
+              {runs.map(run => {
+                const progress = autoAddProgress[run.id];
+                const isAutoAdding = progress && !progress.done;
+                const autoAddDone = progress?.done && progress.total > 0;
+                return (
+                  <Link
+                    key={run.id}
+                    to={`/finder/runs/${run.id}`}
+                    className="block p-3 bg-card border border-border rounded-lg hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="shrink-0">
+                        {run.status === 'done' && <CheckCircle size={14} className="text-green" />}
+                        {run.status === 'running' && <Loader2 size={14} className="animate-spin text-primary" />}
+                        {run.status === 'stopped' && <Square size={14} className="text-amber" />}
+                        {run.status === 'failed' && <XCircle size={14} className="text-red" />}
+                        {run.status === 'pending' && <Clock size={14} className="text-muted-foreground" />}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {run.city} — {(run.keywords || []).slice(0, 3).join(', ')}{(run.keywords || []).length > 3 ? '…' : ''}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {format(new Date(run.created_at), 'MMM d, HH:mm')} · {run.status}
+                          {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
+                        </div>
+                      </div>
+                      {isAutoAdding && (
+                        <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
+                          <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
+                        </span>
+                      )}
+                      {autoAddDone && (
+                        <span className="text-[10px] text-green flex items-center gap-1 shrink-0">
+                          <UserPlus size={10} /> {progress.added} added
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {format(new Date(run.created_at), 'MMM d, HH:mm')} · {run.status}
-                      {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                    {/* Auto-add progress bar */}
+                    {isAutoAdding && (
+                      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all duration-300"
+                          style={{ width: `${(progress.added / progress.total) * 100}%` }}
+                        />
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         )}
