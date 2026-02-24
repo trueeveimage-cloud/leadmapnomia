@@ -16,6 +16,12 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    localStorage.setItem('rememberMe', String(rememberMe));
+    if (rememberMe) {
+      localStorage.setItem('savedEmail', email);
+    } else {
+      localStorage.removeItem('savedEmail');
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) toast.error(error.message);
     setLoading(false);
