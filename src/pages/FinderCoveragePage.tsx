@@ -1,23 +1,98 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { fetchFinderRuns, FinderRun } from '@/lib/finder';
 import { SWEDEN_CITIES, findCity } from '@/lib/swedenCities';
 import { Link } from 'react-router-dom';
 import { MapPin, Search, CheckCircle, Phone, Globe, BarChart2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Circle, Popup, useMap } from 'react-leaflet';
 import InfoTip from '@/components/InfoTip';
-
-function SetView({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  useEffect(() => { map.setView(center, zoom); }, [center, zoom, map]);
-  return null;
-}
 
 interface RunWithCoords extends FinderRun {
   lat: number;
   lng: number;
+}
+
+function LeafletMap({ runsWithCoords, runs }: { runsWithCoords: RunWithCoords[]; runs: FinderRun[] }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    const map = L.map(mapRef.current, {
+      center: [62.0, 15.5],
+      zoom: 5,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+    };
+  }, []);
+
+  // Update markers when data changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Clear existing layers (except tile layer)
+    map.eachLayer(layer => {
+      if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
+        map.removeLayer(layer);
+      }
+    });
+
+    // Unscanned city dots
+    SWEDEN_CITIES
+      .filter(c => !runs.some(r => r.city.toLowerCase() === c.name.toLowerCase()))
+      .forEach(city => {
+        L.circleMarker([city.lat, city.lng], {
+          radius: 4,
+          color: 'hsl(215, 15%, 50%)',
+          fillColor: 'hsl(215, 15%, 50%)',
+          fillOpacity: 0.3,
+          weight: 1,
+        })
+          .bindPopup(`<strong>${city.name}</strong><br/>Not yet scanned`)
+          .addTo(map);
+      });
+
+    // Run circles
+    runsWithCoords.forEach(run => {
+      const color = run.status === 'done' ? 'hsl(142, 69%, 45%)' : 'hsl(213, 94%, 58%)';
+      L.circle([run.lat, run.lng], {
+        radius: run.radius || 1500,
+        color,
+        fillColor: color,
+        fillOpacity: 0.15,
+        weight: 2,
+      })
+        .bindPopup(`
+          <div style="min-width:180px;font-size:12px;">
+            <strong style="font-size:13px;">${run.city}</strong><br/>
+            Status: ${run.status}<br/>
+            Keywords: ${(run.keywords || []).length}<br/>
+            Candidates: ${(run.stats as any)?.candidatesFound || 0}<br/>
+            No Web + Phone: ${(run.stats as any)?.noWebsiteWithPhone || 0}<br/>
+            Radius: ${run.radius}m<br/>
+            ${format(new Date(run.created_at), 'MMM d, HH:mm')}<br/>
+            <a href="/finder/runs/${run.id}" style="color:#60a5fa;">View results →</a>
+          </div>
+        `)
+        .addTo(map);
+    });
+  }, [runsWithCoords, runs]);
+
+  return <div ref={mapRef} className="h-full w-full" />;
 }
 
 export default function FinderCoveragePage() {
@@ -36,14 +111,12 @@ export default function FinderCoveragePage() {
     }).filter(Boolean) as RunWithCoords[];
   }, [runs]);
 
-  // Aggregate stats
   const totalRuns = runs.length;
   const totalCandidates = runs.reduce((s, r) => s + ((r.stats as any)?.candidatesFound || 0), 0);
   const totalDetails = runs.reduce((s, r) => s + ((r.stats as any)?.detailsFetched || 0), 0);
   const totalNoWebPhone = runs.reduce((s, r) => s + ((r.stats as any)?.noWebsiteWithPhone || 0), 0);
   const estSpend = (totalDetails * 0.017 + totalRuns * 2 * 0.032).toFixed(2);
 
-  // City coverage table
   const cityStats = useMemo(() => {
     const map = new Map<string, { runs: number; noWebPhone: number; totalCandidates: number }>();
     for (const run of runs) {
@@ -58,8 +131,6 @@ export default function FinderCoveragePage() {
       .map(([city, stats]) => ({ city, ...stats }))
       .sort((a, b) => b.noWebPhone - a.noWebPhone);
   }, [runs]);
-
-  const swedenCenter: [number, number] = [62.0, 15.5];
 
   return (
     <AppLayout>
@@ -96,66 +167,8 @@ export default function FinderCoveragePage() {
 
         {/* Map */}
         <div className="px-4 sm:px-6 pb-4 flex-1 min-h-[400px]">
-          <div className="h-full min-h-[400px] rounded-lg overflow-hidden border border-border">
-            {!loading && (
-              <MapContainer
-                center={swedenCenter}
-                zoom={5}
-                className="h-full w-full"
-                style={{ background: 'hsl(222, 28%, 7%)' }}
-              >
-                <SetView center={swedenCenter} zoom={5} />
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                />
-                {/* City dots for cities not yet scanned */}
-                {SWEDEN_CITIES.filter(c => !runs.some(r => r.city.toLowerCase() === c.name.toLowerCase())).map(city => (
-                  <Circle
-                    key={city.name}
-                    center={[city.lat, city.lng]}
-                    radius={800}
-                    pathOptions={{ color: 'hsl(215, 15%, 50%)', fillColor: 'hsl(215, 15%, 50%)', fillOpacity: 0.3, weight: 1 }}
-                  >
-                    <Popup>
-                      <div className="text-xs">
-                        <strong>{city.name}</strong><br />
-                        Not yet scanned
-                      </div>
-                    </Popup>
-                  </Circle>
-                ))}
-                {/* Run overlays */}
-                {runsWithCoords.map(run => (
-                  <Circle
-                    key={run.id}
-                    center={[run.lat, run.lng]}
-                    radius={run.radius || 1500}
-                    pathOptions={{
-                      color: run.status === 'done' ? 'hsl(142, 69%, 45%)' : 'hsl(213, 94%, 58%)',
-                      fillColor: run.status === 'done' ? 'hsl(142, 69%, 45%)' : 'hsl(213, 94%, 58%)',
-                      fillOpacity: 0.15,
-                      weight: 2,
-                    }}
-                  >
-                    <Popup>
-                      <div className="text-xs space-y-1 min-w-[180px]">
-                        <div className="font-bold text-sm">{run.city}</div>
-                        <div>Status: {run.status}</div>
-                        <div>Keywords: {(run.keywords || []).length}</div>
-                        <div>Candidates: {(run.stats as any)?.candidatesFound || 0}</div>
-                        <div>No Web + Phone: {(run.stats as any)?.noWebsiteWithPhone || 0}</div>
-                        <div>Radius: {run.radius}m</div>
-                        <div>{format(new Date(run.created_at), 'MMM d, HH:mm')}</div>
-                        <a href={`/finder/runs/${run.id}`} className="text-blue-400 underline flex items-center gap-1">
-                          View results <ExternalLink size={10} />
-                        </a>
-                      </div>
-                    </Popup>
-                  </Circle>
-                ))}
-              </MapContainer>
-            )}
+          <div className="h-full min-h-[400px] rounded-lg overflow-hidden border border-border bg-card">
+            {!loading && <LeafletMap runsWithCoords={runsWithCoords} runs={runs} />}
           </div>
         </div>
 
