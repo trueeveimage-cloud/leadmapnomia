@@ -24,6 +24,7 @@ import InboxPage from "./pages/InboxPage";
 import CallListPage from "./pages/CallListPage";
 import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
+import GuidePage from "./pages/GuidePage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -99,6 +100,7 @@ const App = () => (
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
                     <Route path="/next" element={<NextLeadPage />} />
+                    <Route path="/guide" element={<GuidePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>

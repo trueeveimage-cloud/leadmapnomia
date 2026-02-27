@@ -6,7 +6,7 @@ import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
   Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
   Megaphone, MessageCircle, PhoneCall, LogOut, MapPin, ChevronRight as NextIcon,
-  Target, TrendingUp, ArrowRight
+  Target, TrendingUp, ArrowRight, BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -216,6 +216,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Settings + Sign out */}
       <div className="px-3 py-2 border-t border-sidebar-border space-y-0.5">
+        <NavLink item={{ label: 'Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
         <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
         <button
           onClick={signOut}
