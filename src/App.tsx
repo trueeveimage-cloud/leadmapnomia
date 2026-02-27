@@ -25,6 +25,7 @@ import CallListPage from "./pages/CallListPage";
 import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
 import GuidePage from "./pages/GuidePage";
+import DashboardPage from "./pages/DashboardPage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -69,7 +70,8 @@ const App = () => (
                 <CRMProvider>
                   <GlobalHotkeys />
                   <Routes>
-                    <Route path="/" element={<Navigate to="/unsorted" replace />} />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/add" element={<AddPage />} />
                     <Route path="/bulk" element={<BulkPage />} />
                     <Route path="/unsorted" element={<SectionPage allSections title="Unsorted Inbox" showTriage emptyMessage="No unsorted leads — add some above!" />} />
