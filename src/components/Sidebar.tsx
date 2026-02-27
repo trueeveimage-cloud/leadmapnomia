@@ -6,7 +6,7 @@ import {
   Plus, Layers, Phone, Mail, AtSign, AlertCircle, Zap,
   Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
   Megaphone, MessageCircle, PhoneCall, LogOut, MapPin, ChevronRight as NextIcon,
-  Target, TrendingUp, ArrowRight
+  Target, TrendingUp, ArrowRight, BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
