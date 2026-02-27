@@ -1,4 +1,4 @@
-import { AppLayout } from "@/components/AppLayout";
+import AppLayout from "@/components/AppLayout";
 import { Search, Phone, Mail, MessageSquare, PhoneCall, Users, Target, Zap, BarChart3, Settings, ArrowRight, Keyboard, Globe, Clock, CheckCircle2, XCircle, Calendar, Inbox, ListChecks, Rocket, Map, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
