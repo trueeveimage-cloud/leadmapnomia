@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function isMobileNumber(phone: string): boolean {
+  const cleaned = phone.replace(/\s|-/g, '');
+  // Swedish mobile: starts with 07 or +467
+  return /^07/.test(cleaned) || /^\+467/.test(cleaned) || /^467/.test(cleaned);
+}
+
 async function sendTwilioSms(
   accountSid: string,
   authToken: string,
@@ -118,6 +124,7 @@ Deno.serve(async (req) => {
     const stats = {
       attempted: 0, sent: 0, delivered: 0, failed: 0,
       skipped_no_phone: 0, skipped_opt_out: 0, skipped_cooldown: 0, skipped_duplicate: 0,
+      skipped_landline: 0,
       provider: useTwilio ? 'twilio' : 'mock',
     };
 
@@ -127,6 +134,17 @@ Deno.serve(async (req) => {
       const toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) { stats.skipped_no_phone++; continue; }
 
+      // Only SMS mobile numbers (07...), move landlines straight to call list
+      if (!isMobileNumber(toNumber)) {
+        stats.skipped_landline++;
+        await dbClient.from('leads').update({
+          needs_call: true,
+          outreach_stage: 'no_reply_call',
+          call_after_at: new Date().toISOString(),
+        }).eq('id', lead.id);
+        continue;
+      }
+
       // Render template
       const body = (campaign.template_text || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
         return (lead as any)[key] ?? '';
@@ -134,14 +152,22 @@ Deno.serve(async (req) => {
 
       if (useTwilio) {
         // --- REAL TWILIO SMS ---
-        const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, toNumber, body, statusCallbackUrl);
+        // Normalize to E164 for Twilio
+        let e164 = toNumber.replace(/\s|-/g, '');
+        if (e164.startsWith('07')) {
+          e164 = '+46' + e164.slice(1);
+        } else if (e164.startsWith('467')) {
+          e164 = '+' + e164;
+        }
+
+        const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
 
         await dbClient.from('message_logs').insert({
           lead_id: lead.id,
           direction: 'outbound',
           channel: 'sms',
           from_number: twilioFrom,
-          to_number: toNumber,
+          to_number: e164,
           body,
           provider: 'twilio',
           provider_message_sid: result.sid || null,
@@ -149,6 +175,11 @@ Deno.serve(async (req) => {
           error_message: result.error || null,
           campaign_run_id: run.id,
         });
+
+        // Save normalized E164 on the lead if not already set
+        if (!lead.phone_e164 && e164 !== toNumber) {
+          await dbClient.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
+        }
 
         if (result.error) {
           stats.failed++;
