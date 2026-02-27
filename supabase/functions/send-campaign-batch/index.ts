@@ -5,6 +5,31 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+async function sendTwilioSms(
+  accountSid: string,
+  authToken: string,
+  from: string,
+  to: string,
+  body: string,
+  statusCallback: string,
+): Promise<{ sid: string; status: string; error?: string }> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+  const params = new URLSearchParams({ From: from, To: to, Body: body, StatusCallback: statusCallback });
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + btoa(`${accountSid}:${authToken}`),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+  const json = await resp.json();
+  if (!resp.ok) {
+    return { sid: '', status: 'failed', error: json.message || json.code || 'Twilio error' };
+  }
+  return { sid: json.sid, status: json.status };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -32,8 +57,23 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'campaignId required' }), { status: 400, headers: corsHeaders });
     }
 
+    // Check Twilio credentials
+    const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+    const twilioToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const twilioFrom = Deno.env.get('TWILIO_PHONE_NUMBER');
+    const useTwilio = !!(twilioSid && twilioToken && twilioFrom);
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const statusCallbackUrl = `${supabaseUrl}/functions/v1/twilio-status`;
+
+    // Use service role for DB operations
+    const dbClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
     // Fetch campaign
-    const { data: campaign, error: campErr } = await supabase
+    const { data: campaign, error: campErr } = await dbClient
       .from('campaigns').select('*').eq('id', campaignId).single();
     if (campErr || !campaign) {
       return new Response(JSON.stringify({ error: 'Campaign not found' }), { status: 404, headers: corsHeaders });
@@ -43,7 +83,7 @@ Deno.serve(async (req) => {
     const cooldownDate = new Date(Date.now() - (campaign.cooldown_days || 14) * 86400000).toISOString();
 
     // Build query for eligible leads
-    let query = supabase.from('leads').select('*')
+    let query = dbClient.from('leads').select('*')
       .eq('outreach_opt_out', false)
       .eq('has_replied', false)
       .not('phone', 'is', null);
@@ -68,7 +108,7 @@ Deno.serve(async (req) => {
     if (leadErr) throw leadErr;
 
     // Create campaign run
-    const { data: run, error: runErr } = await supabase
+    const { data: run, error: runErr } = await dbClient
       .from('campaign_runs')
       .insert({ campaign_id: campaignId })
       .select()
@@ -78,58 +118,83 @@ Deno.serve(async (req) => {
     const stats = {
       attempted: 0, sent: 0, delivered: 0, failed: 0,
       skipped_no_phone: 0, skipped_opt_out: 0, skipped_cooldown: 0, skipped_duplicate: 0,
+      provider: useTwilio ? 'twilio' : 'mock',
     };
 
-    // Process leads — mock provider (instant delivery)
     for (const lead of (leads || [])) {
       stats.attempted++;
 
-      if (!lead.phone) { stats.skipped_no_phone++; continue; }
+      const toNumber = lead.phone_e164 || lead.phone;
+      if (!toNumber) { stats.skipped_no_phone++; continue; }
 
       // Render template
       const body = (campaign.template_text || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
         return (lead as any)[key] ?? '';
       });
 
-      // Create message log
-      const { error: msgErr } = await supabase.from('message_logs').insert({
-        lead_id: lead.id,
-        direction: 'outbound',
-        channel: 'sms',
-        from_number: 'MOCK',
-        to_number: lead.phone_e164 || lead.phone,
-        body,
-        provider: 'mock',
-        provider_message_sid: `mock_${crypto.randomUUID()}`,
-        status: 'delivered',
-        campaign_run_id: run.id,
-      });
+      if (useTwilio) {
+        // --- REAL TWILIO SMS ---
+        const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, toNumber, body, statusCallbackUrl);
 
-      if (msgErr) {
-        stats.failed++;
-        continue;
+        await dbClient.from('message_logs').insert({
+          lead_id: lead.id,
+          direction: 'outbound',
+          channel: 'sms',
+          from_number: twilioFrom,
+          to_number: toNumber,
+          body,
+          provider: 'twilio',
+          provider_message_sid: result.sid || null,
+          status: result.error ? 'failed' : result.status,
+          error_message: result.error || null,
+          campaign_run_id: run.id,
+        });
+
+        if (result.error) {
+          stats.failed++;
+          console.error(`SMS failed for ${lead.id}: ${result.error}`);
+          continue;
+        }
+
+        stats.sent++;
+      } else {
+        // --- MOCK PROVIDER ---
+        await dbClient.from('message_logs').insert({
+          lead_id: lead.id,
+          direction: 'outbound',
+          channel: 'sms',
+          from_number: 'MOCK',
+          to_number: toNumber,
+          body,
+          provider: 'mock',
+          provider_message_sid: `mock_${crypto.randomUUID()}`,
+          status: 'delivered',
+          campaign_run_id: run.id,
+        });
+
+        stats.sent++;
+        stats.delivered++;
       }
 
-      stats.sent++;
-      stats.delivered++;
-
       // Update lead
-      await supabase.from('leads').update({
+      await dbClient.from('leads').update({
         last_outbound_at: new Date().toISOString(),
         outreach_stage: 'sms_sent',
         last_message_preview: body.slice(0, 80),
         last_message_direction: 'outbound',
-        last_message_status: 'delivered',
+        last_message_status: useTwilio ? 'queued' : 'delivered',
+        last_contact_method: 'sms',
+        last_contacted_at: new Date().toISOString(),
       }).eq('id', lead.id);
     }
 
     // Update run stats
-    await supabase.from('campaign_runs').update({
+    await dbClient.from('campaign_runs').update({
       stats,
       ended_at: new Date().toISOString(),
     }).eq('id', run.id);
 
-    return new Response(JSON.stringify({ success: true, stats, runId: run.id }), {
+    return new Response(JSON.stringify({ success: true, stats, runId: run.id, provider: useTwilio ? 'twilio' : 'mock' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
