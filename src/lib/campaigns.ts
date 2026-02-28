@@ -78,38 +78,78 @@ export async function fetchCampaignRuns(campaignId: string): Promise<CampaignRun
   return data as CampaignRun[];
 }
 
+export interface EligibilityBreakdown {
+  total: number;
+  eligible: number;
+  noPhone: number;
+  landline: number;
+  optedOut: number;
+  replied: number;
+  cooldown: number;
+  hasWebsite: number;
+  wrongSection: number;
+  lowRating: number;
+  lowReviews: number;
+}
+
+const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
+
+function isMobileNumber(phone: string): boolean {
+  return MOBILE_REGEX.test(phone.replace(/\s|-/g, ''));
+}
+
 export async function countEligibleLeads(filter: AudienceFilter, cooldownDays: number): Promise<number> {
-  let query = supabase.from('leads').select('id', { count: 'exact', head: true });
+  const breakdown = await countEligibleLeadsDetailed(filter, cooldownDays);
+  return breakdown.eligible;
+}
 
-  if (filter.sections?.length) {
-    query = query.in('section', filter.sections);
-  }
-  if (filter.hasWebsite === false) {
-    query = query.is('website', null);
-  }
-  if (filter.minRating) {
-    query = query.gte('rating', filter.minRating);
-  }
-  if (filter.minReviews) {
-    query = query.gte('reviews_count', filter.minReviews);
-  }
-  if (filter.excludeOptOut !== false) {
-    query = query.eq('outreach_opt_out', false);
-  }
-  if (filter.excludeReplied !== false) {
-    query = query.eq('has_replied', false);
-  }
-  if (filter.excludeMissingPhone !== false) {
-    query = query.not('phone', 'is', null);
+export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldownDays: number): Promise<EligibilityBreakdown> {
+  // Fetch all leads with minimal fields
+  const allLeads: any[] = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('id, phone, section, rating, reviews_count, website, outreach_opt_out, has_replied, last_outbound_at')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allLeads.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
   }
 
-  // Cooldown check
-  const cooldownDate = new Date(Date.now() - cooldownDays * 86400000).toISOString();
-  query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
+  const cooldownDate = new Date(Date.now() - cooldownDays * 86400000);
+  const breakdown: EligibilityBreakdown = {
+    total: allLeads.length,
+    eligible: 0,
+    noPhone: 0,
+    landline: 0,
+    optedOut: 0,
+    replied: 0,
+    cooldown: 0,
+    hasWebsite: 0,
+    wrongSection: 0,
+    lowRating: 0,
+    lowReviews: 0,
+  };
 
-  const { count, error } = await query;
-  if (error) throw error;
-  return count ?? 0;
+  for (const lead of allLeads) {
+    // Check each exclusion reason (a lead can only be counted in first matching reason)
+    if (!lead.phone) { breakdown.noPhone++; continue; }
+    if (!isMobileNumber(lead.phone)) { breakdown.landline++; continue; }
+    if (filter.excludeOptOut !== false && lead.outreach_opt_out) { breakdown.optedOut++; continue; }
+    if (filter.excludeReplied !== false && lead.has_replied) { breakdown.replied++; continue; }
+    if (filter.sections?.length && !filter.sections.includes(lead.section)) { breakdown.wrongSection++; continue; }
+    if (filter.hasWebsite === false && lead.website) { breakdown.hasWebsite++; continue; }
+    if (filter.minRating && (lead.rating == null || lead.rating < filter.minRating)) { breakdown.lowRating++; continue; }
+    if (filter.minReviews && (lead.reviews_count == null || lead.reviews_count < filter.minReviews)) { breakdown.lowReviews++; continue; }
+    if (lead.last_outbound_at && new Date(lead.last_outbound_at) > cooldownDate) { breakdown.cooldown++; continue; }
+    breakdown.eligible++;
+  }
+
+  return breakdown;
 }
 
 export function renderTemplate(template: string, lead: Record<string, any>): string {
