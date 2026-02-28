@@ -91,11 +91,6 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Twilio banner */}
-        <div className="bg-amber/10 border border-amber/30 rounded-lg p-3 mb-6 flex items-center gap-2 text-xs text-amber">
-          <AlertTriangle size={14} />
-          <span>Using mock provider — messages are simulated. Connect Twilio in Settings.</span>
-        </div>
 
         {/* Stats grid */}
         <div className="grid grid-cols-4 gap-3 mb-6">
