@@ -32,7 +32,7 @@ export default function CampaignNewPage() {
   const [template, setTemplate] = useState('Hej {name}! Vi hjälper företag inom {category} att växa. Svara JA för mer info. Svara STOP för att avsluta.');
   const [dailyCap, setDailyCap] = useState(100);
   const [batchCap, setBatchCap] = useState(200);
-  const [cooldownDays, setCooldownDays] = useState(14);
+  const [cooldownDays, setCooldownDays] = useState(0);
   const [callAfterHours, setCallAfterHours] = useState(48);
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState<EligibilityBreakdown | null>(null);
