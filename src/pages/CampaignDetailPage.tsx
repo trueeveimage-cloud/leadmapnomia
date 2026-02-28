@@ -5,7 +5,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Zap, Download, ArrowLeft, Send, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Zap, Download, ArrowLeft, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 
