@@ -250,10 +250,6 @@ export default function CampaignNewPage() {
                 <Input type="number" min="1" value={batchCap} onChange={e => setBatchCap(Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Cooldown Days <InfoTip text="Days before re-messaging same lead" /></label>
-                <Input type="number" min="1" value={cooldownDays} onChange={e => setCooldownDays(Number(e.target.value))} className="h-8 text-sm" />
-              </div>
-              <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait for reply before marking for call" /></label>
                 <Input type="number" min="1" value={callAfterHours} onChange={e => setCallAfterHours(Number(e.target.value))} className="h-8 text-sm" />
               </div>
