@@ -1,0 +1,2 @@
+ALTER TABLE public.leads DROP CONSTRAINT leads_status_check;
+ALTER TABLE public.leads ADD CONSTRAINT leads_status_check CHECK (status = ANY (ARRAY['not_contacted','contacted','answered','callback','interested','not_interested','unsure','demo','closed_won','closed_lost']));
