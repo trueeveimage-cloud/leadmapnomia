@@ -88,7 +88,28 @@ Deno.serve(async (req) => {
     }
 
     const filter = campaign.audience_filter || {};
-    const cooldownDate = new Date(Date.now() - (campaign.cooldown_days || 14) * 86400000).toISOString();
+    const cooldownDays = campaign.cooldown_days || 0;
+    const cooldownDate = new Date(Date.now() - cooldownDays * 86400000).toISOString();
+
+    // Check how many messages already sent today to enforce daily cap
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { count: sentToday } = await dbClient
+      .from('message_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('direction', 'outbound')
+      .gte('created_at', todayStart.toISOString());
+
+    const dailyCap = campaign.daily_cap || 100;
+    const remaining = Math.max(0, dailyCap - (sentToday || 0));
+    if (remaining === 0) {
+      return new Response(JSON.stringify({ error: 'Daily cap reached', sentToday }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Actual limit is the lesser of batch cap and remaining daily cap
+    const effectiveLimit = Math.min(campaign.batch_cap || 200, remaining);
 
     // Build query for eligible leads
     let query = dbClient.from('leads').select('*')
@@ -109,8 +130,10 @@ Deno.serve(async (req) => {
       query = query.gte('reviews_count', filter.minReviews);
     }
 
-    query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
-    query = query.limit(campaign.batch_cap || 200);
+    if (cooldownDays > 0) {
+      query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
+    }
+    query = query.limit(effectiveLimit);
 
     const { data: leads, error: leadErr } = await query;
     if (leadErr) throw leadErr;
