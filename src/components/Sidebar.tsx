@@ -238,6 +238,14 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
+        <NavGroup label="Pipeline" icon={<BarChart2 size={14} />}>
+          {pipelinePages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
+        </NavGroup>
+
+        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
+          {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
+        </NavGroup>
+
         <NavGroup label="Tools" icon={<Search size={14} />} defaultOpen={false}>
           <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
