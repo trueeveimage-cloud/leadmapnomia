@@ -226,27 +226,27 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Scrollable nav */}
       <div className="flex-1 px-3 py-1 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        <NavGroup label="Leads" icon={<Users size={11} />}>
+        <NavGroup label="Leads" icon={<Users size={14} />}>
           <UnsortedGroup counts={counts} onNav={onClose} />
           <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
           <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
         </NavGroup>
 
-        <NavGroup label="Pipeline" icon={<BarChart2 size={11} />}>
+        <NavGroup label="Pipeline" icon={<BarChart2 size={14} />}>
           {pipelinePages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
 
-        <NavGroup label="Closing" icon={<Zap size={11} />} defaultOpen={false}>
+        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
           {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
 
-        <NavGroup label="Outreach" icon={<Megaphone size={11} />}>
+        <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
           <NavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
-        <NavGroup label="Tools" icon={<Search size={11} />} defaultOpen={false}>
+        <NavGroup label="Tools" icon={<Search size={14} />} defaultOpen={false}>
           <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
