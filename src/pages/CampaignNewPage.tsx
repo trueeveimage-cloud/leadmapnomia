@@ -48,8 +48,8 @@ export default function CampaignNewPage() {
   const handleEstimate = async () => {
     setEstimating(true);
     try {
-      const count = await countEligibleLeads(filter, cooldownDays);
-      setEstimate(count);
+      const breakdown = await countEligibleLeadsDetailed(filter, cooldownDays);
+      setEstimate(breakdown);
     } catch { toast.error('Failed to estimate'); }
     finally { setEstimating(false); }
   };
