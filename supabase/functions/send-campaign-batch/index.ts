@@ -7,8 +7,10 @@ const corsHeaders = {
 
 function isMobileNumber(phone: string): boolean {
   const cleaned = phone.replace(/\s|-/g, '');
-  // Swedish mobile: starts with 07 or +467
-  return /^07/.test(cleaned) || /^\+467/.test(cleaned) || /^467/.test(cleaned);
+  // Swedish mobile prefixes: 070, 072, 073, 076, 079
+  return /^(070|072|073|076|079)/.test(cleaned) ||
+         /^\+46(70|72|73|76|79)/.test(cleaned) ||
+         /^46(70|72|73|76|79)/.test(cleaned);
 }
 
 async function sendTwilioSms(

@@ -48,11 +48,6 @@ export default function CampaignsPage() {
           </Link>
         </div>
 
-        {/* Twilio banner */}
-        <div className="bg-amber/10 border border-amber/30 rounded-lg p-3 mb-6 flex items-center gap-2 text-xs text-amber">
-          <AlertTriangle size={14} />
-          <span>Twilio not connected — campaigns use mock provider. Go to <Link to="/settings" className="underline">Settings</Link> to connect.</span>
-        </div>
 
         {loading ? (
           <div className="text-sm text-muted-foreground py-20 text-center">Loading campaigns...</div>
