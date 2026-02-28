@@ -32,7 +32,7 @@ export default function CampaignNewPage() {
   const [template, setTemplate] = useState('Hej {name}! Vi hjälper företag inom {category} att växa. Svara JA för mer info. Svara STOP för att avsluta.');
   const [dailyCap, setDailyCap] = useState(100);
   const [batchCap, setBatchCap] = useState(200);
-  const [cooldownDays, setCooldownDays] = useState(14);
+  const [cooldownDays, setCooldownDays] = useState(0);
   const [callAfterHours, setCallAfterHours] = useState(48);
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState<EligibilityBreakdown | null>(null);
@@ -248,10 +248,6 @@ export default function CampaignNewPage() {
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Batch Cap <InfoTip text="Max messages per send batch" /></label>
                 <Input type="number" min="1" value={batchCap} onChange={e => setBatchCap(Number(e.target.value))} className="h-8 text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Cooldown Days <InfoTip text="Days before re-messaging same lead" /></label>
-                <Input type="number" min="1" value={cooldownDays} onChange={e => setCooldownDays(Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait for reply before marking for call" /></label>

@@ -5,7 +5,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Zap, Download, ArrowLeft, Send, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Zap, Download, ArrowLeft, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 
@@ -91,18 +91,12 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Twilio banner */}
-        <div className="bg-amber/10 border border-amber/30 rounded-lg p-3 mb-6 flex items-center gap-2 text-xs text-amber">
-          <AlertTriangle size={14} />
-          <span>Using mock provider — messages are simulated. Connect Twilio in Settings.</span>
-        </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-3 mb-6">
           {[
             { label: 'Daily Cap', value: campaign.daily_cap },
             { label: 'Batch Cap', value: campaign.batch_cap },
-            { label: 'Cooldown', value: `${campaign.cooldown_days}d` },
             { label: 'Call After', value: `${campaign.call_after_hours}h` },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-lg p-3 text-center">
