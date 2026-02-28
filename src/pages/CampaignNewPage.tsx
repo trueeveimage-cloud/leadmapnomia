@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { createCampaign, countEligibleLeads, AudienceFilter, renderTemplate } from '@/lib/campaigns';
+import { createCampaign, countEligibleLeadsDetailed, AudienceFilter, EligibilityBreakdown, renderTemplate } from '@/lib/campaigns';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap } from 'lucide-react';
 import { toast } from 'sonner';
