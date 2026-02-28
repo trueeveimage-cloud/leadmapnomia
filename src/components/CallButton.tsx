@@ -69,61 +69,61 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
 
   const handleOutcome = async (outcome: typeof CALL_OUTCOMES[0]) => {
     setSelectedOutcome(outcome);
-    if (outcome.key === 'demo') {
-      try {
+    try {
+      if (outcome.key === 'demo') {
         const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: 'demo', ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: 'demo', status: 'demo' });
         setPendingLead(updated);
-        onUpdate?.(updated);
-        refreshCounts();
         setStep('idle');
         setDemoOpen(true);
-      } catch {
-        toast.error('Failed to update status');
+        // Call onUpdate AFTER setting local state so we don't get unmounted
+        refreshCounts();
+        onUpdate?.(updated);
+      } else if (outcome.key === 'answered') {
+        setStep('status');
+      } else if (outcome.key === 'not_answered') {
+        const dt = new Date();
+        dt.setDate(dt.getDate() + 1);
+        dt.setHours(12, 0, 0, 0);
+        const updated = await updateLead(lead.id, {
+          status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+        } as any);
+        await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+        setStep('idle');
+        toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+        refreshCounts();
+        onUpdate?.(updated);
+      } else if (outcome.key === 'busy') {
+        const dt = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        const updated = await updateLead(lead.id, {
+          status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
+        } as any);
+        await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
+        setStep('idle');
+        toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
+        refreshCounts();
+        onUpdate?.(updated);
+      } else if (outcome.key === 'wrong_number') {
+        const updated = await updateLead(lead.id, {
+          status: 'not_interested', call_outcome_last: outcome.key, outreach_opt_out: true, ...trackingUpdates(),
+        } as any);
+        await logActivity(lead.id, 'call', { outcome: outcome.key });
+        setStep('idle');
+        toast.success('Marked as wrong number');
+        refreshCounts();
+        onUpdate?.(updated);
+      } else {
+        // callback_later
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setFollowupDate(tomorrow);
+        setFollowupHour(9);
+        setFollowupMinute(0);
+        setStep('followup');
       }
-    } else if (outcome.key === 'answered') {
-      setStep('status');
-    } else if (outcome.key === 'not_answered') {
-      // Auto-schedule: tomorrow at noon
-      const dt = new Date();
-      dt.setDate(dt.getDate() + 1);
-      dt.setHours(12, 0, 0, 0);
-      const updated = await updateLead(lead.id, {
-        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
-      } as any);
-      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
-      onUpdate?.(updated);
-      refreshCounts();
-      setStep('idle');
-      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
-    } else if (outcome.key === 'busy') {
-      // Auto-schedule: 3 hours from now
-      const dt = new Date(Date.now() + 3 * 60 * 60 * 1000);
-      const updated = await updateLead(lead.id, {
-        status: 'callback', call_outcome_last: outcome.key, next_action_at: dt.toISOString(), ...trackingUpdates(),
-      } as any);
-      await logActivity(lead.id, 'call', { outcome: outcome.key, next_action_at: dt.toISOString() });
-      onUpdate?.(updated);
-      refreshCounts();
-      setStep('idle');
-      toast.success(`Follow-up: ${format(dt, 'MMM d h:mma')}`);
-    } else if (outcome.key === 'wrong_number') {
-      const updated = await updateLead(lead.id, {
-        status: 'not_interested', call_outcome_last: outcome.key, outreach_opt_out: true, ...trackingUpdates(),
-      } as any);
-      await logActivity(lead.id, 'call', { outcome: outcome.key });
-      onUpdate?.(updated);
-      refreshCounts();
-      setStep('idle');
-      toast.success('Marked as wrong number');
-    } else {
-      // callback_later
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setFollowupDate(tomorrow);
-      setFollowupHour(9);
-      setFollowupMinute(0);
-      setStep('followup');
+    } catch (err) {
+      console.error('Outcome error:', err);
+      toast.error('Failed to update lead');
     }
   };
 
