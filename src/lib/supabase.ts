@@ -1,5 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
+
+export function isMobileNumber(phone: string): boolean {
+  return MOBILE_REGEX.test(phone.replace(/\s|-/g, ''));
+}
+
 export type LeadSection = 'unsorted' | 'phone' | 'email' | 'missing' | 'both';
 export type LeadStatus =
   | 'not_contacted'
