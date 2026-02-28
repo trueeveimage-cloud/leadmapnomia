@@ -58,12 +58,12 @@ function NavGroup({ label, children, defaultOpen = true, icon }: { label: string
     <div className="animate-fade-in">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-200 rounded-md hover:bg-sidebar-accent/30"
+        className="flex items-center gap-3 w-full px-3 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-sidebar-accent/50 border border-transparent hover:border-sidebar-border"
       >
-        {icon && <span className="text-muted-foreground/40">{icon}</span>}
+        {icon && <span className="text-muted-foreground/60">{icon}</span>}
         <span className="flex-1 text-left">{label}</span>
         <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
-          <ChevronDown size={11} />
+          <ChevronDown size={14} />
         </span>
       </button>
       <div className={cn(
@@ -226,27 +226,27 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Scrollable nav */}
       <div className="flex-1 px-3 py-1 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        <NavGroup label="Leads" icon={<Users size={11} />}>
+        <NavGroup label="Leads" icon={<Users size={14} />}>
           <UnsortedGroup counts={counts} onNav={onClose} />
           <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
           <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
         </NavGroup>
 
-        <NavGroup label="Pipeline" icon={<BarChart2 size={11} />}>
+        <NavGroup label="Pipeline" icon={<BarChart2 size={14} />}>
           {pipelinePages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
 
-        <NavGroup label="Closing" icon={<Zap size={11} />} defaultOpen={false}>
+        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
           {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
 
-        <NavGroup label="Outreach" icon={<Megaphone size={11} />}>
+        <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
           <NavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
-        <NavGroup label="Tools" icon={<Search size={11} />} defaultOpen={false}>
+        <NavGroup label="Tools" icon={<Search size={14} />} defaultOpen={false}>
           <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
