@@ -182,6 +182,24 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {lead.status !== 'not_contacted' && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs gap-1 text-muted-foreground border-border/50 hover:bg-muted hover:text-foreground"
+            onClick={async () => {
+              try {
+                const updated = await updateLead(lead.id, { status: 'not_contacted' as LeadStatus });
+                onUpdate(updated);
+                refreshCounts();
+                toast.success('Moved back to Not Contacted');
+              } catch { toast.error('Failed to update'); }
+            }}
+            title="Revert to Not Contacted"
+          >
+            ↩
+          </Button>
+        )}
         {lead.status === 'demo' && (
           <Button
             size="sm"

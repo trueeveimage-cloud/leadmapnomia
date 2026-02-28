@@ -58,12 +58,12 @@ function NavGroup({ label, children, defaultOpen = true, icon }: { label: string
     <div className="animate-fade-in">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-200 rounded-md hover:bg-sidebar-accent/30"
+        className="flex items-center gap-3 w-full px-3 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-sidebar-accent/50 border border-transparent hover:border-sidebar-border"
       >
-        {icon && <span className="text-muted-foreground/40">{icon}</span>}
+        {icon && <span className="text-muted-foreground/60">{icon}</span>}
         <span className="flex-1 text-left">{label}</span>
         <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
-          <ChevronDown size={11} />
+          <ChevronDown size={14} />
         </span>
       </button>
       <div className={cn(
