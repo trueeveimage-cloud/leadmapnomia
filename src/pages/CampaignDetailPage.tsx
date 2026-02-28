@@ -160,16 +160,17 @@ export default function CampaignDetailPage() {
         </div>
 
         {/* Schedule / Progress */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-5 gap-3 mb-6">
           {[
             { label: 'Total Target', value: totalTarget, icon: Hash },
             { label: 'Daily Cap', value: dailyCap, icon: Clock },
             { label: 'Sent So Far', value: totalSent, icon: Send },
             { label: 'Days Left', value: remaining > 0 ? `~${daysLeft}d` : 'Done', icon: Clock },
+            { label: 'Next Auto-Send', value: campaign.status === 'running' && remaining > 0 ? nextBatch : '—', icon: Timer },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-lg p-3 text-center">
               <s.icon size={14} className="mx-auto mb-1 text-muted-foreground" />
-              <p className="text-lg font-bold text-foreground">{s.value}</p>
+              <p className={`font-bold text-foreground ${s.label === 'Next Auto-Send' ? 'text-sm' : 'text-lg'}`}>{s.value}</p>
               <p className="text-[10px] text-muted-foreground">{s.label}</p>
             </div>
           ))}
