@@ -155,7 +155,13 @@ export async function addLead(lead: Partial<Omit<Lead, 'id' | 'created_at' | 'up
     if (existing) return { duplicate: existing as Lead };
   }
 
-  const { data, error } = await supabase.from('leads').insert(lead).select().single();
+  // Auto-route landlines directly to call list (skip SMS)
+  const insertData: any = { ...lead };
+  if (lead.phone && !isMobileNumber(lead.phone)) {
+    insertData.needs_call = true;
+  }
+
+  const { data, error } = await supabase.from('leads').insert(insertData).select().single();
   if (error) return { error: error.message };
   return { lead: data as Lead };
 }
