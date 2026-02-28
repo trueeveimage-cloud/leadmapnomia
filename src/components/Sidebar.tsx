@@ -52,15 +52,16 @@ function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: bool
   );
 }
 
-function NavGroup({ label, children, defaultOpen = true, icon }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode }) {
+function NavGroup({ label, children, defaultOpen = true, icon, emoji }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode; emoji?: string }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
     <div className="animate-fade-in">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-3 w-full px-3 py-3 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-sidebar-accent/50 border border-transparent hover:border-sidebar-border"
+        className="flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-xl hover:bg-sidebar-accent/60 border border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20 shadow-sm"
       >
-        {icon && <span className="text-muted-foreground/60">{icon}</span>}
+        {emoji && <span className="text-sm">{emoji}</span>}
+        {icon && !emoji && <span className="text-muted-foreground/60">{icon}</span>}
         <span className="flex-1 text-left">{label}</span>
         <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
           <ChevronDown size={14} />
@@ -76,41 +77,38 @@ function NavGroup({ label, children, defaultOpen = true, icon }: { label: string
   );
 }
 
-function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
+function CustomersGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
   const [subOpen, setSubOpen] = React.useState(false);
   const { pathname } = useLocation();
 
   const subsections: NavItem[] = [
-    { label: 'Has Phone', path: '/phone', icon: <Phone size={13} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
-    { label: 'Has Email', path: '/email', icon: <Mail size={13} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
-    { label: 'Both', path: '/both', icon: <Zap size={13} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
-    { label: 'Missing', path: '/missing', icon: <AlertCircle size={13} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
+    { label: '📱 Has Phone', path: '/phone', icon: <Phone size={13} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
+    { label: '📧 Has Email', path: '/email', icon: <Mail size={13} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
+    { label: '⚡ Both', path: '/both', icon: <Zap size={13} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
+    { label: '⚠️ Missing', path: '/missing', icon: <AlertCircle size={13} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
   ];
 
-  const isUnsortedActive = pathname === '/unsorted';
+  const isActive = pathname === '/unsorted';
   const isSubActive = subsections.some(s => pathname === s.path);
 
   return (
-    <div>
-      <div className="flex items-center gap-0.5">
+    <div className="animate-fade-in">
+      {/* Section header styled as button */}
+      <div className="flex items-center gap-0.5 mb-0.5">
         <Link
           to="/unsorted"
           onClick={onNav}
           className={cn(
-            'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200 group flex-1 min-w-0',
-            isUnsortedActive
-              ? 'bg-primary/10 text-primary font-medium shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15)]'
-              : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5'
+            'flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-xl hover:bg-sidebar-accent/60 border border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20 shadow-sm flex-1 min-w-0',
+            isActive && 'bg-primary/10 text-primary border-primary/20'
           )}
         >
-          <span className={cn('shrink-0 transition-colors', isUnsortedActive ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground')}>
-            <Inbox size={15} />
-          </span>
-          <span className="flex-1 truncate">Unsorted</span>
+          <span className="text-sm">👥</span>
+          <span className="flex-1 text-left">Customers</span>
           {counts.unsorted > 0 && (
             <span className={cn(
               'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
-              isUnsortedActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+              isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
             )}>
               {counts.unsorted > 999 ? `${(counts.unsorted / 1000).toFixed(1)}k` : counts.unsorted}
             </span>
@@ -147,14 +145,15 @@ function UnsortedGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['c
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { counts } = useCRM();
   const { signOut } = useAuth();
+  const { pathname } = useLocation();
 
   const closingPages: NavItem[] = [
-    { label: 'Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
-    { label: 'Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
-    { label: 'Unsure', path: '/status/unsure', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.unsure },
-    { label: 'Demo', path: '/status/demo', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(262 83% 65%)' }} />, badge: counts.demo },
-    { label: 'Closed Won', path: '/status/closed-won', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 55%)' }} />, badge: counts.closed_won },
-    { label: 'Closed Lost', path: '/status/closed-lost', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 50% 40%)' }} />, badge: counts.closed_lost },
+    { label: '✅ Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
+    { label: '❌ Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
+    { label: '🤔 Unsure', path: '/status/unsure', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.unsure },
+    { label: '🎯 Demo', path: '/status/demo', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(262 83% 65%)' }} />, badge: counts.demo },
+    { label: '🏆 Closed Won', path: '/status/closed-won', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 55%)' }} />, badge: counts.closed_won },
+    { label: '💀 Closed Lost', path: '/status/closed-lost', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 50% 40%)' }} />, badge: counts.closed_lost },
   ];
 
   return (
@@ -194,17 +193,18 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <span className="ml-auto text-[10px] text-primary/50 font-mono">N</span>
         </Link>
 
+        {/* Statistics button-style */}
         <Link
           to="/dashboard"
           onClick={onClose}
           className={cn(
-            "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200",
-            useLocation().pathname === '/dashboard'
-              ? "bg-primary/10 text-primary font-medium"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            "flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-xl border shadow-sm",
+            pathname === '/dashboard'
+              ? "bg-primary/10 text-primary border-primary/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20"
           )}
         >
-          <LayoutDashboard size={15} className={useLocation().pathname === '/dashboard' ? 'text-primary' : 'text-muted-foreground'} />
+          <span className="text-sm">📊</span>
           <span>Statistics</span>
         </Link>
       </div>
@@ -218,38 +218,37 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Scrollable nav */}
-      <div className="flex-1 px-3 py-1 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        {/* 1. Outreach — campaigns, inbox, call list, callbacks, pipeline statuses */}
-        <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
-          <NavLink item={{ label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted }} onNav={onClose} />
-          <NavLink item={{ label: 'Contacted', path: '/status/contacted', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(213 94% 58%)' }} />, badge: counts.contacted }} onNav={onClose} />
-          <NavLink item={{ label: 'Answered', path: '/status/answered', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.answered }} onNav={onClose} />
-          <NavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks, color: counts.callbacksDue > 0 ? 'hsl(38 95% 55%)' : undefined }} onNav={onClose} />
-          <NavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
-          <NavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
-          <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+      <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+        {/* Customers — own segment */}
+        <CustomersGroup counts={counts} onNav={onClose} />
+
+        {/* 1. Outreach — campaigns, inbox, call list, callbacks */}
+        <NavGroup label="Outreach" emoji="📣">
+          <NavLink item={{ label: '📢 Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
+          <NavLink item={{ label: '💬 Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+          <NavLink item={{ label: '📞 Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+          <NavLink item={{ label: '🔔 Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 
-        {/* 2. Leads & Tools — combined */}
-        <NavGroup label="Leads & Tools" icon={<Users size={14} />}>
-          <UnsortedGroup counts={counts} onNav={onClose} />
-          <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
-          <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
-          <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
-          <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
-          <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
+        {/* 2. Leads & Tools */}
+        <NavGroup label="Leads & Tools" emoji="🛠️">
+          <NavLink item={{ label: '➕ Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
+          <NavLink item={{ label: '📦 Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
+          <NavLink item={{ label: '🔍 Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+          <NavLink item={{ label: '🗺️ Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
+          <NavLink item={{ label: '🧮 Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
         </NavGroup>
 
         {/* 3. Closing — last */}
-        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
+        <NavGroup label="Closing" emoji="🤝" defaultOpen={false}>
           {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
       </div>
 
       {/* Bottom section */}
       <div className="px-3 py-2.5 border-t border-sidebar-border space-y-0.5 bg-sidebar">
-        <NavLink item={{ label: 'Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
-        <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
+        <NavLink item={{ label: '📖 Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+        <NavLink item={{ label: '⚙️ Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
         <button
           onClick={signOut}
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full group"
