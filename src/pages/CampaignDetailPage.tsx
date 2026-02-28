@@ -160,7 +160,7 @@ export default function CampaignDetailPage() {
         </div>
 
         {/* Schedule / Progress */}
-        <div className="grid grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-6 gap-3 mb-6">
           {[
             { label: 'Total Target', value: totalTarget, icon: Hash },
             { label: 'Daily Cap', value: dailyCap, icon: Clock },
