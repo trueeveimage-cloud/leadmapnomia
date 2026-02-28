@@ -41,6 +41,7 @@ export default function CampaignDetailPage() {
   const [retrying, setRetrying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
     if (!id) return;
