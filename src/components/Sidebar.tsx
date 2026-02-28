@@ -148,13 +148,6 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { counts } = useCRM();
   const { signOut } = useAuth();
 
-  const pipelinePages: NavItem[] = [
-    { label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted },
-    { label: 'Contacted', path: '/status/contacted', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(213 94% 58%)' }} />, badge: counts.contacted },
-    { label: 'Answered', path: '/status/answered', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.answered },
-    { label: 'Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks, color: counts.callbacksDue > 0 ? 'hsl(38 95% 55%)' : undefined },
-  ];
-
   const closingPages: NavItem[] = [
     { label: 'Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
     { label: 'Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
@@ -212,7 +205,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           )}
         >
           <LayoutDashboard size={15} className={useLocation().pathname === '/dashboard' ? 'text-primary' : 'text-muted-foreground'} />
-          <span>Dashboard</span>
+          <span>Statistics</span>
         </Link>
       </div>
 
@@ -226,30 +219,30 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Scrollable nav */}
       <div className="flex-1 px-3 py-1 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        <NavGroup label="Leads" icon={<Users size={14} />}>
-          <UnsortedGroup counts={counts} onNav={onClose} />
-          <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
-          <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
-        </NavGroup>
-
+        {/* 1. Outreach — campaigns, inbox, call list, callbacks, pipeline statuses */}
         <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
+          <NavLink item={{ label: 'Not Contacted', path: '/status/not-contacted', icon: <span className="w-2 h-2 rounded-full bg-muted-foreground/70 shrink-0" />, badge: counts.not_contacted }} onNav={onClose} />
+          <NavLink item={{ label: 'Contacted', path: '/status/contacted', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(213 94% 58%)' }} />, badge: counts.contacted }} onNav={onClose} />
+          <NavLink item={{ label: 'Answered', path: '/status/answered', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.answered }} onNav={onClose} />
+          <NavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks, color: counts.callbacksDue > 0 ? 'hsl(38 95% 55%)' : undefined }} onNav={onClose} />
           <NavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
-        <NavGroup label="Pipeline" icon={<BarChart2 size={14} />}>
-          {pipelinePages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
-        </NavGroup>
-
-        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
-          {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
-        </NavGroup>
-
-        <NavGroup label="Tools" icon={<Search size={14} />} defaultOpen={false}>
+        {/* 2. Leads & Tools — combined */}
+        <NavGroup label="Leads & Tools" icon={<Users size={14} />}>
+          <UnsortedGroup counts={counts} onNav={onClose} />
+          <NavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
+          <NavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
           <NavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
           <NavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
+        </NavGroup>
+
+        {/* 3. Closing — last */}
+        <NavGroup label="Closing" icon={<Zap size={14} />} defaultOpen={false}>
+          {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
         </NavGroup>
       </div>
 
