@@ -93,11 +93,10 @@ export default function CampaignDetailPage() {
 
 
         {/* Stats grid */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-3 mb-6">
           {[
             { label: 'Daily Cap', value: campaign.daily_cap },
             { label: 'Batch Cap', value: campaign.batch_cap },
-            { label: 'Cooldown', value: `${campaign.cooldown_days}d` },
             { label: 'Call After', value: `${campaign.call_after_hours}h` },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-lg p-3 text-center">
