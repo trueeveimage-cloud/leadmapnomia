@@ -128,26 +128,27 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   };
 
   const handleStatus = async (status: LeadStatus) => {
-    if (status === 'demo') {
-      try {
+    try {
+      if (status === 'demo') {
         const updated = await updateLead(lead.id, { status: 'demo', call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
         await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status: 'demo' });
         setPendingLead(updated);
-        onUpdate?.(updated);
-        refreshCounts();
         setStep('idle');
         setDemoOpen(true);
-      } catch {
-        toast.error('Failed to update status');
+        refreshCounts();
+        onUpdate?.(updated);
+        return;
       }
-      return;
+      const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
+      await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status });
+      setStep('idle');
+      toast.success(`Lead marked as ${status.replace(/_/g, ' ')}`);
+      refreshCounts();
+      onUpdate?.(updated);
+    } catch (err) {
+      console.error('Status error:', err);
+      toast.error('Failed to update status');
     }
-    const updated = await updateLead(lead.id, { status, call_outcome_last: selectedOutcome?.key, ...trackingUpdates() } as any);
-    await logActivity(lead.id, 'call', { outcome: selectedOutcome?.key, status });
-    onUpdate?.(updated);
-    refreshCounts();
-    setStep('idle');
-    toast.success(`Lead marked as ${status.replace(/_/g, ' ')}`);
   };
 
   const handleFollowupConfirm = async () => {
