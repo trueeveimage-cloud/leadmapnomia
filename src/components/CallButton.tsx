@@ -23,6 +23,7 @@ const STATUS_OPTIONS: { key: LeadStatus; label: string; color?: string }[] = [
   { key: 'not_interested', label: 'Not Interested', color: 'hsl(0 72% 55%)' },
   { key: 'unsure', label: 'Unsure', color: 'hsl(38 95% 55%)' },
   { key: 'contacted', label: 'Contacted', color: 'hsl(213 94% 58%)' },
+  { key: 'not_contacted', label: 'Not Contacted', color: 'hsl(220 10% 55%)' },
   { key: 'demo', label: 'Demo', color: 'hsl(262 83% 65%)' },
   { key: 'closed_won', label: 'Closed Won', color: 'hsl(142 69% 55%)' },
   { key: 'closed_lost', label: 'Closed Lost', color: 'hsl(0 50% 40%)' },
