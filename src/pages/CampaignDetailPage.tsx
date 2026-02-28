@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
-import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, Campaign, CampaignRun, renderTemplate } from '@/lib/campaigns';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Zap, Download, ArrowLeft, Send } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash } from 'lucide-react';
 import { toast } from 'sonner';
-import InfoTip from '@/components/InfoTip';
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,25 +17,42 @@ export default function CampaignDetailPage() {
   const [messages, setMessages] = useState<MessageLog[]>([]);
   const [eligible, setEligible] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
+      setCampaign(c);
+      setRuns(r);
+      // Fetch ALL messages for this campaign (across all runs)
+      const runIds = r.map(run => run.id);
+      if (runIds.length > 0) {
+        const { data } = await supabase
+          .from('message_logs')
+          .select('*')
+          .eq('direction', 'outbound')
+          .in('campaign_run_id', runIds)
+          .order('created_at', { ascending: false });
+        setMessages((data || []) as MessageLog[]);
+      }
+      setEligible(await countEligibleLeads(c.audience_filter as any, c.cooldown_days));
+    } catch { toast.error('Failed to load campaign'); }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
-        setCampaign(c);
-        setRuns(r);
-        if (r.length > 0) {
-          setMessages(await fetchRecentOutbound(r[0].id));
-        }
-        setEligible(await countEligibleLeads(c.audience_filter as any, c.cooldown_days));
-      } catch { toast.error('Failed to load campaign'); }
-      finally { setLoading(false); }
-    };
-    load();
-  }, [id]);
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+    toast.success('Refreshed');
+  };
 
   const handleSendBatch = async () => {
     if (!campaign || !id) return;
@@ -46,13 +64,26 @@ export default function CampaignDetailPage() {
       if (res.error) throw res.error;
       const data = res.data as any;
       toast.success(`Sent ${data.stats?.sent ?? 0} messages`);
-      // Refresh
-      const [r] = await Promise.all([fetchCampaignRuns(id)]);
-      setRuns(r);
-      if (r.length > 0) setMessages(await fetchRecentOutbound(r[0].id));
-      setEligible(await countEligibleLeads(campaign.audience_filter as any, campaign.cooldown_days));
+      await load();
     } catch (err: any) { toast.error(err.message || 'Send failed'); }
     finally { setSending(false); }
+  };
+
+  const handleRetryFailed = async () => {
+    if (!id) return;
+    setRetrying(true);
+    try {
+      const failedIds = messages.filter(m => m.status === 'failed').map(m => m.id);
+      if (failedIds.length === 0) { toast.info('No failed messages to retry'); setRetrying(false); return; }
+      const res = await supabase.functions.invoke('retry-failed-messages', {
+        body: { messageIds: failedIds, campaignId: id },
+      });
+      if (res.error) throw res.error;
+      const data = res.data as any;
+      toast.success(`Retried ${data.retried ?? 0} messages`);
+      await load();
+    } catch (err: any) { toast.error(err.message || 'Retry failed'); }
+    finally { setRetrying(false); }
   };
 
   const toggleStatus = async () => {
@@ -62,6 +93,18 @@ export default function CampaignDetailPage() {
     setCampaign(updated);
     toast.success(`Campaign ${newStatus}`);
   };
+
+  // Categorize messages
+  const delivered = messages.filter(m => m.status === 'delivered' || m.status === 'sent');
+  const failed = messages.filter(m => m.status === 'failed');
+  const undelivered = messages.filter(m => m.status === 'undelivered');
+
+  // Batch schedule calculation
+  const totalTarget = campaign?.batch_cap ?? 0;
+  const dailyCap = campaign?.daily_cap ?? 100;
+  const totalSent = messages.length;
+  const remaining = Math.max(0, totalTarget - totalSent);
+  const daysLeft = dailyCap > 0 ? Math.ceil(remaining / dailyCap) : 0;
 
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
@@ -82,29 +125,49 @@ export default function CampaignDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={toggleStatus} className="h-8 text-sm gap-1.5">
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+              <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
+            </Button>
+            <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
               {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
             </Button>
-            <Button onClick={handleSendBatch} disabled={sending} className="h-8 text-sm gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : 'Send Batch Now'}
+            <Button size="sm" onClick={handleSendBatch} disabled={sending} className="gap-1.5">
+              <Send size={13} /> {sending ? 'Sending...' : 'Send Batch'}
             </Button>
           </div>
         </div>
 
-
-        {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        {/* Schedule / Progress */}
+        <div className="grid grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Daily Cap', value: campaign.daily_cap },
-            { label: 'Batch Cap', value: campaign.batch_cap },
-            { label: 'Call After', value: `${campaign.call_after_hours}h` },
+            { label: 'Total Target', value: totalTarget, icon: Hash },
+            { label: 'Daily Cap', value: dailyCap, icon: Clock },
+            { label: 'Sent So Far', value: totalSent, icon: Send },
+            { label: 'Days Left', value: remaining > 0 ? `~${daysLeft}d` : 'Done', icon: Clock },
           ].map(s => (
             <div key={s.label} className="bg-card border border-border rounded-lg p-3 text-center">
+              <s.icon size={14} className="mx-auto mb-1 text-muted-foreground" />
               <p className="text-lg font-bold text-foreground">{s.value}</p>
               <p className="text-[10px] text-muted-foreground">{s.label}</p>
             </div>
           ))}
         </div>
+
+        {/* Progress bar */}
+        {totalTarget > 0 && (
+          <div className="mb-6">
+            <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+              <span>{totalSent} / {totalTarget} sent</span>
+              <span>{Math.round((totalSent / totalTarget) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.min(100, (totalSent / totalTarget) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Template preview */}
         <div className="bg-card border border-border rounded-lg p-4 mb-6">
@@ -112,11 +175,56 @@ export default function CampaignDetailPage() {
           <p className="text-sm text-foreground font-mono whitespace-pre-wrap">{campaign.template_text}</p>
         </div>
 
-        {/* Runs */}
+        {/* Messages by status */}
         <div className="mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Recent Runs ({runs.length})</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Messages ({messages.length})</h3>
+            {failed.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleRetryFailed} disabled={retrying} className="gap-1.5 text-xs">
+                <RotateCcw size={12} className={retrying ? 'animate-spin' : ''} />
+                {retrying ? 'Retrying...' : `Retry ${failed.length} Failed`}
+              </Button>
+            )}
+          </div>
+
+          <Tabs defaultValue="delivered">
+            <TabsList className="mb-3">
+              <TabsTrigger value="delivered" className="gap-1.5 text-xs">
+                ✅ Delivered <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">{delivered.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="failed" className="gap-1.5 text-xs">
+                ❌ Failed <Badge variant="destructive" className="ml-1 text-[10px] px-1.5">{failed.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="undelivered" className="gap-1.5 text-xs">
+                ⚠️ Undelivered <Badge variant="outline" className="ml-1 text-[10px] px-1.5">{undelivered.length}</Badge>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="delivered">
+              <MessageTable msgs={delivered} />
+            </TabsContent>
+            <TabsContent value="failed">
+              {failed.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4">No failed messages 🎉</p>
+              ) : (
+                <MessageTable msgs={failed} showError />
+              )}
+            </TabsContent>
+            <TabsContent value="undelivered">
+              {undelivered.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4">No undelivered messages</p>
+              ) : (
+                <MessageTable msgs={undelivered} showError />
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Runs */}
+        <div className="mb-10">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Runs ({runs.length})</h3>
           {runs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No runs yet. Click "Send Batch Now" to start.</p>
+            <p className="text-xs text-muted-foreground">No runs yet. Click "Send Batch" to start.</p>
           ) : (
             <div className="space-y-2">
               {runs.slice(0, 5).map(r => (
@@ -125,7 +233,7 @@ export default function CampaignDetailPage() {
                     <span className="text-foreground font-medium">{new Date(r.started_at).toLocaleString()}</span>
                     <span className="text-muted-foreground">{r.ended_at ? 'Completed' : 'In progress'}</span>
                   </div>
-                  <div className="flex gap-3 text-muted-foreground">
+                  <div className="flex gap-3 text-muted-foreground flex-wrap">
                     {Object.entries(r.stats).map(([k, v]) => (
                       <span key={k}>{k}: <span className="text-foreground">{v as number}</span></span>
                     ))}
@@ -135,26 +243,25 @@ export default function CampaignDetailPage() {
             </div>
           )}
         </div>
-
-        {/* Recent messages */}
-        <div className="mb-10">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Recent Outbound Messages</h3>
-          {messages.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No messages sent yet.</p>
-          ) : (
-            <div className="space-y-1">
-              {messages.map(m => (
-                <div key={m.id} className="flex items-center gap-3 py-2 border-b border-border/50 text-xs">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${m.status === 'delivered' ? 'bg-green' : m.status === 'failed' ? 'bg-destructive' : 'bg-amber'}`} />
-                  <span className="text-muted-foreground w-20 shrink-0">{m.to_number}</span>
-                  <span className="text-foreground flex-1 truncate">{m.body}</span>
-                  <span className="text-muted-foreground shrink-0">{m.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </AppLayout>
+  );
+}
+
+function MessageTable({ msgs, showError }: { msgs: MessageLog[]; showError?: boolean }) {
+  if (msgs.length === 0) return <p className="text-xs text-muted-foreground py-4">No messages</p>;
+  return (
+    <div className="space-y-1 max-h-80 overflow-y-auto">
+      {msgs.map(m => (
+        <div key={m.id} className="flex items-start gap-3 py-2 border-b border-border/50 text-xs">
+          <span className="text-muted-foreground w-28 shrink-0">{m.to_number}</span>
+          <span className="text-foreground flex-1 truncate">{m.body}</span>
+          {showError && m.error_message && (
+            <span className="text-destructive shrink-0 max-w-48 truncate" title={m.error_message}>{m.error_message}</span>
+          )}
+          <span className="text-muted-foreground shrink-0 text-[10px]">{new Date(m.created_at).toLocaleTimeString()}</span>
+        </div>
+      ))}
+    </div>
   );
 }
