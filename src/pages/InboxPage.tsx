@@ -1,15 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { fetchInboxMessages, MessageLog } from '@/lib/messages';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-type InboxMessage = MessageLog & { lead_name?: string; lead_category?: string; lead_status?: string };
+type InboxMessage = {
+  id: string;
+  lead_id: string;
+  body: string | null;
+  from_number: string | null;
+  created_at: string;
+  direction: string;
+  lead_name?: string;
+  lead_category?: string;
+  lead_status?: string;
+};
 
 const QUICK_ACTIONS = [
   { status: 'interested', label: 'Interested', color: 'bg-green-500/15 text-green-600 border-green-500/30' },
@@ -18,19 +27,23 @@ const QUICK_ACTIONS = [
   { status: 'callback', label: 'Callback', color: 'bg-purple-500/15 text-purple-600 border-purple-500/30' },
 ] as const;
 
+const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback'];
+
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'pending' | 'answered'>('pending');
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadDetail, setLeadDetail] = useState<Lead | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts } = useCRM();
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        // Fetch inbox messages with lead status
         const { data, error } = await supabase
           .from('message_logs')
           .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
@@ -51,31 +64,54 @@ export default function InboxPage() {
     load();
   }, []);
 
-  // Load lead detail when selected
+  // Load lead detail + conversation when selected
   useEffect(() => {
-    if (!selectedLeadId) { setLeadDetail(null); return; }
+    if (!selectedLeadId) { setLeadDetail(null); setConversation([]); return; }
     supabase.from('leads').select('*').eq('id', selectedLeadId).single()
       .then(({ data }) => setLeadDetail(data as Lead | null));
+    supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
+      .order('created_at', { ascending: true }).limit(50)
+      .then(({ data }) => setConversation(data || []));
   }, [selectedLeadId]);
 
   const handleQuickAction = async (leadId: string, status: string) => {
     try {
       await updateLead(leadId, { status } as Partial<Lead>);
       toast.success(`Lead marked as ${status.replace('_', ' ')}`);
-      // Update local state
       setMessages(prev => prev.map(m => m.lead_id === leadId ? { ...m, lead_status: status } : m));
       refreshCounts();
     } catch { toast.error('Failed to update'); }
   };
 
-  // Determine if a message is "answered" (lead has been triaged with one of the quick actions)
-  const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback'];
+  const handleSendReply = async () => {
+    if (!selectedLeadId || !replyText.trim()) return;
+    setSending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ leadId: selectedLeadId, body: replyText.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to send');
+      toast.success('SMS sent');
+      setReplyText('');
+      // Refresh conversation
+      const { data } = await supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
+        .order('created_at', { ascending: true }).limit(50);
+      setConversation(data || []);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSending(false); }
+  };
+
   const pendingMessages = messages.filter(m => !answeredStatuses.includes(m.lead_status || ''));
   const answeredMessages = messages.filter(m => answeredStatuses.includes(m.lead_status || ''));
-
   const displayed = tab === 'pending' ? pendingMessages : answeredMessages;
 
-  // Counters
   const statusCounts = messages.reduce((acc, m) => {
     const s = m.lead_status || 'unknown';
     acc[s] = (acc[s] || 0) + 1;
@@ -86,7 +122,7 @@ export default function InboxPage() {
     <AppLayout>
       <div className="flex h-full">
         {/* Main list */}
-        <div className={cn("flex-1 min-w-0 flex flex-col", selectedLeadId && "max-w-[60%]")}>
+        <div className={cn("flex-1 min-w-0 flex flex-col", selectedLeadId && "max-w-[55%]")}>
           <div className="px-6 pt-8 pb-4">
             <div className="flex items-center gap-2 mb-4">
               <Inbox size={20} className="text-primary" />
@@ -96,22 +132,17 @@ export default function InboxPage() {
 
             {/* Status counters */}
             <div className="flex flex-wrap gap-2 mb-4">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                {statusCounts.interested || 0} Interested
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-destructive/10 text-destructive text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                {statusCounts.not_interested || 0} Not Interested
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                {statusCounts.unsure || 0} Unsure
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-600 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                {statusCounts.callback || 0} Callback
-              </div>
+              {[
+                { key: 'interested', label: 'Interested', cls: 'bg-green-500/10 text-green-600', dot: 'bg-green-500' },
+                { key: 'not_interested', label: 'Not Interested', cls: 'bg-destructive/10 text-destructive', dot: 'bg-destructive' },
+                { key: 'unsure', label: 'Unsure', cls: 'bg-amber-500/10 text-amber-600', dot: 'bg-amber-500' },
+                { key: 'callback', label: 'Callback', cls: 'bg-purple-500/10 text-purple-600', dot: 'bg-purple-500' },
+              ].map(s => (
+                <div key={s.key} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${s.cls} text-xs font-medium`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                  {statusCounts[s.key] || 0} {s.label}
+                </div>
+              ))}
             </div>
 
             {/* Tabs */}
@@ -203,8 +234,8 @@ export default function InboxPage() {
 
         {/* Lead detail side panel */}
         {selectedLeadId && leadDetail && (
-          <div className="w-[40%] border-l border-border bg-card overflow-y-auto">
-            <div className="p-6">
+          <div className="w-[45%] border-l border-border bg-card flex flex-col">
+            <div className="flex-1 overflow-y-auto p-6">
               <h2 className="text-lg font-bold text-foreground mb-1">{leadDetail.name}</h2>
               {leadDetail.category && <p className="text-xs text-muted-foreground mb-4">{leadDetail.category}</p>}
 
@@ -243,7 +274,6 @@ export default function InboxPage() {
                 )}
               </div>
 
-              {/* Rating */}
               {leadDetail.rating && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
                   <span className="text-amber-500">★ {leadDetail.rating}</span>
@@ -251,13 +281,11 @@ export default function InboxPage() {
                 </div>
               )}
 
-              {/* Status */}
               <div className="mb-4">
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Status</p>
                 <span className="text-sm font-medium text-foreground capitalize">{leadDetail.status.replace('_', ' ')}</span>
               </div>
 
-              {/* Notes */}
               {leadDetail.notes && (
                 <div className="mb-4">
                   <p className="text-xs font-medium text-muted-foreground mb-1.5">Notes</p>
@@ -265,11 +293,55 @@ export default function InboxPage() {
                 </div>
               )}
 
-              {/* Contact info */}
+              {/* Conversation thread */}
+              {conversation.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Conversation</p>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {conversation.map((msg: any) => (
+                      <div key={msg.id} className={cn(
+                        "rounded-lg px-3 py-2 text-sm max-w-[85%]",
+                        msg.direction === 'outbound'
+                          ? "bg-primary/15 text-primary ml-auto"
+                          : "bg-muted text-foreground"
+                      )}>
+                        <p>{msg.body}</p>
+                        <p className="text-[9px] text-muted-foreground mt-1">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="text-xs text-muted-foreground space-y-1">
                 {leadDetail.call_attempts > 0 && <p>Call attempts: {leadDetail.call_attempts}</p>}
                 {leadDetail.last_contacted_at && <p>Last contacted: {new Date(leadDetail.last_contacted_at).toLocaleString()}</p>}
                 {leadDetail.last_inbound_at && <p>Last reply: {new Date(leadDetail.last_inbound_at).toLocaleString()}</p>}
+              </div>
+            </div>
+
+            {/* Reply input */}
+            <div className="border-t border-border p-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
+                  placeholder="Type a reply..."
+                  className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  disabled={sending}
+                />
+                <button
+                  onClick={handleSendReply}
+                  disabled={sending || !replyText.trim()}
+                  className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Send size={14} />
+                  {sending ? 'Sending…' : 'Send'}
+                </button>
               </div>
             </div>
           </div>

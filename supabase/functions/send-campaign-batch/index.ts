@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
         stats.delivered++;
       }
 
-      // Update lead
+      // Update lead — move to 'contacted' status
       await dbClient.from('leads').update({
         last_outbound_at: new Date().toISOString(),
         outreach_stage: 'sms_sent',
@@ -241,6 +241,7 @@ Deno.serve(async (req) => {
         last_message_status: useTwilio ? 'queued' : 'delivered',
         last_contact_method: 'sms',
         last_contacted_at: new Date().toISOString(),
+        status: 'contacted',
       }).eq('id', lead.id);
     }
 
