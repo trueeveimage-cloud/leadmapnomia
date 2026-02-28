@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { createCampaign, countEligibleLeads, AudienceFilter, renderTemplate } from '@/lib/campaigns';
+import { createCampaign, countEligibleLeadsDetailed, AudienceFilter, EligibilityBreakdown, renderTemplate } from '@/lib/campaigns';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,7 +35,7 @@ export default function CampaignNewPage() {
   const [cooldownDays, setCooldownDays] = useState(14);
   const [callAfterHours, setCallAfterHours] = useState(48);
   const [estimating, setEstimating] = useState(false);
-  const [estimate, setEstimate] = useState<number | null>(null);
+  const [estimate, setEstimate] = useState<EligibilityBreakdown | null>(null);
   const [saving, setSaving] = useState(false);
 
   const toggleSection = (s: string) => {
@@ -48,8 +48,8 @@ export default function CampaignNewPage() {
   const handleEstimate = async () => {
     setEstimating(true);
     try {
-      const count = await countEligibleLeads(filter, cooldownDays);
-      setEstimate(count);
+      const breakdown = await countEligibleLeadsDetailed(filter, cooldownDays);
+      setEstimate(breakdown);
     } catch { toast.error('Failed to estimate'); }
     finally { setEstimating(false); }
   };
@@ -175,7 +175,22 @@ export default function CampaignNewPage() {
               {estimating ? 'Estimating...' : 'Estimate eligible leads'}
             </Button>
             {estimate !== null && (
-              <p className="text-sm text-primary font-medium">{estimate} leads eligible</p>
+              <div className="space-y-1.5 mt-2">
+                <p className="text-sm text-primary font-semibold">{estimate.eligible} leads eligible for SMS</p>
+                <div className="text-xs text-muted-foreground space-y-0.5 bg-muted/50 border border-border rounded-md p-3">
+                  <p className="font-medium text-foreground mb-1">Breakdown of {estimate.total} total leads:</p>
+                  <p className="text-primary">✓ {estimate.eligible} eligible (valid mobile, passes all filters)</p>
+                  {estimate.noPhone > 0 && <p>✗ {estimate.noPhone} — no phone number</p>}
+                  {estimate.landline > 0 && <p>✗ {estimate.landline} — landline / invalid mobile prefix</p>}
+                  {estimate.hasWebsite > 0 && <p>✗ {estimate.hasWebsite} — has website (filtered out)</p>}
+                  {estimate.wrongSection > 0 && <p>✗ {estimate.wrongSection} — wrong section</p>}
+                  {estimate.optedOut > 0 && <p>✗ {estimate.optedOut} — opted out</p>}
+                  {estimate.replied > 0 && <p>✗ {estimate.replied} — already replied</p>}
+                  {estimate.cooldown > 0 && <p>✗ {estimate.cooldown} — in cooldown period</p>}
+                  {estimate.lowRating > 0 && <p>✗ {estimate.lowRating} — below min rating</p>}
+                  {estimate.lowReviews > 0 && <p>✗ {estimate.lowReviews} — below min reviews</p>}
+                </div>
+              </div>
             )}
           </div>
         )}
