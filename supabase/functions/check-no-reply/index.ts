@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
       const { error: upErr } = await supabase.from('leads').update({
         needs_call: true,
         outreach_stage: 'no_reply_call',
+        status: 'not_contacted',
       }).eq('id', lead.id);
       if (!upErr) updated++;
     }
