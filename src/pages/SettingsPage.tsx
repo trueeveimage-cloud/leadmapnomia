@@ -180,13 +180,13 @@ export default function SettingsPage() {
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
               <Megaphone size={15} /> SMS Provider
-              <InfoTip text="Connect Twilio to send real SMS. Without it, the app uses a mock provider that simulates sending." />
+              <InfoTip text="Twilio is connected and campaigns will send real SMS messages." />
             </h2>
-            <div className="flex items-center gap-2 text-xs text-amber mt-2 bg-amber/10 border border-amber/30 rounded-md p-3">
-              <AlertTriangle size={14} />
+            <div className="flex items-center gap-2 text-xs text-green mt-2 bg-green/10 border border-green/30 rounded-md p-3">
+              <Check size={14} />
               <div>
-                <p className="font-medium">Twilio not connected</p>
-                <p className="text-muted-foreground mt-0.5">Campaigns use mock provider. To connect Twilio, add these secrets in your Lovable Cloud settings: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER</p>
+                <p className="font-medium">Twilio connected</p>
+                <p className="text-muted-foreground mt-0.5">Campaigns send real SMS via Twilio (+46731727192)</p>
               </div>
             </div>
           </div>
