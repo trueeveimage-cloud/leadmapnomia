@@ -35,7 +35,7 @@ export default function CampaignNewPage() {
   const [cooldownDays, setCooldownDays] = useState(14);
   const [callAfterHours, setCallAfterHours] = useState(48);
   const [estimating, setEstimating] = useState(false);
-  const [estimate, setEstimate] = useState<number | null>(null);
+  const [estimate, setEstimate] = useState<EligibilityBreakdown | null>(null);
   const [saving, setSaving] = useState(false);
 
   const toggleSection = (s: string) => {
