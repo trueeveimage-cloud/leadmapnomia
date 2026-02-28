@@ -175,7 +175,22 @@ export default function CampaignNewPage() {
               {estimating ? 'Estimating...' : 'Estimate eligible leads'}
             </Button>
             {estimate !== null && (
-              <p className="text-sm text-primary font-medium">{estimate} leads eligible</p>
+              <div className="space-y-1.5 mt-2">
+                <p className="text-sm text-primary font-semibold">{estimate.eligible} leads eligible for SMS</p>
+                <div className="text-xs text-muted-foreground space-y-0.5 bg-muted/50 border border-border rounded-md p-3">
+                  <p className="font-medium text-foreground mb-1">Breakdown of {estimate.total} total leads:</p>
+                  <p className="text-primary">✓ {estimate.eligible} eligible (valid mobile, passes all filters)</p>
+                  {estimate.noPhone > 0 && <p>✗ {estimate.noPhone} — no phone number</p>}
+                  {estimate.landline > 0 && <p>✗ {estimate.landline} — landline / invalid mobile prefix</p>}
+                  {estimate.hasWebsite > 0 && <p>✗ {estimate.hasWebsite} — has website (filtered out)</p>}
+                  {estimate.wrongSection > 0 && <p>✗ {estimate.wrongSection} — wrong section</p>}
+                  {estimate.optedOut > 0 && <p>✗ {estimate.optedOut} — opted out</p>}
+                  {estimate.replied > 0 && <p>✗ {estimate.replied} — already replied</p>}
+                  {estimate.cooldown > 0 && <p>✗ {estimate.cooldown} — in cooldown period</p>}
+                  {estimate.lowRating > 0 && <p>✗ {estimate.lowRating} — below min rating</p>}
+                  {estimate.lowReviews > 0 && <p>✗ {estimate.lowReviews} — below min reviews</p>}
+                </div>
+              </div>
             )}
           </div>
         )}
