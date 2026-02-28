@@ -55,10 +55,9 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   const handleCall = () => {
-    if (isMobile) {
-      window.location.href = `tel:${lead.phone}`;
-    }
-    // Track the call attempt immediately
+    // Always open phone app immediately
+    window.location.href = `tel:${lead.phone}`;
+    // Then show outcome popup
     setStep('outcome');
   };
 
