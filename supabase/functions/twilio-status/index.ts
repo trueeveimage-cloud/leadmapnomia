@@ -20,14 +20,17 @@ Deno.serve(async (req) => {
     let messageSid = '', messageStatus = '';
 
     const contentType = req.headers.get('content-type') || '';
-    if (contentType.includes('application/x-www-form-urlencoded')) {
-      const formData = await req.formData();
-      messageSid = formData.get('MessageSid')?.toString() || '';
-      messageStatus = formData.get('MessageStatus')?.toString() || '';
-    } else {
-      const json = await req.json();
+    const rawBody = await req.text();
+
+    if (contentType.includes('json') && rawBody.startsWith('{')) {
+      const json = JSON.parse(rawBody);
       messageSid = json.MessageSid || json.messageSid || '';
       messageStatus = json.MessageStatus || json.messageStatus || '';
+    } else {
+      // Twilio always sends application/x-www-form-urlencoded
+      const params = new URLSearchParams(rawBody);
+      messageSid = params.get('MessageSid') || '';
+      messageStatus = params.get('MessageStatus') || '';
     }
 
     if (!messageSid || !messageStatus) {
