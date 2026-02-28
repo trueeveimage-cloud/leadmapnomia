@@ -165,6 +165,7 @@ export default function CampaignDetailPage() {
             { label: 'Total Target', value: totalTarget, icon: Hash },
             { label: 'Daily Cap', value: dailyCap, icon: Clock },
             { label: 'Sent So Far', value: totalSent, icon: Send },
+            { label: 'Next Batch', value: remaining > 0 ? Math.min(dailyCap, remaining) : 0, icon: Send },
             { label: 'Days Left', value: remaining > 0 ? `~${daysLeft}d` : 'Done', icon: Clock },
             { label: 'Next Auto-Send', value: campaign.status === 'running' && remaining > 0 ? nextBatch : '—', icon: Timer },
           ].map(s => (
