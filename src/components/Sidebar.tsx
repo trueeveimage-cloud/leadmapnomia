@@ -52,15 +52,21 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
   );
 }
 
-function NavGroup({ label, children, defaultOpen = true, icon }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon: React.ReactNode }) {
+function NavGroup({ label, children, defaultOpen = true, icon, color }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon: React.ReactNode; color?: string }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
     <div>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-sidebar-accent/60 border border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20"
+        className={cn(
+          "flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border bg-sidebar-accent/20",
+          color
+            ? `hover:bg-opacity-20 border-opacity-30 hover:border-opacity-50`
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border-sidebar-border/40 hover:border-sidebar-border"
+        )}
+        style={color ? { color, borderColor: `${color}30`, background: `${color}08` } : undefined}
       >
-        <span className="text-muted-foreground/70">{icon}</span>
+        <span style={color ? { color } : undefined} className={color ? '' : 'text-muted-foreground/70'}>{icon}</span>
         <span className="flex-1 text-left">{label}</span>
         <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
           <ChevronDown size={13} />
