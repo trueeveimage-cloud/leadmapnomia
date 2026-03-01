@@ -213,7 +213,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       {/* Nav */}
       <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {/* Outreach */}
-        <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
+        <NavGroup label="Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)">
           <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
@@ -221,7 +221,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </NavGroup>
 
         {/* Leads & Tools */}
-        <NavGroup label="Leads & Tools" icon={<Search size={14} />}>
+        <NavGroup label="Leads & Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)">
           <SidebarNavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
@@ -230,7 +230,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </NavGroup>
 
         {/* Closing */}
-        <NavGroup label="Closing" icon={<Target size={14} />} defaultOpen={false}>
+        <NavGroup label="Closing" icon={<Target size={14} />} defaultOpen={false} color="hsl(142, 69%, 45%)">
           <SidebarNavLink item={{ label: 'Interested', path: '/status/interested', icon: <ThumbsUp size={14} />, badge: counts.interested, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Not Interested', path: '/status/not-interested', icon: <ThumbsDown size={14} />, badge: counts.not_interested, color: 'hsl(0 72% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Unsure', path: '/status/unsure', icon: <HelpCircle size={14} />, badge: counts.unsure, color: 'hsl(38 95% 55%)' }} onNav={onClose} />

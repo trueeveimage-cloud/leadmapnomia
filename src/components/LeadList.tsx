@@ -66,13 +66,16 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       if (excludeSection) {
         data = data.filter(l => l.section !== excludeSection);
       }
+      if (optOut) {
+        data = data.filter(l => l.outreach_opt_out);
+      }
       setLeads(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [section, allSections, status, excludeSection]);
+  }, [section, allSections, status, excludeSection, optOut]);
 
   useEffect(() => { load(); }, [load]);
 
