@@ -176,10 +176,11 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             "flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border",
             pathname === '/dashboard'
               ? "bg-primary/10 text-primary border-primary/20"
-              : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20"
+              : "hover:bg-opacity-20 border-opacity-30 hover:border-opacity-50"
           )}
+          style={pathname !== '/dashboard' ? { color: 'hsl(192, 91%, 52%)', borderColor: 'hsl(192, 91%, 52%, 0.3)', background: 'hsl(192, 91%, 52%, 0.08)' } : undefined}
         >
-          <BarChart2 size={14} className="text-muted-foreground/70" />
+          <BarChart2 size={14} style={pathname !== '/dashboard' ? { color: 'hsl(192, 91%, 52%)' } : undefined} className={pathname === '/dashboard' ? 'text-primary' : ''} />
           <span>Statistics</span>
         </Link>
       </div>
