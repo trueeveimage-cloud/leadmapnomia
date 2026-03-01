@@ -38,6 +38,8 @@ interface LeadListProps {
   /** When true, fetch ALL sections (for the Unsorted overview page) */
   allSections?: boolean;
   status?: LeadStatus;
+  /** When true, show leads with outreach_opt_out = true */
+  optOut?: boolean;
   showTriage?: boolean;
   title: string;
   emptyMessage?: string;
@@ -45,7 +47,7 @@ interface LeadListProps {
   excludeSection?: LeadSection;
 }
 
-export default function LeadList({ section, allSections, status, showTriage, title, emptyMessage, excludeSection }: LeadListProps) {
+export default function LeadList({ section, allSections, status, optOut, showTriage, title, emptyMessage, excludeSection }: LeadListProps) {
   const { refreshCounts } = useCRM();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,13 +66,16 @@ export default function LeadList({ section, allSections, status, showTriage, tit
       if (excludeSection) {
         data = data.filter(l => l.section !== excludeSection);
       }
+      if (optOut) {
+        data = data.filter(l => l.outreach_opt_out);
+      }
       setLeads(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
     }
-  }, [section, allSections, status, excludeSection]);
+  }, [section, allSections, status, excludeSection, optOut]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -80,6 +80,7 @@ const App = () => (
                     <Route path="/gmail" element={<Navigate to="/email" replace />} />
                     <Route path="/both" element={<SectionPage section="both" title="Has Both" emptyMessage="No leads with both contact methods" />} />
                     <Route path="/missing" element={<SectionPage section="missing" title="Missing Contact" emptyMessage="No missing contact leads" />} />
+                    <Route path="/status/has-website" element={<SectionPage optOut title="Has Website" emptyMessage="No leads with websites" />} />
                     <Route path="/callbacks" element={<CallbacksPage />} />
                     <Route path="/status/not-contacted" element={<SectionPage status="not_contacted" title="Not Contacted" excludeSection="missing" />} />
                     <Route path="/status/contacted" element={<SectionPage status="contacted" title="Contacted" />} />
