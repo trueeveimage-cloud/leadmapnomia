@@ -108,7 +108,7 @@ export default function DashboardPage() {
 
   // Funnel data
   const funnelData = [
-    { name: "Total Leads", value: counts.total, fill: COLORS.primary },
+    { name: "Reachable", value: counts.total - counts.hasWebsite - counts.missing, fill: COLORS.primary },
     { name: "Contacted", value: counts.contacted + counts.answered + counts.interested + counts.demo + counts.closed_won, fill: COLORS.cyan },
     { name: "Answered", value: counts.answered + counts.interested + counts.demo + counts.closed_won, fill: COLORS.green },
     { name: "Interested", value: counts.interested + counts.demo + counts.closed_won, fill: COLORS.amber },
