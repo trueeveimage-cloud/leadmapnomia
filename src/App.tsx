@@ -74,7 +74,7 @@ const App = () => (
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/add" element={<AddPage />} />
                     <Route path="/bulk" element={<BulkPage />} />
-                    <Route path="/unsorted" element={<SectionPage allSections title="Unsorted Inbox" showTriage emptyMessage="No unsorted leads — add some above!" />} />
+                    <Route path="/unsorted" element={<SectionPage allSections title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />
                     <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
                     <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
                     <Route path="/gmail" element={<Navigate to="/email" replace />} />
