@@ -8,6 +8,7 @@ interface Counts {
   email: number;
   both: number;
   missing: number;
+  hasWebsite: number;
   callbacks: number;
   callbacksDue: number;
   not_contacted: number;
