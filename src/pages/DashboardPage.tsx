@@ -146,13 +146,13 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+          <h1 className="text-xl font-bold text-foreground">Statistics</h1>
           <p className="text-sm text-muted-foreground">Overview of your outreach pipeline</p>
         </div>
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Total Leads" value={counts.total} icon={<Users size={18} />} color={COLORS.primary} />
+          <StatCard label="Reachable Leads" value={counts.total - counts.hasWebsite - counts.missing} icon={<Users size={18} />} color={COLORS.primary} sub={`${counts.total.toLocaleString()} total`} />
           <StatCard label="SMS Sent" value={msgStats.sent} icon={<MessageSquare size={18} />} color={COLORS.cyan} sub={`${replyRate}% reply rate`} />
           <StatCard label="Calls Made" value={callStats.reduce((s, c) => s + c.count, 0)} icon={<Phone size={18} />} color={COLORS.amber} />
           <StatCard label="Conversion" value={`${conversionRate}%`} icon={<Target size={18} />} color={COLORS.green} sub={`${counts.interested + counts.demo + counts.closed_won} interested+`} />
