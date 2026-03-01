@@ -4,9 +4,10 @@ import { useCRM } from '@/context/CRMContext';
 import { useAuth } from '@/context/AuthContext';
 import {
   Plus, Layers, Phone, Mail, Zap,
-  Settings, BarChart2, Inbox, Users, ChevronDown, ChevronRight, Search, Calculator,
+  Settings, BarChart2, Users, ChevronDown, Search, Calculator,
   Megaphone, MessageCircle, PhoneCall, LogOut, MapPin,
-  ArrowRight, BookOpen, AlertCircle, X, LayoutDashboard
+  ArrowRight, BookOpen, AlertCircle, X, Globe,
+  ThumbsUp, ThumbsDown, HelpCircle, Target, Trophy, Skull, Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +19,7 @@ interface NavItem {
   color?: string;
 }
 
-function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: boolean; onNav?: () => void }) {
+function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) {
   const { pathname } = useLocation();
   const active = pathname === item.path;
   return (
@@ -26,8 +27,7 @@ function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: bool
       to={item.path}
       onClick={onNav}
       className={cn(
-        'flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all duration-200 group',
-        indent ? 'px-2 ml-4' : 'px-3',
+        'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200 group',
         active
           ? 'bg-primary/10 text-primary font-medium shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15)]'
           : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5'
@@ -42,7 +42,7 @@ function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: bool
       <span className="flex-1 truncate">{item.label}</span>
       {item.badge !== undefined && item.badge > 0 && (
         <span className={cn(
-          'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center transition-all duration-200',
+          'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
           active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
         )}>
           {item.badge > 999 ? `${(item.badge / 1000).toFixed(1)}k` : item.badge}
@@ -52,19 +52,18 @@ function NavLink({ item, indent = false, onNav }: { item: NavItem; indent?: bool
   );
 }
 
-function NavGroup({ label, children, defaultOpen = true, icon, emoji }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon?: React.ReactNode; emoji?: string }) {
+function NavGroup({ label, children, defaultOpen = true, icon }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon: React.ReactNode }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
-    <div className="animate-fade-in">
+    <div>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-xl hover:bg-sidebar-accent/60 border border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20 shadow-sm"
+        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-sidebar-accent/60 border border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20"
       >
-        {emoji && <span className="text-sm">{emoji}</span>}
-        {icon && !emoji && <span className="text-muted-foreground/60">{icon}</span>}
+        <span className="text-muted-foreground/70">{icon}</span>
         <span className="flex-1 text-left">{label}</span>
         <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
-          <ChevronDown size={14} />
+          <ChevronDown size={13} />
         </span>
       </button>
       <div className={cn(
@@ -77,64 +76,64 @@ function NavGroup({ label, children, defaultOpen = true, icon, emoji }: { label:
   );
 }
 
-function CustomersGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
-  const [subOpen, setSubOpen] = React.useState(false);
+function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
+  const [open, setOpen] = React.useState(false);
   const { pathname } = useLocation();
 
   const subsections: NavItem[] = [
-    { label: '📱 Has Phone', path: '/phone', icon: <Phone size={13} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
-    { label: '📧 Has Email', path: '/email', icon: <Mail size={13} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
-    { label: '⚡ Both', path: '/both', icon: <Zap size={13} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
-    { label: '⚠️ Missing', path: '/missing', icon: <AlertCircle size={13} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
+    { label: 'Has Phone', path: '/phone', icon: <Phone size={14} />, badge: counts.phone, color: 'hsl(142 69% 45%)' },
+    { label: 'Has Email', path: '/email', icon: <Mail size={14} />, badge: counts.email, color: 'hsl(213 94% 58%)' },
+    { label: 'Both', path: '/both', icon: <Zap size={14} />, badge: counts.both, color: 'hsl(262 83% 65%)' },
+    { label: 'Missing Info', path: '/missing', icon: <AlertCircle size={14} />, badge: counts.missing, color: 'hsl(38 95% 55%)' },
+    { label: 'Has Website', path: '/status/has-website', icon: <Globe size={14} />, badge: counts.hasWebsite, color: 'hsl(192 91% 52%)' },
   ];
 
+  const allPaths = ['/unsorted', ...subsections.map(s => s.path)];
   const isActive = pathname === '/unsorted';
   const isSubActive = subsections.some(s => pathname === s.path);
+  const shouldOpen = open || isSubActive;
 
   return (
-    <div className="animate-fade-in">
-      {/* Section header styled as button */}
+    <div>
       <div className="flex items-center gap-0.5 mb-0.5">
         <Link
           to="/unsorted"
           onClick={onNav}
           className={cn(
-            'flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 rounded-xl hover:bg-sidebar-accent/60 border border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20 shadow-sm flex-1 min-w-0',
-            isActive && 'bg-primary/10 text-primary border-primary/20'
+            'flex items-center gap-2 flex-1 min-w-0 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20 hover:bg-sidebar-accent/60',
+            isActive
+              ? 'bg-primary/10 text-primary border-primary/20'
+              : 'text-muted-foreground hover:text-foreground'
           )}
         >
-          <span className="text-sm">👥</span>
-          <span className="flex-1 text-left">Customers</span>
-          {counts.unsorted > 0 && (
-            <span className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
-              isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-            )}>
-              {counts.unsorted > 999 ? `${(counts.unsorted / 1000).toFixed(1)}k` : counts.unsorted}
-            </span>
-          )}
+          <span className="text-muted-foreground/70"><Users size={14} /></span>
+          <span className="flex-1 text-left">Leads</span>
+          <span className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded-full font-semibold',
+            isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+          )}>
+            {counts.total > 999 ? `${(counts.total / 1000).toFixed(1)}k` : counts.total}
+          </span>
         </Link>
         <button
-          onClick={() => setSubOpen(o => !o)}
+          onClick={() => setOpen(o => !o)}
           className={cn(
             'p-1.5 rounded-lg transition-all duration-200 shrink-0',
-            (subOpen || isSubActive) ? 'text-primary bg-primary/5' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
+            shouldOpen ? 'text-primary bg-primary/5' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
           )}
-          title="Toggle subsections"
         >
-          <span className={cn("block transition-transform duration-200", (subOpen || isSubActive) ? "rotate-0" : "-rotate-90")}>
+          <span className={cn("block transition-transform duration-200", shouldOpen ? "rotate-0" : "-rotate-90")}>
             <ChevronDown size={12} />
           </span>
         </button>
       </div>
-
       <div className={cn(
         "overflow-hidden transition-all duration-300 ease-out",
-        (subOpen || isSubActive) ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0"
+        shouldOpen ? "max-h-[250px] opacity-100" : "max-h-0 opacity-0"
       )}>
         <div className="mt-0.5 space-y-0.5 ml-3 border-l-2 border-primary/10 pl-2">
           {subsections.map(item => (
-            <NavLink key={item.path} item={item} onNav={onNav} />
+            <SidebarNavLink key={item.path} item={item} onNav={onNav} />
           ))}
         </div>
       </div>
@@ -147,18 +146,9 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { signOut } = useAuth();
   const { pathname } = useLocation();
 
-  const closingPages: NavItem[] = [
-    { label: '✅ Interested', path: '/status/interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 45%)' }} />, badge: counts.interested },
-    { label: '❌ Not Interested', path: '/status/not-interested', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 72% 55%)' }} />, badge: counts.not_interested },
-    { label: '🤔 Unsure', path: '/status/unsure', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.unsure },
-    { label: '🎯 Demo', path: '/status/demo', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(262 83% 65%)' }} />, badge: counts.demo },
-    { label: '🏆 Closed Won', path: '/status/closed-won', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(142 69% 55%)' }} />, badge: counts.closed_won },
-    { label: '💀 Closed Lost', path: '/status/closed-lost', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(0 50% 40%)' }} />, badge: counts.closed_lost },
-  ];
-
   return (
     <aside className="w-64 shrink-0 h-screen flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden">
-      {/* Logo + close on mobile */}
+      {/* Logo */}
       <div className="px-4 py-3.5 border-b border-sidebar-border flex items-center justify-between">
         <Link to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 transition-transform duration-200 group-hover:scale-105">
@@ -170,10 +160,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           </div>
         </Link>
         {onClose && (
-          <button
-            onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-          >
+          <button onClick={onClose} className="md:hidden p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors">
             <X size={18} />
           </button>
         )}
@@ -193,18 +180,17 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <span className="ml-auto text-[10px] text-primary/50 font-mono">N</span>
         </Link>
 
-        {/* Statistics button-style */}
         <Link
           to="/dashboard"
           onClick={onClose}
           className={cn(
-            "flex items-center gap-2 w-full px-3 py-2.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-xl border shadow-sm",
+            "flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border",
             pathname === '/dashboard'
               ? "bg-primary/10 text-primary border-primary/20"
-              : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border-sidebar-border/50 hover:border-sidebar-border bg-sidebar-accent/20"
+              : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20"
           )}
         >
-          <span className="text-sm">📊</span>
+          <BarChart2 size={14} className="text-muted-foreground/70" />
           <span>Statistics</span>
         </Link>
       </div>
@@ -212,43 +198,49 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       {/* Lead count pill */}
       <div className="px-4 pb-2">
         <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-secondary/40 text-xs text-muted-foreground">
-          <Users size={11} />
-          <span className="font-medium">{counts.total.toLocaleString()} total leads</span>
+          <Phone size={11} />
+          <span className="font-medium">{counts.phone.toLocaleString()} reachable</span>
+          <span className="text-muted-foreground/50">/ {counts.total.toLocaleString()} total</span>
         </div>
       </div>
 
-      {/* Scrollable nav */}
+      {/* Nav */}
       <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        {/* Customers — own segment */}
-        <CustomersGroup counts={counts} onNav={onClose} />
-
-        {/* 1. Outreach — campaigns, inbox, call list, callbacks */}
-        <NavGroup label="Outreach" emoji="📣">
-          <NavLink item={{ label: '📢 Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
-          <NavLink item={{ label: '💬 Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
-          <NavLink item={{ label: '📞 Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
-          <NavLink item={{ label: '🔔 Callbacks', path: '/callbacks', icon: <span className="w-2 h-2 rounded-full shrink-0" style={{ background: 'hsl(38 95% 55%)' }} />, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
+        {/* Outreach */}
+        <NavGroup label="Outreach" icon={<Megaphone size={14} />}>
+          <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)', badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 
-        {/* 2. Leads & Tools */}
-        <NavGroup label="Leads & Tools" emoji="🛠️">
-          <NavLink item={{ label: '➕ Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
-          <NavLink item={{ label: '📦 Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
-          <NavLink item={{ label: '🔍 Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
-          <NavLink item={{ label: '🗺️ Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
-          <NavLink item={{ label: '🧮 Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
+        {/* Leads & Tools */}
+        <NavGroup label="Leads & Tools" icon={<Search size={14} />}>
+          <SidebarNavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
         </NavGroup>
 
-        {/* 3. Closing — last */}
-        <NavGroup label="Closing" emoji="🤝" defaultOpen={false}>
-          {closingPages.map(item => <NavLink key={item.path} item={item} onNav={onClose} />)}
+        {/* Closing */}
+        <NavGroup label="Closing" icon={<Target size={14} />} defaultOpen={false}>
+          <SidebarNavLink item={{ label: 'Interested', path: '/status/interested', icon: <ThumbsUp size={14} />, badge: counts.interested, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Not Interested', path: '/status/not-interested', icon: <ThumbsDown size={14} />, badge: counts.not_interested, color: 'hsl(0 72% 55%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Unsure', path: '/status/unsure', icon: <HelpCircle size={14} />, badge: counts.unsure, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Demo', path: '/status/demo', icon: <Target size={14} />, badge: counts.demo, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Closed Won', path: '/status/closed-won', icon: <Trophy size={14} />, badge: counts.closed_won, color: 'hsl(142 69% 55%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Closed Lost', path: '/status/closed-lost', icon: <Skull size={14} />, badge: counts.closed_lost, color: 'hsl(0 50% 40%)' }} onNav={onClose} />
         </NavGroup>
+
+        {/* Leads (below Closing) */}
+        <LeadsGroup counts={counts} onNav={onClose} />
       </div>
 
-      {/* Bottom section */}
+      {/* Bottom */}
       <div className="px-3 py-2.5 border-t border-sidebar-border space-y-0.5 bg-sidebar">
-        <NavLink item={{ label: '📖 Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
-        <NavLink item={{ label: '⚙️ Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
+        <SidebarNavLink item={{ label: 'Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+        <SidebarNavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
         <button
           onClick={signOut}
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive w-full group"
