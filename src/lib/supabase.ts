@@ -100,31 +100,32 @@ export async function fetchLeads(filter?: { section?: LeadSection; status?: Lead
 }
 
 export async function fetchLeadCounts() {
-  // Fetch all rows via pagination to avoid 1000-row cap
   const allData: any[] = [];
   const PAGE_SIZE = 1000;
   let from = 0;
   while (true) {
-    const { data, error } = await supabase.from('leads').select('section, status, next_action_at').range(from, from + PAGE_SIZE - 1);
+    const { data, error } = await supabase.from('leads').select('section, status, next_action_at, outreach_opt_out').range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData.push(...data);
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
-  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at'>[];
+  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at' | 'outreach_opt_out'>[];
   const now = new Date();
+  const reachable = leads.filter(l => !l.outreach_opt_out);
 
   return {
     total: leads.length,
-    unsorted: leads.filter(l => l.section === 'unsorted').length,
-    phone: leads.filter(l => l.section === 'phone').length,
-    email: leads.filter(l => l.section === 'email').length,
-    both: leads.filter(l => l.section === 'both').length,
+    unsorted: leads.length,
+    phone: reachable.filter(l => l.section === 'phone').length,
+    email: reachable.filter(l => l.section === 'email').length,
+    both: reachable.filter(l => l.section === 'both').length,
     missing: leads.filter(l => l.section === 'missing').length,
+    hasWebsite: leads.filter(l => l.outreach_opt_out).length,
     callbacks: leads.filter(l => l.status === 'callback').length,
     callbacksDue: leads.filter(l => l.status === 'callback' && l.next_action_at && new Date(l.next_action_at) <= now).length,
-    not_contacted: leads.filter(l => l.status === 'not_contacted' && l.section !== 'missing').length,
+    not_contacted: reachable.filter(l => l.status === 'not_contacted' && l.section !== 'missing').length,
     contacted: leads.filter(l => l.status === 'contacted').length,
     answered: leads.filter(l => l.status === 'answered').length,
     interested: leads.filter(l => l.status === 'interested').length,
