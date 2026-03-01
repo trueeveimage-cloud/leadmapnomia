@@ -211,7 +211,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)' }, badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)', badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 
         {/* Leads & Tools */}
