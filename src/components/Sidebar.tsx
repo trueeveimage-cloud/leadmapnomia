@@ -94,50 +94,33 @@ function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['coun
     { label: 'Has Website', path: '/status/has-website', icon: <Globe size={14} />, badge: counts.hasWebsite, color: 'hsl(192 91% 52%)' },
   ];
 
-  const allPaths = ['/unsorted', ...subsections.map(s => s.path)];
-  const isActive = pathname === '/unsorted';
   const isSubActive = subsections.some(s => pathname === s.path);
+  const isActive = pathname === '/unsorted';
   const shouldOpen = open || isSubActive;
+  const groupColor = 'hsl(38, 95%, 55%)';
 
   return (
     <div>
-      <div className="flex items-center gap-0.5 mb-0.5">
-        <Link
-          to="/unsorted"
-          onClick={onNav}
-          className={cn(
-            'flex items-center gap-2 flex-1 min-w-0 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border border-sidebar-border/40 hover:border-sidebar-border bg-sidebar-accent/20 hover:bg-sidebar-accent/60',
-            isActive
-              ? 'bg-primary/10 text-primary border-primary/20'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <span className="text-muted-foreground/70"><Users size={14} /></span>
-          <span className="flex-1 text-left">Leads</span>
-          <span className={cn(
-            'text-[10px] px-1.5 py-0.5 rounded-full font-semibold',
-            isActive ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-          )}>
-            {counts.total > 999 ? `${(counts.total / 1000).toFixed(1)}k` : counts.total}
-          </span>
-        </Link>
-        <button
-          onClick={() => setOpen(o => !o)}
-          className={cn(
-            'p-1.5 rounded-lg transition-all duration-200 shrink-0',
-            shouldOpen ? 'text-primary bg-primary/5' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
-          )}
-        >
-          <span className={cn("block transition-transform duration-200", shouldOpen ? "rotate-0" : "-rotate-90")}>
-            <ChevronDown size={12} />
-          </span>
-        </button>
-      </div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border"
+        style={{ color: groupColor, borderColor: `${groupColor}30`, background: `${groupColor}08` }}
+      >
+        <span style={{ color: groupColor }}><Users size={14} /></span>
+        <span className="flex-1 text-left">Leads</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-muted text-muted-foreground">
+          {counts.total > 999 ? `${(counts.total / 1000).toFixed(1)}k` : counts.total}
+        </span>
+        <span className={cn("transition-transform duration-200", shouldOpen ? "rotate-0" : "-rotate-90")}>
+          <ChevronDown size={13} />
+        </span>
+      </button>
       <div className={cn(
         "overflow-hidden transition-all duration-300 ease-out",
-        shouldOpen ? "max-h-[250px] opacity-100" : "max-h-0 opacity-0"
+        shouldOpen ? "max-h-[300px] opacity-100 mt-0.5" : "max-h-0 opacity-0"
       )}>
-        <div className="mt-0.5 space-y-0.5 ml-3 border-l-2 border-primary/10 pl-2">
+        <div className="space-y-0.5 pb-1">
+          <SidebarNavLink item={{ label: 'All Leads', path: '/unsorted', icon: <Users size={14} />, badge: counts.total }} onNav={onNav} />
           {subsections.map(item => (
             <SidebarNavLink key={item.path} item={item} onNav={onNav} />
           ))}
