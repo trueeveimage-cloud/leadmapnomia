@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { fetchLeadCounts } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Counts {
   total: number;
@@ -38,6 +39,11 @@ interface BulkImportState {
   stopped: boolean;
 }
 
+interface Notifications {
+  batchReady: boolean;
+  unreadInbox: number;
+}
+
 interface CRMContextValue {
   counts: Counts;
   refreshCounts: () => Promise<void>;
@@ -46,6 +52,8 @@ interface CRMContextValue {
   bulkStopRef: React.MutableRefObject<boolean>;
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  notifications: Notifications;
+  refreshNotifications: () => Promise<void>;
 }
 
 const defaultCounts: Counts = {
@@ -67,12 +75,15 @@ const CRMContext = createContext<CRMContextValue>({
   bulkStopRef: { current: false },
   sidebarOpen: false,
   setSidebarOpen: () => {},
+  notifications: { batchReady: false, unreadInbox: 0 },
+  refreshNotifications: async () => {},
 });
 
 export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [counts, setCounts] = useState<Counts>(defaultCounts);
   const [bulkImport, setBulkImport] = useState<BulkImportState>(defaultBulkImport);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notifications>({ batchReady: false, unreadInbox: 0 });
   const bulkStopRef = useRef(false);
 
   const refreshCounts = useCallback(async () => {
@@ -82,12 +93,36 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  const refreshNotifications = useCallback(async () => {
+    try {
+      // Check if any active campaign has unsent leads (batch ready)
+      const { data: activeCampaigns } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('status', 'active');
+      const batchReady = (activeCampaigns?.length || 0) > 0;
+
+      // Count unread inbound messages (leads that replied but haven't been triaged)
+      const { count: unreadInbox } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('has_replied', true)
+        .eq('status', 'contacted');
+
+      setNotifications({ batchReady, unreadInbox: unreadInbox || 0 });
+    } catch {}
+  }, []);
+
   useEffect(() => {
     refreshCounts();
-  }, [refreshCounts]);
+    refreshNotifications();
+    // Refresh notifications every 60 seconds
+    const interval = setInterval(refreshNotifications, 60000);
+    return () => clearInterval(interval);
+  }, [refreshCounts, refreshNotifications]);
 
   return (
-    <CRMContext.Provider value={{ counts, refreshCounts, bulkImport, setBulkImport, bulkStopRef, sidebarOpen, setSidebarOpen }}>
+    <CRMContext.Provider value={{ counts, refreshCounts, bulkImport, setBulkImport, bulkStopRef, sidebarOpen, setSidebarOpen, notifications, refreshNotifications }}>
       {children}
     </CRMContext.Provider>
   );
