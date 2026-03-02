@@ -1,4 +1,4 @@
-import { AreaType, Density, CityProfile } from './swedenCities';
+import { AreaType, Density, CityProfile } from './cities';
 
 export type PresetKey = 'high_success' | 'balanced' | 'volume';
 
