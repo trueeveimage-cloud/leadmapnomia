@@ -349,6 +349,24 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // --- $300 API spending cap ---
+    const COST_CAP = 300; // USD
+    const TEXT_SEARCH_COST = 0.032;
+    const DETAIL_COST = 0.017;
+    
+    async function checkSpendingCap(): Promise<{ spent: number; ok: boolean }> {
+      const { data: allRuns } = await supabase.from('finder_runs').select('stats');
+      let totalSpent = 0;
+      for (const run of (allRuns || [])) {
+        const s = run.stats as any;
+        if (!s) continue;
+        const searches = s.textSearchRequests || (s.candidatesFound ? Math.ceil(s.candidatesFound / 20) : 0);
+        const details = s.detailsFetched || 0;
+        totalSpent += (searches * TEXT_SEARCH_COST) + (details * DETAIL_COST);
+      }
+      return { spent: totalSpent, ok: totalSpent < COST_CAP };
+    }
+
     const body: SearchRequest = await req.json();
     const { runId, city, keywords, radius, maxPages, maxCandidates, maxDetails, minRating, minReviews, maxReviews, requirePhone, findGmailOnly, action } = body;
 
@@ -356,13 +374,28 @@ serve(async (req) => {
     if (action === 'estimate') {
       const stage1Requests = keywords.length * maxPages;
       const maxStage2 = Math.min(maxCandidates, maxDetails);
+      const { spent } = await checkSpendingCap();
       return new Response(JSON.stringify({
         stage1Requests,
         maxStage2Details: maxStage2,
         estimatedCost: `Stage 1: ~${stage1Requests} text searches. Stage 2: up to ${maxStage2} detail lookups.`,
+        totalSpentSoFar: spent.toFixed(2),
+        budgetRemaining: Math.max(0, COST_CAP - spent).toFixed(2),
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Check spending cap before any search/resume
+    if (action === 'search' || action === 'resume') {
+      const { spent, ok } = await checkSpendingCap();
+      if (!ok) {
+        return new Response(JSON.stringify({ 
+          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Set a higher cap or use a new API key.` 
+        }), {
+          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Resume mode — continue detail fetching for pending candidates from a timed-out run

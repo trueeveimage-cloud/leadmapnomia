@@ -104,14 +104,14 @@ export async function fetchLeadCounts() {
   const PAGE_SIZE = 1000;
   let from = 0;
   while (true) {
-    const { data, error } = await supabase.from('leads').select('section, status, next_action_at, outreach_opt_out').range(from, from + PAGE_SIZE - 1);
+    const { data, error } = await supabase.from('leads').select('section, status, next_action_at, outreach_opt_out, email').range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData.push(...data);
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
-  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at' | 'outreach_opt_out'>[];
+  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at' | 'outreach_opt_out' | 'email'>[];
   const now = new Date();
   const reachable = leads.filter(l => !l.outreach_opt_out);
 
@@ -119,7 +119,7 @@ export async function fetchLeadCounts() {
     total: leads.length,
     unsorted: leads.length,
     phone: reachable.filter(l => l.section === 'phone').length,
-    email: reachable.filter(l => l.section === 'email').length,
+    email: leads.filter(l => !!(l.email && l.email.trim())).length,
     both: reachable.filter(l => l.section === 'both').length,
     missing: leads.filter(l => l.section === 'missing').length,
     hasWebsite: leads.filter(l => l.outreach_opt_out).length,
