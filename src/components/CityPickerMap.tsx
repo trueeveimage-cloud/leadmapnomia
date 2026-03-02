@@ -1,26 +1,29 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { SWEDEN_CITIES, CityProfile } from '@/lib/swedenCities';
+import { ALL_CITIES, getCitiesByCountry, CityProfile, Country, COUNTRY_CENTER } from '@/lib/cities';
 
 interface CityPickerMapProps {
   selectedCities: CityProfile[];
   cityStats: Record<string, { runs: number; leads: number; candidates: number }>;
   onSelectCity: (city: CityProfile) => void;
   onRemoveCity: (name: string) => void;
+  country: Country;
 }
 
-export default function CityPickerMap({ selectedCities, cityStats, onSelectCity, onRemoveCity }: CityPickerMapProps) {
+export default function CityPickerMap({ selectedCities, cityStats, onSelectCity, onRemoveCity, country }: CityPickerMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.CircleMarker[]>([]);
+
+  const center = COUNTRY_CENTER[country];
 
   // Init map once
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
     const map = L.map(mapRef.current, {
-      center: [62.5, 15.5],
-      zoom: 5,
+      center: [center.lat, center.lng],
+      zoom: center.zoom,
       zoomControl: true,
     });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -30,24 +33,30 @@ export default function CityPickerMap({ selectedCities, cityStats, onSelectCity,
     return () => { map.remove(); mapInstanceRef.current = null; };
   }, []);
 
+  // Re-center when country changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setView([center.lat, center.lng], center.zoom);
+  }, [country, center]);
+
   // Update markers when selection or stats change
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Clear old markers
     markersRef.current.forEach(m => map.removeLayer(m));
     markersRef.current = [];
 
     const selectedNames = new Set(selectedCities.map(c => c.name));
+    const cities = getCitiesByCountry(country);
 
-    SWEDEN_CITIES.forEach(city => {
+    cities.forEach(city => {
       const isSelected = selectedNames.has(city.name);
       const cs = cityStats[city.name];
       const searched = !!cs;
       const successRate = cs && cs.candidates > 0 ? ((cs.leads / cs.candidates) * 100).toFixed(0) : null;
 
-      // Color: selected=primary, searched=green, unsearched=grey
       const color = isSelected
         ? 'hsl(217, 91%, 60%)'
         : searched
@@ -64,7 +73,6 @@ export default function CityPickerMap({ selectedCities, cityStats, onSelectCity,
         weight: isSelected ? 3 : 1.5,
       });
 
-      // Tooltip
       let tooltipHtml = `<strong>${city.name}</strong>`;
       if (isSelected) {
         tooltipHtml += `<br/><span style="color:#60a5fa;">✓ Selected for search</span>`;
@@ -79,7 +87,6 @@ export default function CityPickerMap({ selectedCities, cityStats, onSelectCity,
 
       marker.bindTooltip(tooltipHtml, { direction: 'top', sticky: true });
 
-      // Click to toggle selection
       marker.on('click', () => {
         if (isSelected) {
           onRemoveCity(city.name);
@@ -91,7 +98,7 @@ export default function CityPickerMap({ selectedCities, cityStats, onSelectCity,
       marker.addTo(map);
       markersRef.current.push(marker);
     });
-  }, [selectedCities, cityStats, onSelectCity, onRemoveCity]);
+  }, [selectedCities, cityStats, onSelectCity, onRemoveCity, country]);
 
   return <div ref={mapRef} className="h-full w-full rounded-lg" />;
 }
