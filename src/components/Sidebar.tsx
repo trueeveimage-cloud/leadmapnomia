@@ -17,6 +17,7 @@ interface NavItem {
   icon: React.ReactNode;
   badge?: number;
   color?: string;
+  glow?: boolean;
 }
 
 function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) {
@@ -33,14 +34,24 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
           : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-0.5'
       )}
     >
-      <span className={cn(
-        'shrink-0 transition-colors duration-200',
-        active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'
-      )} style={item.color && !active ? { color: item.color } : undefined}>
+      <span
+        className={cn(
+          'shrink-0 transition-colors duration-200',
+          active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground',
+          item.glow && 'animate-pulse drop-shadow-[0_0_6px_currentColor]'
+        )}
+        style={item.color && !active ? { color: item.color } : undefined}
+      >
         {item.icon}
       </span>
       <span className="flex-1 truncate">{item.label}</span>
-      {item.badge !== undefined && item.badge > 0 && (
+      {item.glow && (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: item.color || 'hsl(var(--primary))' }} />
+          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: item.color || 'hsl(var(--primary))' }} />
+        </span>
+      )}
+      {!item.glow && item.badge !== undefined && item.badge > 0 && (
         <span className={cn(
           'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
           active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
@@ -52,12 +63,27 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
   );
 }
 
-function NavGroup({ label, children, defaultOpen = true, icon, color }: { label: string; children: React.ReactNode; defaultOpen?: boolean; icon: React.ReactNode; color?: string }) {
-  const [open, setOpen] = React.useState(defaultOpen);
+const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
+const TOOLS_PATHS = ['/add', '/bulk', '/finder', '/finder/coverage', '/costs'];
+const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/closed-won', '/status/closed-lost'];
+const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
+
+function NavGroup({ label, children, icon, color, paths }: { label: string; children: React.ReactNode; icon: React.ReactNode; color?: string; paths: string[] }) {
+  const { pathname } = useLocation();
+  const containsActive = paths.some(p => pathname === p || pathname.startsWith(p + '/'));
+  const [manualToggle, setManualToggle] = React.useState<boolean | null>(null);
+
+  // Reset manual toggle when navigating to a different group
+  React.useEffect(() => {
+    if (containsActive) setManualToggle(null);
+  }, [containsActive]);
+
+  const open = manualToggle !== null ? manualToggle : containsActive;
+
   return (
     <div>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setManualToggle(prev => prev !== null ? !prev : !containsActive)}
         className={cn(
           "flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border bg-sidebar-accent/20",
           color
@@ -83,7 +109,6 @@ function NavGroup({ label, children, defaultOpen = true, icon, color }: { label:
 }
 
 function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['counts']; onNav?: () => void }) {
-  const [open, setOpen] = React.useState(false);
   const { pathname } = useLocation();
 
   const subsections: NavItem[] = [
@@ -94,15 +119,20 @@ function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['coun
     { label: 'Has Website', path: '/status/has-website', icon: <Globe size={14} />, badge: counts.hasWebsite, color: 'hsl(192 91% 52%)' },
   ];
 
-  const isSubActive = subsections.some(s => pathname === s.path);
-  const isActive = pathname === '/unsorted';
-  const shouldOpen = open || isSubActive;
+  const containsActive = LEADS_PATHS.some(p => pathname === p);
+  const [manualToggle, setManualToggle] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    if (containsActive) setManualToggle(null);
+  }, [containsActive]);
+
+  const open = manualToggle !== null ? manualToggle : containsActive;
   const groupColor = 'hsl(38, 95%, 55%)';
 
   return (
     <div>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setManualToggle(prev => prev !== null ? !prev : !containsActive)}
         className="flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border"
         style={{ color: groupColor, borderColor: `${groupColor}30`, background: `${groupColor}08` }}
       >
@@ -111,13 +141,13 @@ function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['coun
         <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-muted text-muted-foreground">
           {counts.total > 999 ? `${(counts.total / 1000).toFixed(1)}k` : counts.total}
         </span>
-        <span className={cn("transition-transform duration-200", shouldOpen ? "rotate-0" : "-rotate-90")}>
+        <span className={cn("transition-transform duration-200", open ? "rotate-0" : "-rotate-90")}>
           <ChevronDown size={13} />
         </span>
       </button>
       <div className={cn(
         "overflow-hidden transition-all duration-300 ease-out",
-        shouldOpen ? "max-h-[300px] opacity-100 mt-0.5" : "max-h-0 opacity-0"
+        open ? "max-h-[300px] opacity-100 mt-0.5" : "max-h-0 opacity-0"
       )}>
         <div className="space-y-0.5 pb-1">
           <SidebarNavLink item={{ label: 'All Leads', path: '/unsorted', icon: <Users size={14} />, badge: counts.total }} onNav={onNav} />
@@ -131,7 +161,7 @@ function LeadsGroup({ counts, onNav }: { counts: ReturnType<typeof useCRM>['coun
 }
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
-  const { counts } = useCRM();
+  const { counts, notifications } = useCRM();
   const { signOut } = useAuth();
   const { pathname } = useLocation();
 
@@ -197,15 +227,15 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       {/* Nav */}
       <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {/* Outreach */}
-        <NavGroup label="Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)">
-          <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
+        <NavGroup label="Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)" paths={OUTREACH_PATHS}>
+          <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)', glow: notifications.batchReady }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)', glow: notifications.unreadInbox > 0, badge: notifications.unreadInbox > 0 ? notifications.unreadInbox : undefined }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)', badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 
         {/* Leads & Tools */}
-        <NavGroup label="Leads & Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)">
+        <NavGroup label="Leads & Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)" paths={TOOLS_PATHS}>
           <SidebarNavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
@@ -214,7 +244,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </NavGroup>
 
         {/* Closing */}
-        <NavGroup label="Closing" icon={<Target size={14} />} defaultOpen={false} color="hsl(142, 69%, 45%)">
+        <NavGroup label="Closing" icon={<Target size={14} />} color="hsl(142, 69%, 45%)" paths={CLOSING_PATHS}>
           <SidebarNavLink item={{ label: 'Interested', path: '/status/interested', icon: <ThumbsUp size={14} />, badge: counts.interested, color: 'hsl(142 69% 45%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Not Interested', path: '/status/not-interested', icon: <ThumbsDown size={14} />, badge: counts.not_interested, color: 'hsl(0 72% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Unsure', path: '/status/unsure', icon: <HelpCircle size={14} />, badge: counts.unsure, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
