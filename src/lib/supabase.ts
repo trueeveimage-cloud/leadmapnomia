@@ -119,7 +119,7 @@ export async function fetchLeadCounts() {
     total: leads.length,
     unsorted: leads.length,
     phone: reachable.filter(l => l.section === 'phone').length,
-    email: reachable.filter(l => l.section === 'email').length,
+    email: leads.filter(l => !!(l.email && l.email.trim())).length,
     both: reachable.filter(l => l.section === 'both').length,
     missing: leads.filter(l => l.section === 'missing').length,
     hasWebsite: leads.filter(l => l.outreach_opt_out).length,
