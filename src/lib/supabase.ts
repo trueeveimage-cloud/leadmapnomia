@@ -111,7 +111,7 @@ export async function fetchLeadCounts() {
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
-  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at' | 'outreach_opt_out'>[];
+  const leads = allData as Pick<Lead, 'section' | 'status' | 'next_action_at' | 'outreach_opt_out' | 'email'>[];
   const now = new Date();
   const reachable = leads.filter(l => !l.outreach_opt_out);
 
