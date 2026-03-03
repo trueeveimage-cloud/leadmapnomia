@@ -87,12 +87,12 @@ const App = () => (
                     <Route path="/status/contacted" element={<SectionPage status="contacted" title="Contacted" />} />
                     <Route path="/status/answered" element={<SectionPage status="answered" title="Answered" />} />
                     <Route path="/status/callback" element={<SectionPage status="callback" title="Callback" />} />
-                    <Route path="/status/interested" element={<SectionPage status="interested" title="Interested" />} />
-                    <Route path="/status/not-interested" element={<SectionPage status="not_interested" title="Not Interested" />} />
-                    <Route path="/status/unsure" element={<SectionPage status="unsure" title="Unsure" />} />
-                    <Route path="/status/demo" element={<SectionPage status="demo" title="Demo" />} />
-                    <Route path="/status/closed-won" element={<SectionPage status="closed_won" title="Closed / Won" />} />
-                    <Route path="/status/closed-lost" element={<SectionPage status="closed_lost" title="Closed / Lost" />} />
+                    <Route path="/status/interested" element={<ClosingPage status="interested" title="Interested" />} />
+                    <Route path="/status/not-interested" element={<ClosingPage status="not_interested" title="Not Interested" />} />
+                    <Route path="/status/unsure" element={<ClosingPage status="unsure" title="Unsure" />} />
+                    <Route path="/status/demo" element={<ClosingPage status="demo" title="Demo" />} />
+                    <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
+                    <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
                     <Route path="/finder" element={<FinderPage />} />
                     <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                     <Route path="/finder/runs/:id" element={<FinderRunPage />} />
