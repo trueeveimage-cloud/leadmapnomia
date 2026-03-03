@@ -312,6 +312,19 @@ export default function FinderPage() {
     return stats;
   }, [runs]);
 
+  // Recommended searches
+  const recommendations = useMemo(() => {
+    return getRecommendedSearches(runs, cityStats).filter(r => r.country === country);
+  }, [runs, cityStats, country]);
+
+  const applyRecommendation = (rec: SearchRecommendation) => {
+    const selectedNames = new Set(selectedCities.map(c => c.name));
+    const newCities = rec.cities.filter(c => !selectedNames.has(c.name));
+    if (newCities.length === 0) { toast.info('All recommended cities already selected'); return; }
+    setSelectedCities(prev => [...prev, ...newCities]);
+    toast.success(`Added ${newCities.length} recommended cities`);
+  };
+
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6 pb-10">
