@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { detectLeadCountry, shouldNeedCall } from "@/lib/countryRouting";
 
 const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
 
@@ -156,11 +157,10 @@ export async function addLead(lead: Partial<Omit<Lead, 'id' | 'created_at' | 'up
     if (existing) return { duplicate: existing as Lead };
   }
 
-  // Auto-route landlines directly to call list (skip SMS)
+  // Auto-route based on country: NO/DK → messaging only, SE → landlines to call list
   const insertData: any = { ...lead };
-  if (lead.phone && !isMobileNumber(lead.phone)) {
-    insertData.needs_call = true;
-  }
+  const country = detectLeadCountry(lead.address, lead.phone);
+  insertData.needs_call = shouldNeedCall(lead.phone || null, country);
 
   const { data, error } = await supabase.from('leads').insert(insertData).select().single();
   if (error) return { error: error.message };

@@ -9,12 +9,13 @@ import InfoTip from '@/components/InfoTip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createFinderRun, fetchFinderRuns, runFinderSearch, fetchFinderCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
 import { ALL_CITIES, getCitiesByCountry, findCity, searchCities, getAreaLabel, CityProfile, Country, COUNTRY_LABELS, COUNTRY_DEFAULT_KEYWORDS } from '@/lib/cities';
+import { getRecommendedSearches, SearchRecommendation } from '@/lib/recommendedSearches';
 import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, PresetConfig, PresetKey } from '@/lib/finderPresets';
 import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map, Globe } from 'lucide-react';
+import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map, Globe, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import CityPickerMap from '@/components/CityPickerMap';
 
@@ -311,6 +312,19 @@ export default function FinderPage() {
     return stats;
   }, [runs]);
 
+  // Recommended searches
+  const recommendations = useMemo(() => {
+    return getRecommendedSearches(runs, cityStats).filter(r => r.country === country);
+  }, [runs, cityStats, country]);
+
+  const applyRecommendation = (rec: SearchRecommendation) => {
+    const selectedNames = new Set(selectedCities.map(c => c.name));
+    const newCities = rec.cities.filter(c => !selectedNames.has(c.name));
+    if (newCities.length === 0) { toast.info('All recommended cities already selected'); return; }
+    setSelectedCities(prev => [...prev, ...newCities]);
+    toast.success(`Added ${newCities.length} recommended cities`);
+  };
+
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6 pb-10">
@@ -360,6 +374,30 @@ export default function FinderPage() {
               })}
             </div>
           </div>
+
+          {/* Recommended Search */}
+          {recommendations.length > 0 && (
+            <div className="space-y-2">
+              {recommendations.map((rec, i) => (
+                <button
+                  key={i}
+                  onClick={() => applyRecommendation(rec)}
+                  className="w-full p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-all text-left flex items-center gap-3"
+                >
+                  <Sparkles size={16} className="text-amber-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground">{rec.reason}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                      {rec.cities.slice(0, 5).map(c => c.name).join(', ')}{rec.cities.length > 5 ? ` +${rec.cities.length - 5} more` : ''}
+                    </div>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${rec.priority === 'high' ? 'bg-green-500/20 text-green-400' : rec.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>
+                    {rec.priority}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* City Selector — Multi */}
           <div>
