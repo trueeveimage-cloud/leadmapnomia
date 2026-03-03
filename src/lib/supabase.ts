@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { detectLeadCountry, shouldNeedCall } from "@/lib/countryRouting";
 
 const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
 
