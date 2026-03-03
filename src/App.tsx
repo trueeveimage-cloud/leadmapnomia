@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AddPage from "./pages/AddPage";
 import BulkPage from "./pages/BulkPage";
 import SectionPage from "./pages/SectionPage";
+import ClosingPage from "./pages/ClosingPage";
 import CallbacksPage from "./pages/CallbacksPage";
 import SettingsPage from "./pages/SettingsPage";
 import FinderPage from "./pages/FinderPage";
