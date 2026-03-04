@@ -2,12 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 function useNextBatchTimer() {
@@ -41,6 +42,10 @@ export default function CampaignDetailPage() {
   const [retrying, setRetrying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [customBatchSize, setCustomBatchSize] = useState<string>('');
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('09:00');
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
@@ -49,7 +54,6 @@ export default function CampaignDetailPage() {
       const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
       setCampaign(c);
       setRuns(r);
-      // Fetch ALL messages for this campaign (across all runs)
       const runIds = r.map(run => run.id);
       if (runIds.length > 0) {
         const { data } = await supabase
@@ -80,15 +84,41 @@ export default function CampaignDetailPage() {
     if (!campaign || !id) return;
     setSending(true);
     try {
-      const res = await supabase.functions.invoke('send-campaign-batch', {
-        body: { campaignId: id },
-      });
+      const body: any = { campaignId: id };
+      if (customBatchSize && Number(customBatchSize) > 0) {
+        body.batchSize = Number(customBatchSize);
+      }
+      const res = await supabase.functions.invoke('send-campaign-batch', { body });
       if (res.error) throw res.error;
       const data = res.data as any;
       toast.success(`Sent ${data.stats?.sent ?? 0} messages`);
+      setCustomBatchSize('');
       await load();
     } catch (err: any) { toast.error(err.message || 'Send failed'); }
     finally { setSending(false); }
+  };
+
+  const handleScheduleBatch = () => {
+    if (!scheduleDate || !scheduleTime) {
+      toast.error('Select date and time');
+      return;
+    }
+    const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
+    const now = new Date();
+    if (scheduledAt <= now) {
+      toast.error('Schedule must be in the future');
+      return;
+    }
+    const delay = scheduledAt.getTime() - now.getTime();
+    const timeStr = scheduledAt.toLocaleString();
+    toast.success(`Batch scheduled for ${timeStr}`);
+    setShowSchedule(false);
+    
+    // Set a client-side timeout to trigger the batch
+    setTimeout(async () => {
+      toast.info('Scheduled batch starting now...');
+      await handleSendBatch();
+    }, delay);
   };
 
   const handleRetryFailed = async () => {
@@ -131,6 +161,10 @@ export default function CampaignDetailPage() {
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
 
+  // Country info from filter
+  const countries = (campaign.audience_filter as any)?.countries as string[] | undefined;
+  const countryFlags: Record<string, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
+
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto px-6 pt-8">
@@ -144,6 +178,7 @@ export default function CampaignDetailPage() {
             <p className="text-xs text-muted-foreground mt-0.5">
               Status: <span className="text-foreground font-medium">{campaign.status}</span>
               {eligible !== null && <> · {eligible} leads eligible</>}
+              {countries?.length ? <> · {countries.map(c => countryFlags[c] || c).join(' ')}</> : null}
             </p>
           </div>
           <div className="flex gap-2">
@@ -153,10 +188,56 @@ export default function CampaignDetailPage() {
             <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
               {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
             </Button>
+          </div>
+        </div>
+
+        {/* Send controls */}
+        <div className="bg-card border border-border rounded-lg p-4 mb-6">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Send Batch</h3>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground mb-1 block">Batch Size (leave empty for default: {campaign.daily_cap})</label>
+              <Input
+                type="number"
+                min="1"
+                max="1000"
+                value={customBatchSize}
+                onChange={e => setCustomBatchSize(e.target.value)}
+                placeholder={String(campaign.daily_cap)}
+                className="h-8 text-sm"
+              />
+            </div>
             <Button size="sm" onClick={handleSendBatch} disabled={sending} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : 'Send Batch'}
+              <Send size={13} /> {sending ? 'Sending...' : 'Send Now'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
+              <Calendar size={13} /> Schedule
             </Button>
           </div>
+
+          {showSchedule && (
+            <div className="mt-3 p-3 bg-muted/50 border border-border rounded-md space-y-2">
+              <p className="text-xs font-medium text-foreground">Schedule batch for later</p>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={e => setScheduleDate(e.target.value)}
+                  className="h-8 text-sm flex-1"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <Input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={e => setScheduleTime(e.target.value)}
+                  className="h-8 text-sm w-28"
+                />
+                <Button size="sm" onClick={handleScheduleBatch} className="gap-1.5 text-xs">
+                  <Clock size={12} /> Confirm
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Schedule / Progress */}
@@ -248,7 +329,7 @@ export default function CampaignDetailPage() {
         <div className="mb-10">
           <h3 className="text-sm font-semibold text-foreground mb-3">Runs ({runs.length})</h3>
           {runs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No runs yet. Click "Send Batch" to start.</p>
+            <p className="text-xs text-muted-foreground">No runs yet. Click "Send Now" to start.</p>
           ) : (
             <div className="space-y-2">
               {runs.slice(0, 5).map(r => (

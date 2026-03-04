@@ -151,9 +151,14 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
   };
 
   for (const lead of allLeads) {
+    // Country filter
+    if (filter.countries?.length) {
+      const leadCountry = detectLeadCountry(lead.address, lead.phone);
+      if (!filter.countries.includes(leadCountry)) { breakdown.wrongSection++; continue; }
+    }
     // Check each exclusion reason (a lead can only be counted in first matching reason)
     if (!lead.phone) { breakdown.noPhone++; continue; }
-    if (!isMobileNumber(lead.phone)) { breakdown.landline++; continue; }
+    if (!isMobileNumber(lead.phone, lead.address)) { breakdown.landline++; continue; }
     if (filter.excludeOptOut !== false && lead.outreach_opt_out) { breakdown.optedOut++; continue; }
     if (filter.excludeReplied !== false && lead.has_replied) { breakdown.replied++; continue; }
     if (filter.sections?.length && !filter.sections.includes(lead.section)) { breakdown.wrongSection++; continue; }

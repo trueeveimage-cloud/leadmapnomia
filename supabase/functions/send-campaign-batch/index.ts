@@ -5,12 +5,50 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-function isMobileNumber(phone: string): boolean {
+function isMobileNumber(phone: string, address?: string | null): boolean {
   const cleaned = phone.replace(/\s|-/g, '');
-  // Swedish mobile prefixes: 070, 072, 073, 076, 079
-  return /^(070|072|073|076|079)/.test(cleaned) ||
-         /^\+46(70|72|73|76|79)/.test(cleaned) ||
-         /^46(70|72|73|76|79)/.test(cleaned);
+  const country = detectCountry(address, phone);
+  
+  if (country === 'NO') {
+    return /^(\+47|47)?(4|9)\d{7}$/.test(cleaned) || /^(4|9)\d{7}$/.test(cleaned);
+  }
+  if (country === 'DK') {
+    return /^(\+45|45)?(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned) ||
+           /^(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned);
+  }
+  return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
+}
+
+function detectCountry(address?: string | null, phone?: string | null): string {
+  const addr = (address || '').toLowerCase();
+  if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) return 'NO';
+  if (addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) return 'DK';
+  if (phone) {
+    const clean = phone.replace(/\s|-/g, '');
+    if (clean.startsWith('+47') || (clean.startsWith('47') && clean.length >= 10)) return 'NO';
+    if (clean.startsWith('+45') || (clean.startsWith('45') && clean.length >= 10)) return 'DK';
+  }
+  return 'SE';
+}
+
+function normalizeToE164(phone: string, address?: string | null): string {
+  let e164 = phone.replace(/\s|-/g, '');
+  const country = detectCountry(address, phone);
+  
+  if (country === 'NO') {
+    if (/^(4|9)\d{7}$/.test(e164)) e164 = '+47' + e164;
+    else if (/^47(4|9)\d{7}$/.test(e164)) e164 = '+' + e164;
+  } else if (country === 'DK') {
+    if (/^(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(e164)) e164 = '+45' + e164;
+    else if (/^45\d{8}$/.test(e164)) e164 = '+' + e164;
+  } else {
+    // Sweden
+    if (e164.startsWith('07')) e164 = '+46' + e164.slice(1);
+    else if (e164.startsWith('467')) e164 = '+' + e164;
+  }
+  
+  if (!e164.startsWith('+')) e164 = '+' + e164;
+  return e164;
 }
 
 async function sendTwilioSms(
@@ -60,7 +98,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    const { campaignId } = await req.json();
+    const { campaignId, batchSize } = await req.json();
     if (!campaignId) {
       return new Response(JSON.stringify({ error: 'campaignId required' }), { status: 400, headers: corsHeaders });
     }
@@ -108,8 +146,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Actual limit is the lesser of batch cap and remaining daily cap
-    const effectiveLimit = Math.min(campaign.batch_cap || 200, remaining);
+    // Use custom batch size if provided, else campaign default
+    const requestedBatch = batchSize ? Math.min(Number(batchSize), remaining) : Math.min(campaign.batch_cap || 200, remaining);
+    const effectiveLimit = requestedBatch;
 
     // Build query for eligible leads
     let query = dbClient.from('leads').select('*')
@@ -138,6 +177,15 @@ Deno.serve(async (req) => {
     const { data: leads, error: leadErr } = await query;
     if (leadErr) throw leadErr;
 
+    // Filter by country if specified
+    let filteredLeads = leads || [];
+    if (filter.countries?.length) {
+      filteredLeads = filteredLeads.filter((lead: any) => {
+        const country = detectCountry(lead.address, lead.phone);
+        return filter.countries.includes(country);
+      });
+    }
+
     // Create campaign run
     const { data: run, error: runErr } = await dbClient
       .from('campaign_runs')
@@ -153,20 +201,26 @@ Deno.serve(async (req) => {
       provider: useTwilio ? 'twilio' : 'mock',
     };
 
-    for (const lead of (leads || [])) {
+    for (const lead of filteredLeads) {
       stats.attempted++;
 
       const toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-      // Only SMS mobile numbers (07...), move landlines straight to call list
-      if (!isMobileNumber(toNumber)) {
-        stats.skipped_landline++;
-        await dbClient.from('leads').update({
-          needs_call: true,
-          outreach_stage: 'no_reply_call',
-          call_after_at: new Date().toISOString(),
-        }).eq('id', lead.id);
+      // Only SMS mobile numbers, move landlines straight to call list (Sweden only)
+      if (!isMobileNumber(toNumber, lead.address)) {
+        const country = detectCountry(lead.address, toNumber);
+        // Only Sweden has call routing for landlines
+        if (country === 'SE') {
+          stats.skipped_landline++;
+          await dbClient.from('leads').update({
+            needs_call: true,
+            outreach_stage: 'no_reply_call',
+            call_after_at: new Date().toISOString(),
+          }).eq('id', lead.id);
+        } else {
+          stats.skipped_landline++;
+        }
         continue;
       }
 
@@ -175,16 +229,10 @@ Deno.serve(async (req) => {
         return (lead as any)[key] ?? '';
       });
 
-      if (useTwilio) {
-        // --- REAL TWILIO SMS ---
-        // Normalize to E164 for Twilio
-        let e164 = toNumber.replace(/\s|-/g, '');
-        if (e164.startsWith('07')) {
-          e164 = '+46' + e164.slice(1);
-        } else if (e164.startsWith('467')) {
-          e164 = '+' + e164;
-        }
+      // Normalize to E164
+      const e164 = normalizeToE164(toNumber, lead.address);
 
+      if (useTwilio) {
         const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
 
         await dbClient.from('message_logs').insert({
@@ -214,13 +262,12 @@ Deno.serve(async (req) => {
 
         stats.sent++;
       } else {
-        // --- MOCK PROVIDER ---
         await dbClient.from('message_logs').insert({
           lead_id: lead.id,
           direction: 'outbound',
           channel: 'sms',
           from_number: 'MOCK',
-          to_number: toNumber,
+          to_number: e164,
           body,
           provider: 'mock',
           provider_message_sid: `mock_${crypto.randomUUID()}`,
