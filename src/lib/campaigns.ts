@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Country } from '@/lib/cities';
 
 export interface AudienceFilter {
   sections?: string[];
@@ -8,6 +9,7 @@ export interface AudienceFilter {
   excludeOptOut?: boolean;
   excludeReplied?: boolean;
   excludeMissingPhone?: boolean;
+  countries?: Country[];
 }
 
 export interface Campaign {
