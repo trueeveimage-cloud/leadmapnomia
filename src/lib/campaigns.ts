@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Country } from '@/lib/cities';
 
 export interface AudienceFilter {
   sections?: string[];
@@ -8,6 +9,7 @@ export interface AudienceFilter {
   excludeOptOut?: boolean;
   excludeReplied?: boolean;
   excludeMissingPhone?: boolean;
+  countries?: Country[];
 }
 
 export interface Campaign {
@@ -92,10 +94,23 @@ export interface EligibilityBreakdown {
   lowReviews: number;
 }
 
-const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
+import { detectLeadCountry } from '@/lib/countryRouting';
 
-function isMobileNumber(phone: string): boolean {
-  return MOBILE_REGEX.test(phone.replace(/\s|-/g, ''));
+function isMobileNumber(phone: string, address?: string | null): boolean {
+  const cleaned = phone.replace(/\s|-/g, '');
+  const country = detectLeadCountry(address, phone);
+  
+  if (country === 'NO') {
+    // Norwegian mobiles: 8 digits starting with 4 or 9
+    return /^(\+47|47)?(4|9)\d{7}$/.test(cleaned) || /^(4|9)\d{7}$/.test(cleaned);
+  }
+  if (country === 'DK') {
+    // Danish mobiles: 8 digits, prefixes 2x, 30-31, 40-42, 50-53, 60-61, 71, 80-81, 91-93
+    return /^(\+45|45)?(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned) ||
+           /^(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned);
+  }
+  // Swedish mobile prefixes: 070, 072, 073, 076, 079
+  return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
 }
 
 export async function countEligibleLeads(filter: AudienceFilter, cooldownDays: number): Promise<number> {
@@ -136,9 +151,14 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
   };
 
   for (const lead of allLeads) {
+    // Country filter
+    if (filter.countries?.length) {
+      const leadCountry = detectLeadCountry(lead.address, lead.phone);
+      if (!filter.countries.includes(leadCountry)) { breakdown.wrongSection++; continue; }
+    }
     // Check each exclusion reason (a lead can only be counted in first matching reason)
     if (!lead.phone) { breakdown.noPhone++; continue; }
-    if (!isMobileNumber(lead.phone)) { breakdown.landline++; continue; }
+    if (!isMobileNumber(lead.phone, lead.address)) { breakdown.landline++; continue; }
     if (filter.excludeOptOut !== false && lead.outreach_opt_out) { breakdown.optedOut++; continue; }
     if (filter.excludeReplied !== false && lead.has_replied) { breakdown.replied++; continue; }
     if (filter.sections?.length && !filter.sections.includes(lead.section)) { breakdown.wrongSection++; continue; }

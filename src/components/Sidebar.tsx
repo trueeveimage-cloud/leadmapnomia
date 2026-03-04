@@ -51,7 +51,7 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
           <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: item.color || 'hsl(var(--primary))' }} />
         </span>
       )}
-      {!item.glow && item.badge !== undefined && item.badge > 0 && (
+      {item.badge !== undefined && item.badge > 0 && (
         <span className={cn(
           'text-[10px] px-1.5 py-0.5 rounded-full font-semibold min-w-[20px] text-center',
           active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'

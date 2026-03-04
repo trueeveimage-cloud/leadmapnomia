@@ -5,15 +5,22 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { createCampaign, countEligibleLeadsDetailed, AudienceFilter, EligibilityBreakdown, renderTemplate } from '@/lib/campaigns';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
+import type { Country } from '@/lib/cities';
 
 const SECTIONS = [
   { value: 'phone', label: 'Has Phone' },
   { value: 'email', label: 'Has Email' },
   { value: 'both', label: 'Both' },
   { value: 'unsorted', label: 'Unsorted' },
+];
+
+const COUNTRIES: { value: Country; label: string; flag: string }[] = [
+  { value: 'SE', label: 'Sweden', flag: '🇸🇪' },
+  { value: 'NO', label: 'Norway', flag: '🇳🇴' },
+  { value: 'DK', label: 'Denmark', flag: '🇩🇰' },
 ];
 
 const VARIABLES = ['{name}', '{category}', '{city}', '{rating}'];
@@ -28,6 +35,7 @@ export default function CampaignNewPage() {
     excludeOptOut: true,
     excludeReplied: true,
     excludeMissingPhone: true,
+    countries: ['SE', 'NO', 'DK'],
   });
   const [template, setTemplate] = useState('Hej {name}! Vi hjälper företag inom {category} att växa. Svara JA för mer info. Svara STOP för att avsluta.');
   const [dailyCap, setDailyCap] = useState(100);
@@ -42,6 +50,13 @@ export default function CampaignNewPage() {
     setFilter(f => {
       const sections = f.sections || [];
       return { ...f, sections: sections.includes(s) ? sections.filter(x => x !== s) : [...sections, s] };
+    });
+  };
+
+  const toggleCountry = (c: Country) => {
+    setFilter(f => {
+      const countries = f.countries || [];
+      return { ...f, countries: countries.includes(c) ? countries.filter(x => x !== c) : [...countries, c] };
     });
   };
 
@@ -118,6 +133,26 @@ export default function CampaignNewPage() {
               <InfoTip text="Select which leads to target. Leads must have a phone number and not be opted out." />
             </h2>
 
+            {/* Country selector */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
+                <Globe size={12} /> Countries
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {COUNTRIES.map(c => (
+                  <button
+                    key={c.value}
+                    onClick={() => toggleCountry(c.value)}
+                    className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                      filter.countries?.includes(c.value) ? 'bg-primary/15 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
+                    }`}
+                  >
+                    {c.flag} {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Sections</label>
               <div className="flex flex-wrap gap-1.5">
@@ -183,7 +218,7 @@ export default function CampaignNewPage() {
                   {estimate.noPhone > 0 && <p>✗ {estimate.noPhone} — no phone number</p>}
                   {estimate.landline > 0 && <p>✗ {estimate.landline} — landline / invalid mobile prefix</p>}
                   {estimate.hasWebsite > 0 && <p>✗ {estimate.hasWebsite} — has website (filtered out)</p>}
-                  {estimate.wrongSection > 0 && <p>✗ {estimate.wrongSection} — wrong section</p>}
+                  {estimate.wrongSection > 0 && <p>✗ {estimate.wrongSection} — wrong section/country</p>}
                   {estimate.optedOut > 0 && <p>✗ {estimate.optedOut} — opted out</p>}
                   {estimate.replied > 0 && <p>✗ {estimate.replied} — already replied</p>}
                   {estimate.cooldown > 0 && <p>✗ {estimate.cooldown} — in cooldown period</p>}
@@ -246,11 +281,11 @@ export default function CampaignNewPage() {
                 <Input type="number" min="1" value={dailyCap} onChange={e => setDailyCap(Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Batch Cap <InfoTip text="Max messages per send batch" /></label>
+                <label className="text-xs text-muted-foreground mb-1 block">Batch Cap <InfoTip text="Total target for campaign" /></label>
                 <Input type="number" min="1" value={batchCap} onChange={e => setBatchCap(Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait for reply before marking for call" /></label>
+                <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait for reply before marking for call (Sweden only)" /></label>
                 <Input type="number" min="1" value={callAfterHours} onChange={e => setCallAfterHours(Number(e.target.value))} className="h-8 text-sm" />
               </div>
             </div>
