@@ -5,20 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-function isMobileNumber(phone: string, address?: string | null): boolean {
-  const cleaned = phone.replace(/\s|-/g, '');
-  const country = detectCountry(address, phone);
-  
-  if (country === 'NO') {
-    return /^(\+47|47)?(4|9)\d{7}$/.test(cleaned) || /^(4|9)\d{7}$/.test(cleaned);
-  }
-  if (country === 'DK') {
-    return /^(\+45|45)?(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned) ||
-           /^(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(cleaned);
-  }
-  return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
-}
-
 function detectCountry(address?: string | null, phone?: string | null): string {
   const addr = (address || '').toLowerCase();
   if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) return 'NO';
@@ -31,15 +17,26 @@ function detectCountry(address?: string | null, phone?: string | null): string {
   return 'SE';
 }
 
+function isSmsEligible(phone: string, address?: string | null): boolean {
+  const cleaned = phone.replace(/\s|-/g, '');
+  const country = detectCountry(address, phone);
+  
+  // For Norway and Denmark: send to ALL numbers — Twilio handles landline rejection
+  if (country === 'NO' || country === 'DK') return true;
+  
+  // Sweden: only mobile numbers (landlines go to call list)
+  return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
+}
+
 function normalizeToE164(phone: string, address?: string | null): string {
   let e164 = phone.replace(/\s|-/g, '');
   const country = detectCountry(address, phone);
   
   if (country === 'NO') {
-    if (/^(4|9)\d{7}$/.test(e164)) e164 = '+47' + e164;
-    else if (/^47(4|9)\d{7}$/.test(e164)) e164 = '+' + e164;
+    if (/^\d{8}$/.test(e164)) e164 = '+47' + e164;
+    else if (/^47\d{8}$/.test(e164)) e164 = '+' + e164;
   } else if (country === 'DK') {
-    if (/^(2\d|3[01]|4[0-2]|5[0-3]|6[01]|71|8[01]|9[1-3])\d{6}$/.test(e164)) e164 = '+45' + e164;
+    if (/^\d{8}$/.test(e164)) e164 = '+45' + e164;
     else if (/^45\d{8}$/.test(e164)) e164 = '+' + e164;
   } else {
     // Sweden
@@ -93,8 +90,9 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: claims, error: authErr } = await supabase.auth.getClaims(authHeader.replace('Bearer ', ''));
-    if (authErr || !claims?.claims) {
+    // Verify the user is authenticated
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
@@ -207,8 +205,8 @@ Deno.serve(async (req) => {
       const toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-      // Only SMS mobile numbers, move landlines straight to call list (Sweden only)
-      if (!isMobileNumber(toNumber, lead.address)) {
+      // Check SMS eligibility: NO/DK send to all, SE only mobile
+      if (!isSmsEligible(toNumber, lead.address)) {
         const country = detectCountry(lead.address, toNumber);
         // Only Sweden has call routing for landlines
         if (country === 'SE') {
