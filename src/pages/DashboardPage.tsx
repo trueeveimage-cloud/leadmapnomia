@@ -3,7 +3,7 @@ import { useCRM } from "@/context/CRMContext";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, AreaChart, Area } from "recharts";
-import { TrendingUp, Users, Phone, MessageSquare, Target, ArrowUpRight, ArrowDownRight, Globe, Mail, Search } from "lucide-react";
+import { TrendingUp, Users, Phone, MessageSquare, Target, ArrowUpRight, ArrowDownRight, Globe, Mail, Search, Zap, Clock, CheckCircle } from "lucide-react";
 import { findCity, Country, getCitiesByCountry } from "@/lib/cities";
 
 const COLORS = {
@@ -55,33 +55,39 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 export default function DashboardPage() {
   const { counts } = useCRM();
-  const [msgStats, setMsgStats] = useState({ sent: 0, delivered: 0, failed: 0, inbound: 0 });
+  const [msgStats, setMsgStats] = useState({ sent: 0, delivered: 0, failed: 0, undelivered: 0, inbound: 0, queued: 0 });
   const [callStats, setCallStats] = useState<{ outcome: string; count: number }[]>([]);
   const [dailyActivity, setDailyActivity] = useState<{ date: string; sms: number; calls: number }[]>([]);
-  const [countryLeads, setCountryLeads] = useState<Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number }>>({
-    SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
-    NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
-    DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
+  const [countryLeads, setCountryLeads] = useState<Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number; contacted: number; replied: number }>>({
+    SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+    NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+    DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
   });
-  const [finderStats, setFinderStats] = useState<Record<Country, { runs: number; leads: number; spend: number }>>({
-    SE: { runs: 0, leads: 0, spend: 0 },
-    NO: { runs: 0, leads: 0, spend: 0 },
-    DK: { runs: 0, leads: 0, spend: 0 },
+  const [finderStats, setFinderStats] = useState<Record<Country, { runs: number; leads: number; spend: number; cities: number }>>({
+    SE: { runs: 0, leads: 0, spend: 0, cities: 0 },
+    NO: { runs: 0, leads: 0, spend: 0, cities: 0 },
+    DK: { runs: 0, leads: 0, spend: 0, cities: 0 },
   });
+  const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
+  const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
 
   useEffect(() => {
-    // Fetch SMS stats
+    // Fetch SMS stats with more detail
     Promise.all([
       supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "outbound"),
       supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "outbound").eq("status", "delivered"),
       supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "outbound").eq("status", "failed"),
+      supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "outbound").eq("status", "undelivered"),
       supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "inbound"),
-    ]).then(([sent, delivered, failed, inbound]) => {
+      supabase.from("message_logs").select("id", { count: "exact", head: true }).eq("direction", "outbound").in("status", ["queued", "sent"]),
+    ]).then(([sent, delivered, failed, undelivered, inbound, queued]) => {
       setMsgStats({
         sent: sent.count || 0,
         delivered: delivered.count || 0,
         failed: failed.count || 0,
+        undelivered: undelivered.count || 0,
         inbound: inbound.count || 0,
+        queued: queued.count || 0,
       });
     });
 
@@ -98,6 +104,39 @@ export default function DashboardPage() {
         });
         setCallStats(Object.entries(map).map(([outcome, count]) => ({ outcome, count })));
       });
+
+    // Fetch outreach stages
+    supabase
+      .from("leads")
+      .select("outreach_stage")
+      .then(({ data }) => {
+        const map: Record<string, number> = {};
+        (data || []).forEach((l: any) => {
+          const s = l.outreach_stage || "none";
+          map[s] = (map[s] || 0) + 1;
+        });
+        setOutreachStages(Object.entries(map).map(([stage, count]) => ({ stage, count })).sort((a, b) => b.count - a.count));
+      });
+
+    // Fetch campaign stats
+    Promise.all([
+      supabase.from("campaigns").select("id, status"),
+      supabase.from("campaign_runs").select("id, stats"),
+    ]).then(([camps, runs]) => {
+      const campaigns = camps.data || [];
+      const allRuns = runs.data || [];
+      let totalSent = 0;
+      for (const r of allRuns) {
+        const s = r.stats as any;
+        totalSent += s?.sent || 0;
+      }
+      setCampaignStats({
+        total: campaigns.length,
+        running: campaigns.filter(c => c.status === 'running').length,
+        totalRuns: allRuns.length,
+        totalSent,
+      });
+    });
 
     // Fetch daily activity (last 14 days)
     const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
@@ -119,23 +158,23 @@ export default function DashboardPage() {
         );
       });
 
-    // Fetch leads by country (using address to detect)
+    // Fetch leads by country
     (async () => {
       const PAGE_SIZE = 1000;
       const allLeads: any[] = [];
       let from = 0;
       while (true) {
-        const { data, error } = await supabase.from('leads').select('address, phone, email, section, outreach_opt_out, needs_call').range(from, from + PAGE_SIZE - 1);
+        const { data, error } = await supabase.from('leads').select('address, phone, email, section, outreach_opt_out, needs_call, status, has_replied, outreach_stage').range(from, from + PAGE_SIZE - 1);
         if (error || !data || data.length === 0) break;
         allLeads.push(...data);
         if (data.length < PAGE_SIZE) break;
         from += PAGE_SIZE;
       }
 
-      const stats: Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number }> = {
-        SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
-        NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
-        DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0 },
+      const stats: Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number; contacted: number; replied: number }> = {
+        SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+        NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+        DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
       };
 
       for (const lead of allLeads) {
@@ -144,7 +183,6 @@ export default function DashboardPage() {
         if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) country = 'NO';
         else if (addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) country = 'DK';
         else {
-          // Try matching city names
           for (const c of getCitiesByCountry('NO')) {
             if (addr.includes(c.name.toLowerCase())) { country = 'NO'; break; }
           }
@@ -159,6 +197,8 @@ export default function DashboardPage() {
         if (lead.email) stats[country].email++;
         if (lead.needs_call) stats[country].callOnly++;
         else if (lead.phone && !lead.outreach_opt_out) stats[country].smsOnly++;
+        if (lead.status === 'contacted' || lead.outreach_stage === 'sms_sent') stats[country].contacted++;
+        if (lead.has_replied) stats[country].replied++;
       }
       setCountryLeads(stats);
     })();
@@ -166,18 +206,23 @@ export default function DashboardPage() {
     // Fetch finder stats by country
     (async () => {
       const { data: runs } = await supabase.from('finder_runs').select('city, stats');
-      const fStats: Record<Country, { runs: number; leads: number; spend: number }> = {
-        SE: { runs: 0, leads: 0, spend: 0 },
-        NO: { runs: 0, leads: 0, spend: 0 },
-        DK: { runs: 0, leads: 0, spend: 0 },
+      const fStats: Record<Country, { runs: number; leads: number; spend: number; cities: number }> = {
+        SE: { runs: 0, leads: 0, spend: 0, cities: 0 },
+        NO: { runs: 0, leads: 0, spend: 0, cities: 0 },
+        DK: { runs: 0, leads: 0, spend: 0, cities: 0 },
       };
+      const citySets: Record<Country, Set<string>> = { SE: new Set(), NO: new Set(), DK: new Set() };
       for (const run of (runs || [])) {
         const city = findCity(run.city);
         const c = city?.country || 'SE';
         fStats[c].runs++;
+        citySets[c].add(run.city);
         const s = run.stats as any;
         fStats[c].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
         fStats[c].spend += ((s?.detailsFetched ?? 0) * 0.017) + (0.032 * 2);
+      }
+      for (const c of ['SE', 'NO', 'DK'] as Country[]) {
+        fStats[c].cities = citySets[c].size;
       }
       setFinderStats(fStats);
     })();
@@ -196,7 +241,8 @@ export default function DashboardPage() {
   // SMS pie data
   const smsPieData = [
     { name: "Delivered", value: msgStats.delivered, fill: COLORS.green },
-    { name: "Queued", value: Math.max(0, msgStats.sent - msgStats.delivered - msgStats.failed), fill: COLORS.amber },
+    { name: "Undelivered", value: msgStats.undelivered, fill: COLORS.amber },
+    { name: "Queued/Sent", value: msgStats.queued, fill: COLORS.cyan },
     { name: "Failed", value: msgStats.failed, fill: COLORS.red },
   ].filter(d => d.value > 0);
 
@@ -211,6 +257,10 @@ export default function DashboardPage() {
     not_interested: COLORS.red,
   };
 
+  const deliveryRate = msgStats.sent > 0
+    ? ((msgStats.delivered / msgStats.sent) * 100).toFixed(1)
+    : "0";
+
   const conversionRate = counts.total > 0
     ? ((counts.interested + counts.demo + counts.closed_won) / counts.total * 100).toFixed(1)
     : "0";
@@ -219,18 +269,14 @@ export default function DashboardPage() {
     ? (msgStats.inbound / msgStats.sent * 100).toFixed(1)
     : "0";
 
-  // Country chart data
-  const countryChartData = (['SE', 'NO', 'DK'] as Country[]).map(c => ({
-    name: `${FLAGS[c]} ${COUNTRY_NAMES[c]}`,
-    flag: FLAGS[c],
-    country: COUNTRY_NAMES[c],
-    leads: countryLeads[c].total,
-    phone: countryLeads[c].phone,
-    email: countryLeads[c].email,
-    sms: countryLeads[c].smsOnly,
-    call: countryLeads[c].callOnly,
-    fill: c === 'SE' ? COLORS.primary : c === 'NO' ? COLORS.red : COLORS.amber,
-  }));
+  // Outreach stage colors
+  const stageColors: Record<string, string> = {
+    none: COLORS.muted,
+    sms_sent: COLORS.primary,
+    no_reply_call: COLORS.amber,
+    replied: COLORS.green,
+    opted_out: COLORS.red,
+  };
 
   return (
     <AppLayout>
@@ -240,12 +286,18 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">Overview of your outreach pipeline</p>
         </div>
 
-        {/* Stat cards */}
+        {/* Stat cards - 2 rows */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="Reachable Leads" value={counts.total - counts.hasWebsite - counts.missing} icon={<Users size={18} />} color={COLORS.primary} sub={`${counts.total.toLocaleString()} total`} />
-          <StatCard label="SMS Sent" value={msgStats.sent} icon={<MessageSquare size={18} />} color={COLORS.cyan} sub={`${replyRate}% reply rate`} />
-          <StatCard label="Calls Made" value={callStats.reduce((s, c) => s + c.count, 0)} icon={<Phone size={18} />} color={COLORS.amber} />
+          <StatCard label="SMS Sent" value={msgStats.sent} icon={<MessageSquare size={18} />} color={COLORS.cyan} sub={`${deliveryRate}% delivered`} />
+          <StatCard label="Replies" value={msgStats.inbound} icon={<MessageSquare size={18} />} color={COLORS.green} sub={`${replyRate}% reply rate`} />
           <StatCard label="Conversion" value={`${conversionRate}%`} icon={<Target size={18} />} color={COLORS.green} sub={`${counts.interested + counts.demo + counts.closed_won} interested+`} />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="Delivered" value={msgStats.delivered} icon={<CheckCircle size={18} />} color={COLORS.green} sub={`${msgStats.undelivered} undelivered`} />
+          <StatCard label="Calls Made" value={callStats.reduce((s, c) => s + c.count, 0)} icon={<Phone size={18} />} color={COLORS.amber} />
+          <StatCard label="Campaigns" value={campaignStats.total} icon={<Zap size={18} />} color={COLORS.purple} sub={`${campaignStats.running} active · ${campaignStats.totalRuns} runs`} />
+          <StatCard label="Total API Spend" value={`$${(Object.values(finderStats).reduce((s, f) => s + f.spend, 0)).toFixed(0)}`} icon={<Search size={18} />} color={COLORS.cyan} sub={`${Object.values(finderStats).reduce((s, f) => s + f.runs, 0)} finder runs`} />
         </div>
 
         {/* Country breakdown */}
@@ -254,13 +306,16 @@ export default function DashboardPage() {
             {(['SE', 'NO', 'DK'] as Country[]).map(c => {
               const cl = countryLeads[c];
               const fs = finderStats[c];
+              const costPerLead = fs.leads > 0 ? (fs.spend / fs.leads).toFixed(2) : '-';
+              const contactRate = cl.total > 0 ? ((cl.contacted / cl.total) * 100).toFixed(0) : '0';
+              const replyR = cl.contacted > 0 ? ((cl.replied / cl.contacted) * 100).toFixed(0) : '0';
               return (
                 <div key={c} className="rounded-lg border border-border bg-secondary/30 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-2xl">{FLAGS[c]}</span>
                     <div>
                       <div className="text-sm font-semibold text-foreground">{COUNTRY_NAMES[c]}</div>
-                      <div className="text-xs text-muted-foreground">{fs.runs} runs · ${fs.spend.toFixed(0)} spent</div>
+                      <div className="text-xs text-muted-foreground">{fs.runs} runs · {fs.cities} cities · ${fs.spend.toFixed(0)}</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -273,8 +328,12 @@ export default function DashboardPage() {
                       <div className="text-muted-foreground">Has Phone</div>
                     </div>
                     <div className="bg-card rounded p-2">
-                      <div className="text-lg font-bold" style={{ color: COLORS.primary }}>{cl.email}</div>
-                      <div className="text-muted-foreground">Has Email</div>
+                      <div className="text-lg font-bold" style={{ color: COLORS.primary }}>{cl.contacted}</div>
+                      <div className="text-muted-foreground">Contacted ({contactRate}%)</div>
+                    </div>
+                    <div className="bg-card rounded p-2">
+                      <div className="text-lg font-bold" style={{ color: COLORS.cyan }}>{cl.replied}</div>
+                      <div className="text-muted-foreground">Replied ({replyR}%)</div>
                     </div>
                     <div className="bg-card rounded p-2">
                       <div className="text-lg font-bold" style={{ color: c === 'SE' ? COLORS.amber : COLORS.cyan }}>
@@ -282,24 +341,32 @@ export default function DashboardPage() {
                       </div>
                       <div className="text-muted-foreground">{c === 'SE' ? 'Call List' : 'SMS Queue'}</div>
                     </div>
+                    <div className="bg-card rounded p-2">
+                      <div className="text-lg font-bold" style={{ color: COLORS.purple }}>${costPerLead}</div>
+                      <div className="text-muted-foreground">Cost/Lead</div>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={countryChartData} margin={{ left: 10, right: 10 }}>
-              <XAxis dataKey="country" tick={{ fontSize: 12, fill: "hsl(215, 15%, 50%)" }} />
+            <BarChart data={(['SE', 'NO', 'DK'] as Country[]).map(c => ({
+              name: COUNTRY_NAMES[c],
+              leads: countryLeads[c].total,
+              contacted: countryLeads[c].contacted,
+              replied: countryLeads[c].replied,
+              fill: c === 'SE' ? COLORS.primary : c === 'NO' ? COLORS.red : COLORS.amber,
+            }))} margin={{ left: 10, right: 10 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(215, 15%, 50%)" }} />
               <YAxis tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />
               <Tooltip
                 contentStyle={{ background: "hsl(222, 24%, 10%)", border: "1px solid hsl(222, 22%, 16%)", borderRadius: 8, fontSize: 12 }}
-                formatter={(value: number, name: string) => [value, name === 'leads' ? 'Total' : name === 'sms' ? 'SMS Queue' : name === 'call' ? 'Call List' : name]}
               />
-              <Bar dataKey="leads" name="Total" radius={[4, 4, 0, 0]}>
-                {countryChartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
-                ))}
-              </Bar>
+              <Bar dataKey="leads" name="Total" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="contacted" name="Contacted" fill={COLORS.cyan} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="replied" name="Replied" fill={COLORS.green} radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{ fontSize: 11, color: "hsl(215, 15%, 50%)" }} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -324,7 +391,7 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="SMS Delivery">
+          <ChartCard title="SMS Delivery Breakdown">
             {smsPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -358,8 +425,42 @@ export default function DashboardPage() {
           </ChartCard>
         </div>
 
-        {/* Charts row 2 */}
+        {/* Outreach stages + Daily activity */}
         <div className="grid gap-4 md:grid-cols-2">
+          <ChartCard title="Outreach Stages">
+            {outreachStages.length > 0 ? (
+              <div className="space-y-2">
+                {outreachStages.map(s => {
+                  const total = outreachStages.reduce((sum, x) => sum + x.count, 0);
+                  const pct = total > 0 ? (s.count / total * 100) : 0;
+                  const labels: Record<string, string> = {
+                    none: 'Not Contacted',
+                    sms_sent: 'SMS Sent',
+                    no_reply_call: 'Moved to Call',
+                    replied: 'Replied',
+                    opted_out: 'Opted Out',
+                  };
+                  return (
+                    <div key={s.stage}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">{labels[s.stage] || s.stage}</span>
+                        <span className="text-foreground font-medium">{s.count} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(1, pct)}%`, background: stageColors[s.stage] || COLORS.muted }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">No outreach data yet</div>
+            )}
+          </ChartCard>
+
           <ChartCard title="Daily Activity (14 days)">
             {dailyActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
@@ -378,53 +479,28 @@ export default function DashboardPage() {
               <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">No activity yet</div>
             )}
           </ChartCard>
-
-          <ChartCard title="Call Outcomes">
-            {callStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={callStats} margin={{ left: -10, right: 10 }}>
-                  <XAxis dataKey="outcome" tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(222, 24%, 10%)", border: "1px solid hsl(222, 22%, 16%)", borderRadius: 8, fontSize: 12 }}
-                  />
-                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                    {callStats.map((entry, i) => (
-                      <Cell key={i} fill={outcomeColors[entry.outcome] || COLORS.muted} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">No call data yet</div>
-            )}
-          </ChartCard>
         </div>
 
-        {/* Finder Performance by Country */}
-        <ChartCard title="Finder Performance by Country">
-          <div className="grid grid-cols-3 gap-3">
-            {(['SE', 'NO', 'DK'] as Country[]).map(c => {
-              const fs = finderStats[c];
-              const cities = getCitiesByCountry(c);
-              const costPerLead = fs.leads > 0 ? (fs.spend / fs.leads).toFixed(2) : '-';
-              return (
-                <div key={c} className="rounded-lg border border-border bg-secondary/30 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">{FLAGS[c]}</span>
-                    <span className="text-sm font-semibold text-foreground">{COUNTRY_NAMES[c]}</span>
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Finder Runs</span><span className="font-medium text-foreground">{fs.runs}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Leads Found</span><span className="font-medium" style={{ color: COLORS.green }}>{fs.leads}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Est. Spend</span><span className="font-medium text-foreground">${fs.spend.toFixed(0)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Cost/Lead</span><span className="font-medium" style={{ color: COLORS.cyan }}>${costPerLead}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Cities</span><span className="font-medium text-foreground">{cities.length}</span></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* Call outcomes */}
+        <ChartCard title="Call Outcomes">
+          {callStats.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={callStats} margin={{ left: -10, right: 10 }}>
+                <XAxis dataKey="outcome" tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />
+                <YAxis tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />
+                <Tooltip
+                  contentStyle={{ background: "hsl(222, 24%, 10%)", border: "1px solid hsl(222, 22%, 16%)", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {callStats.map((entry, i) => (
+                    <Cell key={i} fill={outcomeColors[entry.outcome] || COLORS.muted} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">No call data yet</div>
+          )}
         </ChartCard>
 
         {/* Pipeline breakdown */}

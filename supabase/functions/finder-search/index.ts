@@ -467,8 +467,15 @@ serve(async (req) => {
     if (action === 'search' || action === 'resume') {
       const { spent, ok } = await checkSpendingCap();
       if (!ok) {
+        // Update the run status so it doesn't stay stuck as "pending"
+        if (runId) {
+          await supabase.from('finder_runs').update({ 
+            status: 'failed', 
+            stats: { error: 'spending_cap', spent: spent.toFixed(2), cap: COST_CAP } 
+          }).eq('id', runId);
+        }
         return new Response(JSON.stringify({ 
-          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Set a higher cap or use a new API key.` 
+          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Increase the cap in the edge function to continue.` 
         }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
