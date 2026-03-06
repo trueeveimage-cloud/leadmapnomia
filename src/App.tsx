@@ -32,13 +32,42 @@ import { useNavigate } from "react-router-dom";
 
 const queryClient = new QueryClient();
 
-// Global hotkeys
+// Global hotkeys + Easter egg
 function GlobalHotkeys() {
   const navigate = useNavigate();
   useEffect(() => {
+    // Konami code: ↑↑↓↓←→←→BA
+    const konamiCode = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+    let konamiIndex = 0;
+
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName.toLowerCase();
       const isInput = tag === 'input' || tag === 'textarea';
+
+      // Konami code detection
+      if (e.key === konamiCode[konamiIndex]) {
+        konamiIndex++;
+        if (konamiIndex === konamiCode.length) {
+          konamiIndex = 0;
+          // 🎉 Easter egg activated
+          const messages = [
+            "💰 You're destined for greatness. Keep grinding.",
+            "🚀 Every rejection is one step closer to a YES.",
+            "👑 Champions aren't built in comfort zones.",
+            "🔥 Your parents will be so proud. Don't stop.",
+            "💎 Diamonds are made under pressure. You got this.",
+            "⚡ The hustle is real. The results are coming.",
+          ];
+          const msg = messages[Math.floor(Math.random() * messages.length)];
+          document.body.style.transition = 'all 0.5s';
+          document.body.style.filter = 'hue-rotate(180deg)';
+          setTimeout(() => { document.body.style.filter = ''; }, 2000);
+          alert(msg);
+        }
+      } else {
+        konamiIndex = 0;
+      }
+
       if (e.key === 'n' && !isInput && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         navigate('/next');
