@@ -9,10 +9,12 @@ function detectCountry(address?: string | null, phone?: string | null): string {
   const addr = (address || '').toLowerCase();
   if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) return 'NO';
   if (addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) return 'DK';
+  if (addr.includes('sverige') || addr.includes('sweden') || addr.includes(', se')) return 'SE';
   if (phone) {
     const clean = phone.replace(/\s|-/g, '');
     if (clean.startsWith('+47') || (clean.startsWith('47') && clean.length >= 10)) return 'NO';
     if (clean.startsWith('+45') || (clean.startsWith('45') && clean.length >= 10)) return 'DK';
+    if (clean.startsWith('+46') || (clean.startsWith('46') && clean.length >= 10)) return 'SE';
   }
   return 'SE';
 }
@@ -96,7 +98,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    const { campaignId, batchSize } = await req.json();
+    const { campaignId, batchSize, countries: requestedCountries } = await req.json();
     if (!campaignId) {
       return new Response(JSON.stringify({ error: 'campaignId required' }), { status: 400, headers: corsHeaders });
     }
@@ -127,6 +129,14 @@ Deno.serve(async (req) => {
     const cooldownDays = campaign.cooldown_days || 0;
     const cooldownDate = new Date(Date.now() - cooldownDays * 86400000).toISOString();
 
+    // Determine which countries to send to
+    // Priority: 1) request body param, 2) campaign filter, 3) default to Sweden only
+    const targetCountries: string[] = requestedCountries?.length
+      ? requestedCountries
+      : filter.countries?.length
+        ? filter.countries
+        : ['SE'];
+
     // Check how many messages already sent today to enforce daily cap
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -144,7 +154,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use custom batch size if provided, else campaign default
     const requestedBatch = batchSize ? Math.min(Number(batchSize), remaining) : Math.min(campaign.batch_cap || 200, remaining);
     const effectiveLimit = requestedBatch;
 
@@ -170,19 +179,21 @@ Deno.serve(async (req) => {
     if (cooldownDays > 0) {
       query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
     }
-    query = query.limit(effectiveLimit);
+    
+    // Fetch more leads than needed to account for country/landline filtering
+    query = query.limit(effectiveLimit * 3);
 
     const { data: leads, error: leadErr } = await query;
     if (leadErr) throw leadErr;
 
-    // Filter by country if specified
-    let filteredLeads = leads || [];
-    if (filter.countries?.length) {
-      filteredLeads = filteredLeads.filter((lead: any) => {
-        const country = detectCountry(lead.address, lead.phone);
-        return filter.countries.includes(country);
-      });
-    }
+    // Filter by target countries
+    let filteredLeads = (leads || []).filter((lead: any) => {
+      const country = detectCountry(lead.address, lead.phone);
+      return targetCountries.includes(country);
+    });
+
+    // Limit to effective batch size
+    filteredLeads = filteredLeads.slice(0, effectiveLimit);
 
     // Create campaign run
     const { data: run, error: runErr } = await dbClient
@@ -197,6 +208,7 @@ Deno.serve(async (req) => {
       skipped_no_phone: 0, skipped_opt_out: 0, skipped_cooldown: 0, skipped_duplicate: 0,
       skipped_landline: 0,
       provider: useTwilio ? 'twilio' : 'mock',
+      countries: targetCountries,
     };
 
     for (const lead of filteredLeads) {
@@ -205,10 +217,9 @@ Deno.serve(async (req) => {
       const toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-      // Check SMS eligibility: NO/DK send to all, SE only mobile
+      // Check SMS eligibility
       if (!isSmsEligible(toNumber, lead.address)) {
         const country = detectCountry(lead.address, toNumber);
-        // Only Sweden has call routing for landlines
         if (country === 'SE') {
           stats.skipped_landline++;
           await dbClient.from('leads').update({
@@ -247,7 +258,6 @@ Deno.serve(async (req) => {
           campaign_run_id: run.id,
         });
 
-        // Save normalized E164 on the lead if not already set
         if (!lead.phone_e164 && e164 !== toNumber) {
           await dbClient.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
         }
@@ -277,7 +287,7 @@ Deno.serve(async (req) => {
         stats.delivered++;
       }
 
-      // Update lead — move to 'contacted' status
+      // Update lead
       await dbClient.from('leads').update({
         last_outbound_at: new Date().toISOString(),
         outreach_stage: 'sms_sent',
