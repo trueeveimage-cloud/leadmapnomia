@@ -8,8 +8,15 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Country } from '@/lib/cities';
+
+const COUNTRY_OPTIONS: { value: Country; label: string; flag: string }[] = [
+  { value: 'SE', label: 'Sweden', flag: '🇸🇪' },
+  { value: 'NO', label: 'Norway', flag: '🇳🇴' },
+  { value: 'DK', label: 'Denmark', flag: '🇩🇰' },
+];
 
 function useNextBatchTimer() {
   const [timeLeft, setTimeLeft] = useState('');
@@ -43,6 +50,7 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [customBatchSize, setCustomBatchSize] = useState<string>('');
+  const [selectedCountries, setSelectedCountries] = useState<Country[]>(['SE']);
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
@@ -54,6 +62,9 @@ export default function CampaignDetailPage() {
       const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
       setCampaign(c);
       setRuns(r);
+      // Set selected countries from campaign filter
+      const campCountries = (c.audience_filter as any)?.countries;
+      if (campCountries?.length) setSelectedCountries(campCountries);
       const runIds = r.map(run => run.id);
       if (runIds.length > 0) {
         const { data } = await supabase
@@ -80,18 +91,32 @@ export default function CampaignDetailPage() {
     toast.success('Refreshed');
   };
 
+  const toggleCountry = (c: Country) => {
+    setSelectedCountries(prev => 
+      prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
+    );
+  };
+
   const handleSendBatch = async () => {
     if (!campaign || !id) return;
+    if (selectedCountries.length === 0) {
+      toast.error('Select at least one country');
+      return;
+    }
     setSending(true);
     try {
-      const body: any = { campaignId: id };
+      const body: any = { campaignId: id, countries: selectedCountries };
       if (customBatchSize && Number(customBatchSize) > 0) {
         body.batchSize = Number(customBatchSize);
       }
       const res = await supabase.functions.invoke('send-campaign-batch', { body });
       if (res.error) throw res.error;
       const data = res.data as any;
-      toast.success(`Sent ${data.stats?.sent ?? 0} messages`);
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.failed ?? 0} failed, ${data.stats?.skipped_landline ?? 0} landlines skipped)`);
+      }
       setCustomBatchSize('');
       await load();
     } catch (err: any) { toast.error(err.message || 'Send failed'); }
@@ -111,10 +136,9 @@ export default function CampaignDetailPage() {
     }
     const delay = scheduledAt.getTime() - now.getTime();
     const timeStr = scheduledAt.toLocaleString();
-    toast.success(`Batch scheduled for ${timeStr}`);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => COUNTRY_OPTIONS.find(co => co.value === c)?.flag).join(' ')}`);
     setShowSchedule(false);
     
-    // Set a client-side timeout to trigger the batch
     setTimeout(async () => {
       toast.info('Scheduled batch starting now...');
       await handleSendBatch();
@@ -146,12 +170,10 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
-  // Categorize messages
   const delivered = messages.filter(m => m.status === 'delivered' || m.status === 'sent');
   const failed = messages.filter(m => m.status === 'failed');
   const undelivered = messages.filter(m => m.status === 'undelivered');
 
-  // Batch schedule calculation
   const totalTarget = campaign?.batch_cap ?? 0;
   const dailyCap = campaign?.daily_cap ?? 100;
   const totalSent = messages.length;
@@ -161,8 +183,6 @@ export default function CampaignDetailPage() {
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
 
-  // Country info from filter
-  const countries = (campaign.audience_filter as any)?.countries as string[] | undefined;
   const countryFlags: Record<string, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
 
   return (
@@ -178,7 +198,6 @@ export default function CampaignDetailPage() {
             <p className="text-xs text-muted-foreground mt-0.5">
               Status: <span className="text-foreground font-medium">{campaign.status}</span>
               {eligible !== null && <> · {eligible} leads eligible</>}
-              {countries?.length ? <> · {countries.map(c => countryFlags[c] || c).join(' ')}</> : null}
             </p>
           </div>
           <div className="flex gap-2">
@@ -194,6 +213,29 @@ export default function CampaignDetailPage() {
         {/* Send controls */}
         <div className="bg-card border border-border rounded-lg p-4 mb-6">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Send Batch</h3>
+          
+          {/* Country selector */}
+          <div className="mb-3">
+            <label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
+              <Globe size={12} /> Target Countries
+            </label>
+            <div className="flex gap-1.5">
+              {COUNTRY_OPTIONS.map(c => (
+                <button
+                  key={c.value}
+                  onClick={() => toggleCountry(c.value)}
+                  className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                    selectedCountries.includes(c.value) 
+                      ? 'bg-primary/15 text-primary border-primary/30' 
+                      : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
+                  }`}
+                >
+                  {c.flag} {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <label className="text-xs text-muted-foreground mb-1 block">Batch Size (leave empty for default: {campaign.daily_cap})</label>
@@ -207,8 +249,8 @@ export default function CampaignDetailPage() {
                 className="h-8 text-sm"
               />
             </div>
-            <Button size="sm" onClick={handleSendBatch} disabled={sending} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : 'Send Now'}
+            <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0} className="gap-1.5">
+              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryFlags[c]).join('')}`}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
               <Calendar size={13} /> Schedule
@@ -332,19 +374,30 @@ export default function CampaignDetailPage() {
             <p className="text-xs text-muted-foreground">No runs yet. Click "Send Now" to start.</p>
           ) : (
             <div className="space-y-2">
-              {runs.slice(0, 5).map(r => (
-                <div key={r.id} className="bg-card border border-border rounded-lg p-3 text-xs">
-                  <div className="flex justify-between mb-1">
-                    <span className="text-foreground font-medium">{new Date(r.started_at).toLocaleString()}</span>
-                    <span className="text-muted-foreground">{r.ended_at ? 'Completed' : 'In progress'}</span>
+              {runs.slice(0, 10).map(r => {
+                const s = r.stats as any;
+                return (
+                  <div key={r.id} className="bg-card border border-border rounded-lg p-3 text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-foreground font-medium">{new Date(r.started_at).toLocaleString()}</span>
+                      <div className="flex items-center gap-2">
+                        {s?.countries && (
+                          <span className="text-muted-foreground">
+                            {(s.countries as string[]).map((c: string) => countryFlags[c] || c).join(' ')}
+                          </span>
+                        )}
+                        <span className="text-muted-foreground">{r.ended_at ? 'Completed' : 'In progress'}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 text-muted-foreground flex-wrap">
+                      {s?.attempted !== undefined && <span>attempted: <span className="text-foreground">{s.attempted}</span></span>}
+                      {s?.sent !== undefined && <span>sent: <span className="text-foreground font-semibold">{s.sent}</span></span>}
+                      {s?.failed !== undefined && s.failed > 0 && <span className="text-destructive">failed: {s.failed}</span>}
+                      {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines: {s.skipped_landline}</span>}
+                    </div>
                   </div>
-                  <div className="flex gap-3 text-muted-foreground flex-wrap">
-                    {Object.entries(r.stats).map(([k, v]) => (
-                      <span key={k}>{k}: <span className="text-foreground">{v as number}</span></span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
