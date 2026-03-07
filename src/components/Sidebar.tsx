@@ -169,7 +169,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     <aside className="w-64 shrink-0 h-screen flex flex-col border-r border-sidebar-border bg-sidebar overflow-hidden">
       {/* Logo */}
       <div className="px-4 py-3.5 border-b border-sidebar-border flex items-center justify-between">
-        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
+        <Link to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group" data-easter-egg>
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20 transition-transform duration-200 group-hover:scale-105">
             <BarChart2 size={15} className="text-primary-foreground" />
           </div>
