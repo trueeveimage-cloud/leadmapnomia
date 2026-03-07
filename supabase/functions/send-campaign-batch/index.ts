@@ -180,20 +180,17 @@ Deno.serve(async (req) => {
       query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
     }
     
-    // Fetch more leads than needed to account for country/landline filtering
-    query = query.limit(effectiveLimit * 3);
+    // Fetch MORE leads to account for landline skipping — we want effectiveLimit ACTUAL sends
+    query = query.limit(effectiveLimit * 5);
 
     const { data: leads, error: leadErr } = await query;
     if (leadErr) throw leadErr;
 
     // Filter by target countries
-    let filteredLeads = (leads || []).filter((lead: any) => {
+    const filteredLeads = (leads || []).filter((lead: any) => {
       const country = detectCountry(lead.address, lead.phone);
       return targetCountries.includes(country);
     });
-
-    // Limit to effective batch size
-    filteredLeads = filteredLeads.slice(0, effectiveLimit);
 
     // Create campaign run
     const { data: run, error: runErr } = await dbClient
@@ -211,24 +208,26 @@ Deno.serve(async (req) => {
       countries: targetCountries,
     };
 
+    // Loop until we've SENT effectiveLimit messages (not just attempted)
     for (const lead of filteredLeads) {
+      // Stop once we've sent enough
+      if (stats.sent >= effectiveLimit) break;
+
       stats.attempted++;
 
       const toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-      // Check SMS eligibility
+      // Check SMS eligibility — landlines DON'T count toward batch limit
       if (!isSmsEligible(toNumber, lead.address)) {
         const country = detectCountry(lead.address, toNumber);
+        stats.skipped_landline++;
         if (country === 'SE') {
-          stats.skipped_landline++;
           await dbClient.from('leads').update({
             needs_call: true,
             outreach_stage: 'no_reply_call',
             call_after_at: new Date().toISOString(),
           }).eq('id', lead.id);
-        } else {
-          stats.skipped_landline++;
         }
         continue;
       }
