@@ -383,8 +383,8 @@ export default function CampaignDetailPage() {
                       <span className="text-foreground font-medium">{new Date(r.started_at).toLocaleString()}</span>
                       <div className="flex items-center gap-2">
                         {s?.countries && (
-                          <span className="text-muted-foreground">
-                            {(s.countries as string[]).map((c: string) => countryFlags[c] || c).join(' ')}
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            {(s.countries as string[]).map((c: string) => <CountryFlag key={c} country={c} size={14} />)}
                           </span>
                         )}
                         <span className="text-muted-foreground">{r.ended_at ? 'Completed' : 'In progress'}</span>
