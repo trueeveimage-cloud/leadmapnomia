@@ -17,7 +17,6 @@ const COLORS = {
   muted: "hsl(215, 15%, 50%)",
 };
 
-const FLAGS: Record<Country, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
 const COUNTRY_NAMES: Record<Country, string> = { SE: 'Sweden', NO: 'Norway', DK: 'Denmark' };
 
 interface StatCardProps {
