@@ -11,11 +11,12 @@ import { useParams, Link } from 'react-router-dom';
 import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
+import CountryFlag, { countryLabel } from '@/components/CountryFlag';
 
-const COUNTRY_OPTIONS: { value: Country; label: string; flag: string }[] = [
-  { value: 'SE', label: 'Sweden', flag: '🇸🇪' },
-  { value: 'NO', label: 'Norway', flag: '🇳🇴' },
-  { value: 'DK', label: 'Denmark', flag: '🇩🇰' },
+const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
+  { value: 'SE', label: 'Sweden' },
+  { value: 'NO', label: 'Norway' },
+  { value: 'DK', label: 'Denmark' },
 ];
 
 function useNextBatchTimer() {
@@ -136,7 +137,7 @@ export default function CampaignDetailPage() {
     }
     const delay = scheduledAt.getTime() - now.getTime();
     const timeStr = scheduledAt.toLocaleString();
-    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => COUNTRY_OPTIONS.find(co => co.value === c)?.flag).join(' ')}`);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`);
     setShowSchedule(false);
     
     setTimeout(async () => {
@@ -183,7 +184,7 @@ export default function CampaignDetailPage() {
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
 
-  const countryFlags: Record<string, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
+  
 
   return (
     <AppLayout>
@@ -230,7 +231,7 @@ export default function CampaignDetailPage() {
                       : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
                   }`}
                 >
-                  {c.flag} {c.label}
+                  <CountryFlag country={c.value} size={16} /> {c.label}
                 </button>
               ))}
             </div>
@@ -250,7 +251,7 @@ export default function CampaignDetailPage() {
               />
             </div>
             <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryFlags[c]).join('')}`}
+              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
               <Calendar size={13} /> Schedule
@@ -382,8 +383,8 @@ export default function CampaignDetailPage() {
                       <span className="text-foreground font-medium">{new Date(r.started_at).toLocaleString()}</span>
                       <div className="flex items-center gap-2">
                         {s?.countries && (
-                          <span className="text-muted-foreground">
-                            {(s.countries as string[]).map((c: string) => countryFlags[c] || c).join(' ')}
+                          <span className="flex items-center gap-1 text-muted-foreground">
+                            {(s.countries as string[]).map((c: string) => <CountryFlag key={c} country={c} size={14} />)}
                           </span>
                         )}
                         <span className="text-muted-foreground">{r.ended_at ? 'Completed' : 'In progress'}</span>

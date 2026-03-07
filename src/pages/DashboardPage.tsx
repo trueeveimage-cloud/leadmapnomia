@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, AreaChart, Area } from "recharts";
 import { TrendingUp, Users, Phone, MessageSquare, Target, ArrowUpRight, ArrowDownRight, Globe, Mail, Search, Zap, Clock, CheckCircle } from "lucide-react";
 import { findCity, Country, getCitiesByCountry } from "@/lib/cities";
+import CountryFlag, { countryLabel } from "@/components/CountryFlag";
 
 const COLORS = {
   primary: "hsl(213, 94%, 58%)",
@@ -16,7 +17,6 @@ const COLORS = {
   muted: "hsl(215, 15%, 50%)",
 };
 
-const FLAGS: Record<Country, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
 const COUNTRY_NAMES: Record<Country, string> = { SE: 'Sweden', NO: 'Norway', DK: 'Denmark' };
 
 interface StatCardProps {
@@ -312,7 +312,7 @@ export default function DashboardPage() {
               return (
                 <div key={c} className="rounded-lg border border-border bg-secondary/30 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">{FLAGS[c]}</span>
+                    <CountryFlag country={c} size={28} />
                     <div>
                       <div className="text-sm font-semibold text-foreground">{COUNTRY_NAMES[c]}</div>
                       <div className="text-xs text-muted-foreground">{fs.runs} runs · {fs.cities} cities · ${fs.spend.toFixed(0)}</div>

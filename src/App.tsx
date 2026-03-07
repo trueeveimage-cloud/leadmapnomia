@@ -49,20 +49,7 @@ function GlobalHotkeys() {
         konamiIndex++;
         if (konamiIndex === konamiCode.length) {
           konamiIndex = 0;
-          // 🎉 Easter egg activated
-          const messages = [
-            "💰 You're destined for greatness. Keep grinding.",
-            "🚀 Every rejection is one step closer to a YES.",
-            "👑 Champions aren't built in comfort zones.",
-            "🔥 Your parents will be so proud. Don't stop.",
-            "💎 Diamonds are made under pressure. You got this.",
-            "⚡ The hustle is real. The results are coming.",
-          ];
-          const msg = messages[Math.floor(Math.random() * messages.length)];
-          document.body.style.transition = 'all 0.5s';
-          document.body.style.filter = 'hue-rotate(180deg)';
-          setTimeout(() => { document.body.style.filter = ''; }, 2000);
-          alert(msg);
+          activateEasterEgg();
         }
       } else {
         konamiIndex = 0;
@@ -74,9 +61,56 @@ function GlobalHotkeys() {
       }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+
+    // Easier easter egg: click the logo/title 7 times rapidly
+    let clickCount = 0;
+    let clickTimer: ReturnType<typeof setTimeout>;
+    const logoHandler = () => {
+      clickCount++;
+      clearTimeout(clickTimer);
+      if (clickCount >= 7) {
+        clickCount = 0;
+        activateEasterEgg();
+      }
+      clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
+    };
+    // Attach to sidebar logo area
+    setTimeout(() => {
+      const logo = document.querySelector('[data-easter-egg]');
+      if (logo) logo.addEventListener('click', logoHandler);
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('keydown', handler);
+      clearTimeout(clickTimer);
+    };
   }, [navigate]);
   return null;
+}
+
+function activateEasterEgg() {
+  const messages = [
+    "💰 You're destined for greatness. Keep grinding.",
+    "🚀 Every rejection is one step closer to a YES.",
+    "👑 Champions aren't built in comfort zones.",
+    "🔥 Your parents will be so proud. Don't stop.",
+    "💎 Diamonds are made under pressure. You got this.",
+    "⚡ The hustle is real. The results are coming.",
+    "🦁 You didn't come this far to only come this far.",
+    "🌟 Greatness takes time. Stay patient, stay hungry.",
+  ];
+  const msg = messages[Math.floor(Math.random() * messages.length)];
+  document.body.style.transition = 'all 0.5s';
+  document.body.style.filter = 'hue-rotate(180deg)';
+  setTimeout(() => { document.body.style.filter = ''; }, 2000);
+  
+  // Show a nice toast-style overlay instead of alert
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:99999;background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid #0f3460;border-radius:20px;padding:40px 50px;text-align:center;font-size:24px;color:#e94560;font-weight:bold;box-shadow:0 0 60px rgba(233,69,96,0.3);animation:fadeIn 0.3s ease';
+  overlay.textContent = msg;
+  document.body.appendChild(overlay);
+  setTimeout(() => { overlay.style.opacity = '0'; overlay.style.transition = 'opacity 0.5s'; }, 2500);
+  setTimeout(() => overlay.remove(), 3000);
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {

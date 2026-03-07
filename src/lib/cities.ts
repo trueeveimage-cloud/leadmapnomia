@@ -15,9 +15,9 @@ export interface CityProfile {
 }
 
 export const COUNTRY_LABELS: Record<Country, string> = {
-  SE: '🇸🇪 Sweden',
-  NO: '🇳🇴 Norway',
-  DK: '🇩🇰 Denmark',
+  SE: 'Sweden',
+  NO: 'Norway',
+  DK: 'Denmark',
 };
 
 export const COUNTRY_CENTER: Record<Country, { lat: number; lng: number; zoom: number }> = {
