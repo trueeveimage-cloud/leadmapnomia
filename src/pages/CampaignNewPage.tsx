@@ -148,7 +148,7 @@ export default function CampaignNewPage() {
                       filter.countries?.includes(c.value) ? 'bg-primary/15 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
                     }`}
                   >
-                    {c.flag} {c.label}
+                    <CountryFlag country={c.value} size={16} /> {c.label}
                   </button>
                 ))}
               </div>
