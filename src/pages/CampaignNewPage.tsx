@@ -9,6 +9,7 @@ import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import type { Country } from '@/lib/cities';
+import CountryFlag from '@/components/CountryFlag';
 
 const SECTIONS = [
   { value: 'phone', label: 'Has Phone' },
@@ -17,10 +18,10 @@ const SECTIONS = [
   { value: 'unsorted', label: 'Unsorted' },
 ];
 
-const COUNTRIES: { value: Country; label: string; flag: string }[] = [
-  { value: 'SE', label: 'Sweden', flag: '🇸🇪' },
-  { value: 'NO', label: 'Norway', flag: '🇳🇴' },
-  { value: 'DK', label: 'Denmark', flag: '🇩🇰' },
+const COUNTRIES: { value: Country; label: string }[] = [
+  { value: 'SE', label: 'Sweden' },
+  { value: 'NO', label: 'Norway' },
+  { value: 'DK', label: 'Denmark' },
 ];
 
 const VARIABLES = ['{name}', '{category}', '{city}', '{rating}'];
