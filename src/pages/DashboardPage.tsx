@@ -312,7 +312,7 @@ export default function DashboardPage() {
               return (
                 <div key={c} className="rounded-lg border border-border bg-secondary/30 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">{FLAGS[c]}</span>
+                    <CountryFlag country={c} size={28} />
                     <div>
                       <div className="text-sm font-semibold text-foreground">{COUNTRY_NAMES[c]}</div>
                       <div className="text-xs text-muted-foreground">{fs.runs} runs · {fs.cities} cities · ${fs.spend.toFixed(0)}</div>
