@@ -251,7 +251,7 @@ export default function CampaignDetailPage() {
               />
             </div>
             <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryFlags[c]).join('')}`}
+              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
               <Calendar size={13} /> Schedule
