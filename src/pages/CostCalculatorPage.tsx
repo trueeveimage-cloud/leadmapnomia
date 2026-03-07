@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
-import { Calculator, TrendingUp, Search, MapPin, DollarSign, MessageSquare } from 'lucide-react';
+import { Calculator, TrendingUp, Search, MapPin, DollarSign, MessageSquare, Wallet, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
 
-// Google Places API pricing (USD per request, as of 2025)
 const PRICING = {
   textSearch: 0.032,
   placeDetails: 0.017,
@@ -13,10 +13,9 @@ const PRICING = {
   nearbySearch: 0.032,
 };
 
-// Twilio SMS pricing (SEK)
 const SMS_PRICING = {
-  outbound: 0.065, // ~$0.065 per outbound SMS segment (Sweden)
-  inbound: 0.0075, // ~$0.0075 per inbound
+  outbound: 0.065,
+  inbound: 0.0075,
 };
 
 interface RunStats {
@@ -34,6 +33,8 @@ export default function CostCalculatorPage() {
   const [leadsCount, setLeadsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [smsStats, setSmsStats] = useState({ outbound: 0, inbound: 0 });
+  const [twilioBalance, setTwilioBalance] = useState<{ balance: number; currency: string } | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -51,7 +52,19 @@ export default function CostCalculatorPage() {
       setLoading(false);
     }
     load();
+    fetchBalance();
   }, []);
+
+  async function fetchBalance() {
+    setBalanceLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('twilio-balance');
+      if (!error && data?.balance != null) {
+        setTwilioBalance({ balance: data.balance, currency: data.currency || 'USD' });
+      }
+    } catch {}
+    setBalanceLoading(false);
+  }
 
   const runCosts = runs.map(run => {
     const stats = run.stats || {};
@@ -74,6 +87,8 @@ export default function CostCalculatorPage() {
   const smsCostInbound = smsStats.inbound * SMS_PRICING.inbound;
   const smsCostTotal = smsCostOutbound + smsCostInbound;
 
+  const smsRemaining = twilioBalance ? Math.floor(twilioBalance.balance / SMS_PRICING.outbound) : null;
+
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-10">
@@ -89,6 +104,39 @@ export default function CostCalculatorPage() {
           <div className="text-center py-16 text-muted-foreground text-sm">Loading…</div>
         ) : (
           <>
+            {/* Twilio Balance */}
+            <div className="mb-6 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Wallet size={14} className="text-primary" /> Twilio Account Balance
+                </h2>
+                <Button variant="ghost" size="sm" onClick={fetchBalance} disabled={balanceLoading} className="h-7 text-xs gap-1">
+                  <RefreshCw size={12} className={balanceLoading ? 'animate-spin' : ''} /> Refresh
+                </Button>
+              </div>
+              {twilioBalance ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Balance</div>
+                    <div className="text-2xl font-bold text-foreground">${twilioBalance.balance.toFixed(2)}</div>
+                    <div className="text-[10px] text-muted-foreground">{twilioBalance.currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">SMS Remaining</div>
+                    <div className="text-2xl font-bold text-foreground">{smsRemaining?.toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">at ${SMS_PRICING.outbound}/msg</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Total Spent on SMS</div>
+                    <div className="text-2xl font-bold text-foreground">${smsCostTotal.toFixed(2)}</div>
+                    <div className="text-[10px] text-muted-foreground">{smsStats.outbound + smsStats.inbound} messages</div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{balanceLoading ? 'Loading…' : 'Could not fetch balance — check Twilio config'}</p>
+              )}
+            </div>
+
             {/* SMS Cost Section */}
             <div className="mb-6">
               <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
