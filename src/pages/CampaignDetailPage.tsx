@@ -184,7 +184,7 @@ export default function CampaignDetailPage() {
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
 
-  const countryFlags: Record<string, string> = { SE: '🇸🇪', NO: '🇳🇴', DK: '🇩🇰' };
+  
 
   return (
     <AppLayout>
