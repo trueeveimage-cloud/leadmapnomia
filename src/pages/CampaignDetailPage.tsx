@@ -137,7 +137,7 @@ export default function CampaignDetailPage() {
     }
     const delay = scheduledAt.getTime() - now.getTime();
     const timeStr = scheduledAt.toLocaleString();
-    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => COUNTRY_OPTIONS.find(co => co.value === c)?.flag).join(' ')}`);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`);
     setShowSchedule(false);
     
     setTimeout(async () => {
