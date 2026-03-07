@@ -1,5 +1,5 @@
 import AppLayout from "@/components/AppLayout";
-import { Search, Phone, Mail, MessageSquare, PhoneCall, Users, Target, Zap, BarChart3, Settings, ArrowRight, Keyboard, Globe, Clock, CheckCircle2, XCircle, Calendar, Inbox, ListChecks, Rocket, Map, FileText } from "lucide-react";
+import { Search, Phone, Mail, MessageSquare, PhoneCall, Users, Target, Zap, BarChart3, Settings, ArrowRight, Keyboard, Globe, Clock, CheckCircle2, XCircle, Calendar, Inbox, ListChecks, Rocket, Map, FileText, Lightbulb, DollarSign, StickyNote } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface FeatureCardProps {
@@ -88,7 +88,7 @@ export default function GuidePage() {
               <h1 className="text-2xl font-bold text-foreground">How It All Works</h1>
             </div>
             <p className="text-muted-foreground max-w-2xl leading-relaxed">
-              Your complete outreach CRM — from finding leads to closing deals. Here's every feature and how they connect together.
+              Your complete outreach CRM — from finding leads to closing deals. Find → Reach → Close.
             </p>
           </div>
         </div>
@@ -108,15 +108,45 @@ export default function GuidePage() {
             </div>
             <div className="space-y-4 rounded-lg bg-secondary/30 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-amber">Phase 2 · Reach</p>
-              <FlowStep step={4} title="Campaign SMS" desc="Send SMS to 07-numbers via Twilio" active />
+              <FlowStep step={4} title="Campaign SMS" desc="Send SMS via Twilio to Sweden, Norway, Denmark" active />
               <FlowStep step={5} title="Wait for Reply" desc="Auto-track delivery + inbound replies" />
               <FlowStep step={6} title="Auto Call List" desc="No reply after 48h → moved to call list" />
             </div>
             <div className="space-y-4 rounded-lg bg-secondary/30 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-green">Phase 3 · Close</p>
               <FlowStep step={7} title="Call / Follow Up" desc="Call leads, log outcomes, schedule callbacks" active />
-              <FlowStep step={8} title="Status Pipeline" desc="Track: Interested → Demo → Closed Won" />
+              <FlowStep step={8} title="Book & Notes" desc="Schedule meetings, add private client notes" />
               <FlowStep step={9} title="Won!" desc="Deal closed, lead moves to Closed / Won 🎉" />
+            </div>
+          </div>
+        </div>
+
+        {/* Reply Rate Tips */}
+        <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-card p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-primary" />
+            How to Get More Replies & Close Faster
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">📨 SMS Template Tips</h3>
+              <ul className="text-xs text-muted-foreground space-y-2">
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Ask a question</strong> — "Får ni kunder via Google?" gets 2-3x more replies than statements</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Keep under 160 chars</strong> — 1 SMS segment = cheaper + higher read rate</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Use {'{name}'} + {'{category}'}</strong> — personalization feels less spammy</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>End with clear CTA</strong> — "Svara JA" beats "kontakta oss"</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Add your real name</strong> — "/Marcus" at the end builds trust</span></li>
+              </ul>
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">📞 Closing Tips</h3>
+              <ul className="text-xs text-muted-foreground space-y-2">
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Call within 5 min</strong> of a reply — speed-to-lead is everything</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Send between 10-14</strong> — business owners check phones at lunch</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Follow up 3 times</strong> — most sales happen after the 3rd-5th contact</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Use notes</strong> — write down what they said, reference it next call</span></li>
+                <li className="flex gap-2"><CheckCircle2 size={14} className="text-green-400 shrink-0 mt-0.5" /> <span><strong>Book the meeting</strong> — use the Bookings tab to lock in a time</span></li>
+              </ul>
             </div>
           </div>
         </div>
@@ -132,7 +162,7 @@ export default function GuidePage() {
             <FeatureCard
               icon={<Search className="h-5 w-5" />}
               title="Finder"
-              description="Search Google Maps for businesses by city, keywords and niche. Run batch searches across multiple cities at once."
+              description="Search Google Maps for businesses by city, keywords and niche. Run batch searches across multiple cities."
               features={[
                 "Search by city + keywords (e.g. 'Frisör Stockholm')",
                 "Batch mode: run across 10+ cities simultaneously",
@@ -147,7 +177,7 @@ export default function GuidePage() {
             <FeatureCard
               icon={<Users className="h-5 w-5" />}
               title="Unsorted Inbox"
-              description="All newly found leads land here. Categorized by what contact info they have — Phone, Email, Both, or Missing."
+              description="All newly found leads land here. Categorized by contact info — Phone, Email, Both, or Missing."
               features={[
                 "Sub-sections: Phone, Email, Both, Missing",
                 "Quick triage: assign status in one click",
@@ -161,13 +191,13 @@ export default function GuidePage() {
             <FeatureCard
               icon={<MessageSquare className="h-5 w-5" />}
               title="Campaigns"
-              description="Build targeted SMS campaigns with templates, audience filters, and safety caps. Send real SMS via Twilio."
+              description="Build targeted SMS campaigns with templates, audience filters, and safety caps. Choose country per batch."
               features={[
-                "Audience filter: by section, rating, website, reviews",
-                "Template variables: {name}, {category}, {city}",
-                "Safety: daily cap, batch cap, cooldown days",
-                "Only sends to mobile numbers (07...)",
-                "Landlines skip SMS → go straight to call list",
+                "Pre-built high-converting templates",
+                "Country selector: Sweden, Norway, Denmark",
+                "Smart landline filtering — only sends to mobiles",
+                "Cost estimate before sending",
+                "Daily cap + batch cap to control spend",
               ]}
               path="/campaigns"
               accent="purple"
@@ -181,7 +211,7 @@ export default function GuidePage() {
                 "Real-time inbound via Twilio webhook",
                 "One-click: Interested, Not Interested, Callback",
                 "Auto-detects opt-out keywords (stop, avsluta)",
-                "Shows lead name + message preview",
+                "Reply directly from the inbox",
               ]}
               path="/inbox"
               accent="green"
@@ -190,12 +220,12 @@ export default function GuidePage() {
             <FeatureCard
               icon={<PhoneCall className="h-5 w-5" />}
               title="Call List"
-              description="Leads who need a phone call — either landlines that can't receive SMS or leads who didn't reply."
+              description="Leads who need a phone call — landlines or leads who didn't reply to SMS."
               features={[
                 "Auto-populated: landlines + no-reply leads",
-                "Cron job checks every 30 min for non-repliers",
                 "Log outcome: Answered, No Answer, Busy, Wrong #",
-                "Auto-reschedule: No Answer → tomorrow, Busy → 3h",
+                "Auto-reschedule: No Answer → tomorrow",
+                "Keyboard shortcut: N for next lead",
               ]}
               path="/call-list"
               accent="amber"
@@ -204,12 +234,11 @@ export default function GuidePage() {
             <FeatureCard
               icon={<Zap className="h-5 w-5" />}
               title="Next Lead"
-              description="Your power-dial page. Fetches the highest-priority lead and walks you through the call workflow step by step."
+              description="Power-dial page. Fetches the highest-priority lead and walks you through the call workflow."
               features={[
                 "Priority: overdue callbacks → needs call → uncontacted",
                 "One-tap call on mobile (opens dialer)",
-                "Desktop: copy number + log outcome",
-                "Quick followup presets: 1h, 3h, tomorrow, 2 days",
+                "Quick followup presets: 1h, 3h, tomorrow",
                 "Keyboard shortcut: press N from anywhere",
               ]}
               path="/next"
@@ -222,9 +251,8 @@ export default function GuidePage() {
               description="Scheduled follow-ups with precise dates and times. Overdue callbacks are highlighted."
               features={[
                 "Sorted by next action date",
-                "Overdue items highlighted in red",
+                "Overdue items highlighted",
                 "Set exact date + time for follow-up",
-                "One-click to call when it's time",
               ]}
               path="/callbacks"
               accent="amber"
@@ -233,40 +261,40 @@ export default function GuidePage() {
             <FeatureCard
               icon={<ListChecks className="h-5 w-5" />}
               title="Status Pipeline"
-              description="Track every lead through the sales funnel with dedicated pages for each status."
+              description="Track every lead through the sales funnel. Each status has notes, bookings, and message history."
               features={[
-                "Not Contacted → Contacted → Answered",
-                "Interested → Demo → Closed Won 🎉",
-                "Not Interested / Unsure / Closed Lost",
-                "Each status has its own filtered page",
+                "Not Contacted → Contacted → Interested → Demo → Won",
+                "Private notes per lead",
+                "Schedule meetings with booking system",
+                "Full message history per lead",
               ]}
               path="/status/not-contacted"
               accent="green"
             />
 
             <FeatureCard
-              icon={<Globe className="h-5 w-5" />}
-              title="Coverage Map"
-              description="Visual map showing which cities you've already searched, helping you avoid duplicates and find new areas."
+              icon={<DollarSign className="h-5 w-5" />}
+              title="Cost Calculator"
+              description="Track every dollar spent on API calls and SMS. See your Twilio balance in real-time."
               features={[
-                "Interactive Sweden map with city markers",
-                "Color-coded by search completeness",
-                "Click a city to see its search history",
+                "Live Twilio balance + remaining SMS count",
+                "Per-run API cost breakdown",
+                "SMS cost tracking (outbound + inbound)",
+                "Cache savings calculator",
               ]}
-              path="/finder/coverage"
-              accent="cyan"
+              path="/costs"
+              accent="red"
             />
 
             <FeatureCard
               icon={<Settings className="h-5 w-5" />}
               title="Settings"
-              description="Configure defaults, API keys, and run bulk operations on your data."
+              description="Configure defaults, run bulk operations, and export your data."
               features={[
                 "Outreach defaults: caps, cooldown, call-after hours",
                 "Finder defaults: city, keywords, leads target",
-                "Bulk email scrape: find emails from websites",
+                "Bulk email scrape from websites",
                 "Export all leads to CSV",
-                "Keyboard shortcuts reference",
               ]}
               path="/settings"
               accent="primary"
@@ -301,19 +329,21 @@ export default function GuidePage() {
             SMS Outreach Flow
           </h2>
           <div className="space-y-3 text-sm font-mono text-muted-foreground bg-secondary/30 rounded-lg p-4 overflow-x-auto">
-            <p><span className="text-primary">Campaign</span> → Send Batch clicked</p>
-            <p className="pl-4">├─ Phone starts with <span className="text-green">07</span> → <span className="text-green">SMS sent via Twilio</span></p>
+            <p><span className="text-primary">Campaign</span> → Send Batch (choose country + size)</p>
+            <p className="pl-4">├─ Mobile number → <span className="text-green">SMS sent via Twilio</span></p>
             <p className="pl-4">│&nbsp;&nbsp; ├─ Lead replies → <span className="text-green">Inbox</span> → pick status</p>
             <p className="pl-4">│&nbsp;&nbsp; └─ No reply (48h) → <span className="text-amber">Call List</span> (auto)</p>
-            <p className="pl-4">└─ Landline (08, 031...) → <span className="text-amber">Call List</span> (immediate)</p>
+            <p className="pl-4">└─ Landline (SE only) → <span className="text-amber">Call List</span> (immediate)</p>
             <p className="mt-2"><span className="text-amber">Call List</span> → You call → pick outcome:</p>
-            <p className="pl-4">├─ <span className="text-green">Answered</span> → pick status (Interested / Demo / etc.)</p>
+            <p className="pl-4">├─ <span className="text-green">Answered</span> → pick status → add notes → book meeting</p>
             <p className="pl-4">├─ <span className="text-amber">No Answer</span> → reschedule tomorrow</p>
-            <p className="pl-4">├─ <span className="text-amber">Busy</span> → reschedule +3 hours</p>
             <p className="pl-4">├─ <span className="text-purple">Callback</span> → pick date/time</p>
             <p className="pl-4">└─ <span className="text-destructive">Wrong #</span> → removed</p>
           </div>
         </div>
+
+        {/* Easter egg hint */}
+        <p className="text-center text-[10px] text-muted-foreground/30">click the logo 7 times 🐣</p>
       </div>
     </AppLayout>
   );

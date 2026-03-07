@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { createCampaign, countEligibleLeadsDetailed, AudienceFilter, EligibilityBreakdown, renderTemplate } from '@/lib/campaigns';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap, Globe } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Users, MessageSquare, Shield, Megaphone, Zap, Globe, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import type { Country } from '@/lib/cities';
@@ -25,6 +25,34 @@ const COUNTRIES: { value: Country; label: string }[] = [
 ];
 
 const VARIABLES = ['{name}', '{category}', '{city}', '{rating}'];
+
+const TEMPLATE_PRESETS = [
+  {
+    label: '🎯 Direct Value',
+    text: 'Hej {name}! Jag hittade ert företag på Google – ni har bra omdömen men ingen hemsida. Vi bygger hemsidor från 2990kr. Intresserad? Svara JA',
+    tip: 'Leads to a clear YES/NO decision. Mentions price to pre-qualify.',
+  },
+  {
+    label: '❓ Question Hook',
+    text: 'Hej! Snabb fråga – får ni kunder via Google just nu? Vi hjälper {category} i {city} att synas bättre. Vill du veta hur? /Marcus',
+    tip: 'Questions get 2-3x more replies than statements. Personal name builds trust.',
+  },
+  {
+    label: '⭐ Compliment First',
+    text: 'Hej {name}! Såg att ni har {rating} stjärnor på Google – imponerande! Men jag la märke till att ni saknar hemsida. Vill ni ha hjälp med det?',
+    tip: 'Opens with genuine compliment. Feels personal, not mass-sent.',
+  },
+  {
+    label: '🔥 Urgency',
+    text: 'Hej {name}, vi har just nu 3 lediga platser för nya hemsidor i {city}. Intresserad av en offert? Svara JA så återkommer jag idag.',
+    tip: 'Scarcity + speed creates urgency. Works best for limited offers.',
+  },
+  {
+    label: '🇳🇴 Norwegian',
+    text: 'Hei {name}! Jeg fant dere på Google – dere har gode anmeldelser men ingen nettside. Vi lager nettsider fra 2990kr. Interessert? Svar JA',
+    tip: 'Norwegian version of the direct value template.',
+  },
+];
 
 export default function CampaignNewPage() {
   const navigate = useNavigate();
@@ -93,6 +121,9 @@ export default function CampaignNewPage() {
 
   const sampleLead = { name: 'Frisör Anna', category: 'Hair Salon', city: 'Göteborg', rating: '4.5' };
 
+  // Estimate cost for this campaign
+  const estCost = batchCap * 0.065;
+
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-6 pt-8">
@@ -144,7 +175,7 @@ export default function CampaignNewPage() {
                   <button
                     key={c.value}
                     onClick={() => toggleCountry(c.value)}
-                    className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                    className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors flex items-center gap-1.5 ${
                       filter.countries?.includes(c.value) ? 'bg-primary/15 text-primary border-primary/30' : 'bg-muted text-muted-foreground border-border hover:border-primary/30'
                     }`}
                   >
@@ -239,6 +270,30 @@ export default function CampaignNewPage() {
               <InfoTip text="Write your SMS template. Use variables like {name} to personalize each message." />
             </h2>
 
+            {/* Template Presets */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1.5">
+                <Lightbulb size={12} /> High-converting templates (click to use)
+              </label>
+              <div className="space-y-2">
+                {TEMPLATE_PRESETS.map((preset, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setTemplate(preset.text)}
+                    className={`w-full text-left p-3 rounded-lg border transition-all text-xs ${
+                      template === preset.text
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-border bg-muted/30 hover:border-primary/20 hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="font-medium text-foreground mb-1">{preset.label}</div>
+                    <div className="text-muted-foreground leading-relaxed">{preset.text}</div>
+                    <div className="text-[10px] text-primary/70 mt-1.5 italic">💡 {preset.tip}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-1 mb-2">
               {VARIABLES.map(v => (
                 <button
@@ -264,7 +319,21 @@ export default function CampaignNewPage() {
               <p className="text-sm text-foreground">{renderTemplate(template, sampleLead)}</p>
             </div>
 
-            <p className="text-xs text-muted-foreground">{template.length} chars · {Math.ceil(template.length / 160)} SMS segment(s)</p>
+            <p className="text-xs text-muted-foreground">{template.length} chars · {Math.ceil(template.length / 160)} SMS segment(s) · est. ${(Math.ceil(template.length / 160) * 0.065).toFixed(3)}/msg</p>
+
+            {/* Reply rate tips */}
+            <div className="bg-primary/5 border border-primary/15 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5"><Lightbulb size={12} className="text-primary" /> Tips to increase reply rates</p>
+              <ul className="text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
+                <li><strong>Ask a question</strong> — questions get 2-3x more replies than statements</li>
+                <li><strong>Keep it under 160 chars</strong> — 1 SMS segment = cheaper + higher read rate</li>
+                <li><strong>Use their name + category</strong> — personalization feels less spammy</li>
+                <li><strong>End with a clear CTA</strong> — "Svara JA" is better than "kontakta oss"</li>
+                <li><strong>Add your real name</strong> — "/Marcus" at the end builds trust</li>
+                <li><strong>Send between 10-14</strong> — business owners check phones at lunch</li>
+                <li><strong>Mention a specific benefit</strong> — "synas bättre på Google" beats "växa"</li>
+              </ul>
+            </div>
           </div>
         )}
 
@@ -273,7 +342,7 @@ export default function CampaignNewPage() {
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
             <h2 className="font-semibold text-foreground text-sm flex items-center gap-2">
               <Shield size={15} /> Cost & Safety Controls
-              <InfoTip text="Set limits to control spend and avoid spamming. Call-after-hours triggers follow-up calls for non-responders." />
+              <InfoTip text="Set limits to control spend and avoid spamming." />
             </h2>
 
             <div className="grid grid-cols-2 gap-3">
@@ -286,8 +355,27 @@ export default function CampaignNewPage() {
                 <Input type="number" min="1" value={batchCap} onChange={e => setBatchCap(Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait for reply before marking for call (Sweden only)" /></label>
+                <label className="text-xs text-muted-foreground mb-1 block">Call After Hours <InfoTip text="Hours to wait before marking for call" /></label>
                 <Input type="number" min="1" value={callAfterHours} onChange={e => setCallAfterHours(Number(e.target.value))} className="h-8 text-sm" />
+              </div>
+            </div>
+
+            {/* Cost estimate */}
+            <div className="bg-muted/50 border border-border rounded-lg p-3">
+              <p className="text-xs font-semibold text-foreground mb-1">Estimated Campaign Cost</p>
+              <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                <div>
+                  <span className="block text-foreground font-medium">${estCost.toFixed(2)}</span>
+                  <span>Total ({batchCap} SMS)</span>
+                </div>
+                <div>
+                  <span className="block text-foreground font-medium">${(dailyCap * 0.065).toFixed(2)}</span>
+                  <span>Per day ({dailyCap}/day)</span>
+                </div>
+                <div>
+                  <span className="block text-foreground font-medium">{Math.ceil(batchCap / dailyCap)}</span>
+                  <span>Days to complete</span>
+                </div>
               </div>
             </div>
           </div>
