@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, AreaChart, Area } from "recharts";
 import { TrendingUp, Users, Phone, MessageSquare, Target, ArrowUpRight, ArrowDownRight, Globe, Mail, Search, Zap, Clock, CheckCircle } from "lucide-react";
 import { findCity, Country, getCitiesByCountry } from "@/lib/cities";
+import CountryFlag, { countryLabel } from "@/components/CountryFlag";
 
 const COLORS = {
   primary: "hsl(213, 94%, 58%)",
