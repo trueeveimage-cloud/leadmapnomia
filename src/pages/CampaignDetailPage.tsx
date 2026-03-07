@@ -11,11 +11,12 @@ import { useParams, Link } from 'react-router-dom';
 import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
+import CountryFlag, { countryLabel } from '@/components/CountryFlag';
 
-const COUNTRY_OPTIONS: { value: Country; label: string; flag: string }[] = [
-  { value: 'SE', label: 'Sweden', flag: '🇸🇪' },
-  { value: 'NO', label: 'Norway', flag: '🇳🇴' },
-  { value: 'DK', label: 'Denmark', flag: '🇩🇰' },
+const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
+  { value: 'SE', label: 'Sweden' },
+  { value: 'NO', label: 'Norway' },
+  { value: 'DK', label: 'Denmark' },
 ];
 
 function useNextBatchTimer() {
