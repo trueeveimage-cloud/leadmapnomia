@@ -165,6 +165,7 @@ const App = () => (
                     <Route path="/campaigns" element={<CampaignsPage />} />
                     <Route path="/campaigns/new" element={<CampaignNewPage />} />
                     <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+                    <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
                     <Route path="/next" element={<NextLeadPage />} />
