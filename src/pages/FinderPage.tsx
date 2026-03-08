@@ -228,9 +228,22 @@ export default function FinderPage() {
     setSelectedCities(prev => prev.filter(c => c.name !== name));
   };
 
+  // Twilio balance warning
+  const [twilioBalance, setTwilioBalance] = useState<number | null>(null);
+  useEffect(() => {
+    supabase.functions.invoke('twilio-balance').then(({ data }) => {
+      if (data?.balance !== undefined) setTwilioBalance(data.balance);
+    }).catch(() => {});
+  }, []);
+
   const handleRun = async () => {
     if (selectedCities.length === 0) { toast.error('Select at least one city'); return; }
     if (keywordList.length === 0) { toast.error('Add at least one keyword'); return; }
+
+    // Warn if balance is low
+    if (twilioBalance !== null && twilioBalance < 5) {
+      toast.warning(`⚠️ Twilio balance low: $${twilioBalance.toFixed(2)} — consider adding funds`);
+    }
 
     setSetting('finder_default_city', selectedCities[0].name);
     setSetting('finder_default_keywords', keywords);
