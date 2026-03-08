@@ -46,6 +46,77 @@ export type Database = {
           },
         ]
       }
+      caller_sessions: {
+        Row: {
+          caller_id: string
+          calls_made: number
+          created_at: string
+          demos_booked: number
+          ended_at: string | null
+          id: string
+          leads_interested: number
+          started_at: string
+        }
+        Insert: {
+          caller_id: string
+          calls_made?: number
+          created_at?: string
+          demos_booked?: number
+          ended_at?: string | null
+          id?: string
+          leads_interested?: number
+          started_at?: string
+        }
+        Update: {
+          caller_id?: string
+          calls_made?: number
+          created_at?: string
+          demos_booked?: number
+          ended_at?: string | null
+          id?: string
+          leads_interested?: number
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "caller_sessions_caller_id_fkey"
+            columns: ["caller_id"]
+            isOneToOne: false
+            referencedRelation: "callers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      callers: {
+        Row: {
+          bonus_per_sale: number
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          rate_per_call: number
+        }
+        Insert: {
+          bonus_per_sale?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          rate_per_call?: number
+        }
+        Update: {
+          bonus_per_sale?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          rate_per_call?: number
+        }
+        Relationships: []
+      }
       campaign_runs: {
         Row: {
           campaign_id: string
@@ -380,6 +451,8 @@ export type Database = {
           call_after_at: string | null
           call_attempts: number
           call_outcome_last: string | null
+          caller_id: string | null
+          caller_name: string | null
           category: string | null
           created_at: string
           email: string | null
@@ -416,6 +489,8 @@ export type Database = {
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
+          caller_id?: string | null
+          caller_name?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
@@ -452,6 +527,8 @@ export type Database = {
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
+          caller_id?: string | null
+          caller_name?: string | null
           category?: string | null
           created_at?: string
           email?: string | null
@@ -483,7 +560,15 @@ export type Database = {
           updated_at?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_caller_id_fkey"
+            columns: ["caller_id"]
+            isOneToOne: false
+            referencedRelation: "callers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       message_logs: {
         Row: {
