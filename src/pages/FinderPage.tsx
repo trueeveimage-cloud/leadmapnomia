@@ -341,6 +341,17 @@ export default function FinderPage() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6 pb-10">
+        {/* Low balance warning */}
+        {twilioBalance !== null && twilioBalance < 10 && (
+          <div className="mb-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center gap-2 text-xs">
+            <span className="text-amber-400 text-lg">⚠️</span>
+            <div>
+              <span className="font-medium text-foreground">Low Twilio Balance: ${twilioBalance.toFixed(2)}</span>
+              <span className="text-muted-foreground ml-2">Add funds to keep sending SMS and running the finder.</span>
+            </div>
+          </div>
+        )}
+
         <div className="mb-5">
           <div className="flex items-center justify-between">
             <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
