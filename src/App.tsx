@@ -26,6 +26,7 @@ import CallListPage from "./pages/CallListPage";
 import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
 import GuidePage from "./pages/GuidePage";
+import CampaignStatsPage from "./pages/CampaignStatsPage";
 import DashboardPage from "./pages/DashboardPage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -164,6 +165,7 @@ const App = () => (
                     <Route path="/campaigns" element={<CampaignsPage />} />
                     <Route path="/campaigns/new" element={<CampaignNewPage />} />
                     <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+                    <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
                     <Route path="/next" element={<NextLeadPage />} />

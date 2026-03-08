@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -228,9 +229,22 @@ export default function FinderPage() {
     setSelectedCities(prev => prev.filter(c => c.name !== name));
   };
 
+  // Twilio balance warning
+  const [twilioBalance, setTwilioBalance] = useState<number | null>(null);
+  useEffect(() => {
+    supabase.functions.invoke('twilio-balance').then(({ data }) => {
+      if (data?.balance !== undefined) setTwilioBalance(data.balance);
+    }).catch(() => {});
+  }, []);
+
   const handleRun = async () => {
     if (selectedCities.length === 0) { toast.error('Select at least one city'); return; }
     if (keywordList.length === 0) { toast.error('Add at least one keyword'); return; }
+
+    // Warn if balance is low
+    if (twilioBalance !== null && twilioBalance < 5) {
+      toast.warning(`⚠️ Twilio balance low: $${twilioBalance.toFixed(2)} — consider adding funds`);
+    }
 
     setSetting('finder_default_city', selectedCities[0].name);
     setSetting('finder_default_keywords', keywords);
@@ -328,6 +342,17 @@ export default function FinderPage() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-6 pb-10">
+        {/* Low balance warning */}
+        {twilioBalance !== null && twilioBalance < 10 && (
+          <div className="mb-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center gap-2 text-xs">
+            <span className="text-amber-400 text-lg">⚠️</span>
+            <div>
+              <span className="font-medium text-foreground">Low Twilio Balance: ${twilioBalance.toFixed(2)}</span>
+              <span className="text-muted-foreground ml-2">Add funds to keep sending SMS and running the finder.</span>
+            </div>
+          </div>
+        )}
+
         <div className="mb-5">
           <div className="flex items-center justify-between">
             <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
