@@ -137,13 +137,15 @@ Deno.serve(async (req) => {
         ? filter.countries
         : ['SE'];
 
-    // Check how many messages already sent today to enforce daily cap
+    // Check how many messages successfully sent today to enforce daily cap
+    // Only count successful sends (not failed) so failures don't eat into the cap
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const { count: sentToday } = await dbClient
       .from('message_logs')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outbound')
+      .not('status', 'eq', 'failed')
       .gte('created_at', todayStart.toISOString());
 
     const dailyCap = campaign.daily_cap || 100;

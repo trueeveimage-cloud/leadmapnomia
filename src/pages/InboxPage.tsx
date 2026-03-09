@@ -36,6 +36,7 @@ export default function InboxPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadDetail, setLeadDetail] = useState<Lead | null>(null);
   const [replyText, setReplyText] = useState('');
+  const replyRef = React.useRef<HTMLTextAreaElement>(null);
   const [sending, setSending] = useState(false);
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts } = useCRM();
