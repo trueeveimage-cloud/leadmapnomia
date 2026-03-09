@@ -145,7 +145,7 @@ export default function NextLeadPage() {
 
   const handleCall = () => {
     if (!lead) return;
-    if (isMobile) window.location.href = `tel:${lead.phone}`;
+    window.open(`tel:${lead.phone}`, '_self');
     setStep('outcome');
   };
 
@@ -299,11 +299,11 @@ export default function NextLeadPage() {
     }
   };
 
-  // Earnings calculator
+  // Earnings calculator: rate_per_call = per demo, bonus_per_sale = per sale
   const earnings = activeCaller ? {
-    callPay: sessionStats.calls * activeCaller.rate_per_call,
-    bonuses: sessionStats.demos * activeCaller.bonus_per_sale,
-    total: (sessionStats.calls * activeCaller.rate_per_call) + (sessionStats.demos * activeCaller.bonus_per_sale),
+    demoPay: sessionStats.demos * activeCaller.rate_per_call,
+    saleBonuses: sessionStats.interested * activeCaller.bonus_per_sale,
+    total: (sessionStats.demos * activeCaller.rate_per_call) + (sessionStats.interested * activeCaller.bonus_per_sale),
   } : null;
 
   // Caller picker dialog
@@ -333,7 +333,7 @@ export default function NextLeadPage() {
                   <div className="flex-1">
                     <div className="font-semibold text-foreground">{caller.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {caller.rate_per_call} kr/call · {caller.bonus_per_sale} kr/demo bonus
+                      {caller.rate_per_call} kr/demo · {caller.bonus_per_sale} kr/sale bonus
                     </div>
                   </div>
                   <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
@@ -395,9 +395,9 @@ export default function NextLeadPage() {
           <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 rounded-lg p-3 mb-4 text-xs flex items-center gap-4">
             <DollarSign size={16} className="text-primary" />
             <div className="flex-1 flex gap-4">
-              <span className="text-muted-foreground">Calls: <span className="text-foreground font-medium">{earnings.callPay} kr</span> ({sessionStats.calls} × {activeCaller!.rate_per_call} kr)</span>
-              {earnings.bonuses > 0 && (
-                <span className="text-muted-foreground">Bonuses: <span className="font-medium" style={{ color: 'hsl(142 69% 45%)' }}>{earnings.bonuses} kr</span> ({sessionStats.demos} × {activeCaller!.bonus_per_sale} kr)</span>
+              <span className="text-muted-foreground">Demos: <span className="text-foreground font-medium">{earnings.demoPay} kr</span> ({sessionStats.demos} × {activeCaller!.rate_per_call} kr)</span>
+              {earnings.saleBonuses > 0 && (
+                <span className="text-muted-foreground">Sales: <span className="font-medium" style={{ color: 'hsl(142 69% 45%)' }}>{earnings.saleBonuses} kr</span> ({sessionStats.interested} × {activeCaller!.bonus_per_sale} kr)</span>
               )}
             </div>
             <span className="font-bold text-foreground text-sm">{earnings.total} kr total</span>
@@ -483,12 +483,10 @@ export default function NextLeadPage() {
 
               {step === 'outcome' && (
                 <div>
-                  {!isMobile && (
-                    <div className="mb-3 p-3 bg-muted rounded-lg">
-                      <div className="text-xs text-muted-foreground">Dial this number</div>
-                      <div className="text-xl font-mono font-bold text-foreground tracking-wide">{lead.phone}</div>
-                    </div>
-                  )}
+                  <div className="mb-3 p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Dial this number</div>
+                    <a href={`tel:${lead.phone}`} className="text-xl font-mono font-bold text-primary tracking-wide hover:underline">{lead.phone}</a>
+                  </div>
                   <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome</div>
                   <div className="flex flex-wrap gap-2">
                     {OUTCOMES.map(o => (
@@ -498,6 +496,11 @@ export default function NextLeadPage() {
                         {o.label}
                       </button>
                     ))}
+                    <button onClick={() => { setStep('status'); }}
+                      className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                      style={{ color: 'hsl(262 83% 65%)' }}>
+                      Answered →
+                    </button>
                     <button onClick={() => setStep('preview')} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
                   </div>
                 </div>
