@@ -483,12 +483,10 @@ export default function NextLeadPage() {
 
               {step === 'outcome' && (
                 <div>
-                  {!isMobile && (
-                    <div className="mb-3 p-3 bg-muted rounded-lg">
-                      <div className="text-xs text-muted-foreground">Dial this number</div>
-                      <div className="text-xl font-mono font-bold text-foreground tracking-wide">{lead.phone}</div>
-                    </div>
-                  )}
+                  <div className="mb-3 p-3 bg-muted rounded-lg">
+                    <div className="text-xs text-muted-foreground">Dial this number</div>
+                    <a href={`tel:${lead.phone}`} className="text-xl font-mono font-bold text-primary tracking-wide hover:underline">{lead.phone}</a>
+                  </div>
                   <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome</div>
                   <div className="flex flex-wrap gap-2">
                     {OUTCOMES.map(o => (
@@ -498,6 +496,11 @@ export default function NextLeadPage() {
                         {o.label}
                       </button>
                     ))}
+                    <button onClick={() => { setStep('status'); }}
+                      className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                      style={{ color: 'hsl(262 83% 65%)' }}>
+                      Answered →
+                    </button>
                     <button onClick={() => setStep('preview')} className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
                   </div>
                 </div>
