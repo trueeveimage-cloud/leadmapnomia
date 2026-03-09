@@ -327,8 +327,13 @@ export default function InboxPage() {
             <div className="border-t border-border p-4">
             <div className="flex gap-2 items-end">
                 <textarea
+                  ref={replyRef}
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
+                  onChange={(e) => {
+                    setReplyText(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -337,15 +342,9 @@ export default function InboxPage() {
                   }}
                   placeholder="Type a reply..."
                   rows={1}
-                  className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"
+                  className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none"
                   style={{ minHeight: '38px', maxHeight: '120px' }}
                   disabled={sending}
-                  ref={(el) => {
-                    if (el) {
-                      el.style.height = 'auto';
-                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-                    }
-                  }}
                 />
                 <button
                   onClick={handleSendReply}
