@@ -333,7 +333,7 @@ export default function NextLeadPage() {
                   <div className="flex-1">
                     <div className="font-semibold text-foreground">{caller.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {caller.rate_per_call} kr/call · {caller.bonus_per_sale} kr/demo bonus
+                      {caller.rate_per_call} kr/demo · {caller.bonus_per_sale} kr/sale bonus
                     </div>
                   </div>
                   <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
