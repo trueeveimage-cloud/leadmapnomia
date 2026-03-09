@@ -299,11 +299,11 @@ export default function NextLeadPage() {
     }
   };
 
-  // Earnings calculator
+  // Earnings calculator: rate_per_call = per demo, bonus_per_sale = per sale
   const earnings = activeCaller ? {
-    callPay: sessionStats.calls * activeCaller.rate_per_call,
-    bonuses: sessionStats.demos * activeCaller.bonus_per_sale,
-    total: (sessionStats.calls * activeCaller.rate_per_call) + (sessionStats.demos * activeCaller.bonus_per_sale),
+    demoPay: sessionStats.demos * activeCaller.rate_per_call,
+    saleBonuses: sessionStats.interested * activeCaller.bonus_per_sale,
+    total: (sessionStats.demos * activeCaller.rate_per_call) + (sessionStats.interested * activeCaller.bonus_per_sale),
   } : null;
 
   // Caller picker dialog
