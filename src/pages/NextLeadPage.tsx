@@ -395,9 +395,9 @@ export default function NextLeadPage() {
           <div className="bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 rounded-lg p-3 mb-4 text-xs flex items-center gap-4">
             <DollarSign size={16} className="text-primary" />
             <div className="flex-1 flex gap-4">
-              <span className="text-muted-foreground">Calls: <span className="text-foreground font-medium">{earnings.callPay} kr</span> ({sessionStats.calls} × {activeCaller!.rate_per_call} kr)</span>
-              {earnings.bonuses > 0 && (
-                <span className="text-muted-foreground">Bonuses: <span className="font-medium" style={{ color: 'hsl(142 69% 45%)' }}>{earnings.bonuses} kr</span> ({sessionStats.demos} × {activeCaller!.bonus_per_sale} kr)</span>
+              <span className="text-muted-foreground">Demos: <span className="text-foreground font-medium">{earnings.demoPay} kr</span> ({sessionStats.demos} × {activeCaller!.rate_per_call} kr)</span>
+              {earnings.saleBonuses > 0 && (
+                <span className="text-muted-foreground">Sales: <span className="font-medium" style={{ color: 'hsl(142 69% 45%)' }}>{earnings.saleBonuses} kr</span> ({sessionStats.interested} × {activeCaller!.bonus_per_sale} kr)</span>
               )}
             </div>
             <span className="font-bold text-foreground text-sm">{earnings.total} kr total</span>
