@@ -27,6 +27,7 @@ const OUTCOMES = [
   { key: 'busy', label: 'Busy', color: 'hsl(38 95% 55%)' },
   { key: 'wrong_number', label: 'Wrong #', color: 'hsl(0 72% 55%)' },
   { key: 'callback_later', label: 'Callback', color: 'hsl(213 94% 58%)' },
+  { key: 'demo', label: '🎨 Demo', color: 'hsl(262 83% 65%)' },
 ] as const;
 
 const STATUSES = [
@@ -183,6 +184,14 @@ export default function NextLeadPage() {
 
     if (outcomeKey === 'answered') {
       setStep('status');
+      return;
+    }
+
+    if (outcomeKey === 'demo') {
+      // Open demo form directly from outcome
+      base.status = 'demo';
+      await updateLead(lead.id, base);
+      setShowDemoModal(true);
       return;
     }
 

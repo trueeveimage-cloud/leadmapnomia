@@ -180,6 +180,9 @@ Deno.serve(async (req) => {
       query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
     }
     
+    // Sort by highest reviews first — prioritise established businesses
+    query = query.order('reviews_count', { ascending: false, nullsFirst: false });
+
     // Fetch MORE leads to account for landline skipping — we want effectiveLimit ACTUAL sends
     query = query.limit(effectiveLimit * 5);
 
