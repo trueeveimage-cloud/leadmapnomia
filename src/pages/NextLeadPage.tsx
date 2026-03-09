@@ -187,6 +187,14 @@ export default function NextLeadPage() {
       return;
     }
 
+    if (outcomeKey === 'demo') {
+      // Open demo form directly from outcome
+      base.status = 'demo';
+      await updateLead(lead.id, base);
+      setShowDemoModal(true);
+      return;
+    }
+
     let nextActionAt: Date;
     if (outcomeKey === 'not_answered') {
       nextActionAt = addDays(new Date(), 1);
