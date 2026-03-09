@@ -145,7 +145,7 @@ export default function NextLeadPage() {
 
   const handleCall = () => {
     if (!lead) return;
-    if (isMobile) window.location.href = `tel:${lead.phone}`;
+    window.open(`tel:${lead.phone}`, '_self');
     setStep('outcome');
   };
 
