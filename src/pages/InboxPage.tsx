@@ -324,15 +324,27 @@ export default function InboxPage() {
 
             {/* Reply input */}
             <div className="border-t border-border p-4">
-              <div className="flex gap-2">
-                <input
-                  type="text"
+            <div className="flex gap-2 items-end">
+                <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendReply();
+                    }
+                  }}
                   placeholder="Type a reply..."
-                  className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  rows={1}
+                  className="flex-1 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 resize-none overflow-hidden"
+                  style={{ minHeight: '38px', maxHeight: '120px' }}
                   disabled={sending}
+                  ref={(el) => {
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+                    }
+                  }}
                 />
                 <button
                   onClick={handleSendReply}
