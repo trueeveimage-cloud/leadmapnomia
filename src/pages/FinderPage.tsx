@@ -429,6 +429,11 @@ export default function FinderPage() {
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
                       {rec.cities.slice(0, 5).map(c => c.name).join(', ')}{rec.cities.length > 5 ? ` +${rec.cities.length - 5} more` : ''}
                     </div>
+                    {rec.suggestedNiches && rec.suggestedNiches.length > 0 && (
+                      <div className="text-[10px] text-primary mt-0.5">
+                        🎯 Top niches: {rec.suggestedNiches.slice(0, 3).join(', ')}
+                      </div>
+                    )}
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${rec.priority === 'high' ? 'bg-green-500/20 text-green-400' : rec.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>
                     {rec.priority}
