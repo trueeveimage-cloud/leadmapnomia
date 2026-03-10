@@ -319,11 +319,18 @@ export default function InboxPage() {
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {conversation.map((msg: any) => (
                       <div key={msg.id} className={cn(
-                        "rounded-lg px-3 py-2 text-sm max-w-[85%]",
+                        "rounded-lg px-3 py-2 text-sm max-w-[85%] group relative",
                         msg.direction === 'outbound'
                           ? "bg-primary/15 text-primary ml-auto"
                           : "bg-muted text-foreground"
                       )}>
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id, { stopPropagation: () => {} } as React.MouseEvent)}
+                          className="absolute -top-1 -right-1 p-0.5 rounded-full bg-card border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete message"
+                        >
+                          <X size={10} />
+                        </button>
                         <p>{msg.body}</p>
                         <p className="text-[9px] text-muted-foreground mt-1">
                           {new Date(msg.created_at).toLocaleString()}
