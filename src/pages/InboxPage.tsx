@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
@@ -82,6 +82,17 @@ export default function InboxPage() {
       setMessages(prev => prev.map(m => m.lead_id === leadId ? { ...m, lead_status: status } : m));
       refreshCounts();
     } catch { toast.error('Failed to update'); }
+  };
+
+  const handleDeleteMessage = async (messageId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { error } = await supabase.from('message_logs').delete().eq('id', messageId);
+      if (error) throw error;
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setConversation(prev => prev.filter((m: any) => m.id !== messageId));
+      toast.success('Message deleted');
+    } catch { toast.error('Failed to delete message'); }
   };
 
   const handleSendReply = async () => {
@@ -222,6 +233,13 @@ export default function InboxPage() {
                               {a.label}
                             </button>
                           ))}
+                          <button
+                            onClick={(e) => handleDeleteMessage(m.id, e)}
+                            className="p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete message"
+                          >
+                            <X size={14} />
+                          </button>
                           <ChevronRight size={14} className="text-muted-foreground ml-1" />
                         </div>
                       </div>
@@ -301,11 +319,18 @@ export default function InboxPage() {
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {conversation.map((msg: any) => (
                       <div key={msg.id} className={cn(
-                        "rounded-lg px-3 py-2 text-sm max-w-[85%]",
+                        "rounded-lg px-3 py-2 text-sm max-w-[85%] group relative",
                         msg.direction === 'outbound'
                           ? "bg-primary/15 text-primary ml-auto"
                           : "bg-muted text-foreground"
                       )}>
+                        <button
+                          onClick={() => handleDeleteMessage(msg.id, { stopPropagation: () => {} } as React.MouseEvent)}
+                          className="absolute -top-1 -right-1 p-0.5 rounded-full bg-card border border-border text-muted-foreground hover:text-destructive hover:border-destructive/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete message"
+                        >
+                          <X size={10} />
+                        </button>
                         <p>{msg.body}</p>
                         <p className="text-[9px] text-muted-foreground mt-1">
                           {new Date(msg.created_at).toLocaleString()}

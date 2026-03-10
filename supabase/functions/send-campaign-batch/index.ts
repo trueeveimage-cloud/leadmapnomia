@@ -160,10 +160,13 @@ Deno.serve(async (req) => {
     const effectiveLimit = requestedBatch;
 
     // Build query for eligible leads
+    // CRITICAL: Exclude leads that already replied, are interested, or have any engaged status
+    const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost'];
     let query = dbClient.from('leads').select('*')
       .eq('outreach_opt_out', false)
       .eq('has_replied', false)
-      .not('phone', 'is', null);
+      .not('phone', 'is', null)
+      .not('status', 'in', `(${excludedStatuses.join(',')})`);
 
     if (filter.sections?.length) {
       query = query.in('section', filter.sections);
