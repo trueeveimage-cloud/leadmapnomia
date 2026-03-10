@@ -326,10 +326,24 @@ export default function FinderPage() {
     return stats;
   }, [runs]);
 
+  // Campaign performance for recommendations
+  const [campaignPerf, setCampaignPerf] = useState<CampaignPerformance | undefined>();
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: leads }, { data: msgs }] = await Promise.all([
+          supabase.from('leads').select('id, category, address, has_replied').limit(5000),
+          supabase.from('message_logs').select('lead_id, direction, status').eq('direction', 'outbound').limit(5000),
+        ]);
+        if (leads && msgs) setCampaignPerf(buildCampaignPerformance(leads, msgs));
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   // Recommended searches
   const recommendations = useMemo(() => {
-    return getRecommendedSearches(runs, cityStats).filter(r => r.country === country);
-  }, [runs, cityStats, country]);
+    return getRecommendedSearches(runs, cityStats, campaignPerf).filter(r => r.country === country);
+  }, [runs, cityStats, country, campaignPerf]);
 
   const applyRecommendation = (rec: SearchRecommendation) => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
