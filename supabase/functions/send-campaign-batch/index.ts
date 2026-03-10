@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
     }
 
     const dailyCap = campaign.daily_cap || 100;
-    const remaining = Math.max(0, dailyCap - (sentToday || 0));
+    const remaining = Math.max(0, dailyCap - sentToday);
     if (remaining === 0) {
       return new Response(JSON.stringify({ error: 'Daily cap reached', sentToday }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
