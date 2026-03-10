@@ -137,19 +137,32 @@ Deno.serve(async (req) => {
         ? filter.countries
         : ['SE'];
 
-    // Check how many messages successfully sent today to enforce daily cap
-    // Only count successful sends (not failed) so failures don't eat into the cap
+    // Check how many messages THIS CAMPAIGN sent today (per-campaign daily cap)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const { count: sentToday } = await dbClient
-      .from('message_logs')
-      .select('id', { count: 'exact', head: true })
-      .eq('direction', 'outbound')
-      .not('status', 'eq', 'failed')
+
+    // Get today's run IDs for this campaign
+    const { data: todayRuns } = await dbClient
+      .from('campaign_runs')
+      .select('id')
+      .eq('campaign_id', campaignId)
       .gte('created_at', todayStart.toISOString());
+    
+    const todayRunIds = (todayRuns || []).map((r: any) => r.id);
+    
+    let sentToday = 0;
+    if (todayRunIds.length > 0) {
+      const { count } = await dbClient
+        .from('message_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('direction', 'outbound')
+        .not('status', 'eq', 'failed')
+        .in('campaign_run_id', todayRunIds);
+      sentToday = count || 0;
+    }
 
     const dailyCap = campaign.daily_cap || 100;
-    const remaining = Math.max(0, dailyCap - (sentToday || 0));
+    const remaining = Math.max(0, dailyCap - sentToday);
     if (remaining === 0) {
       return new Response(JSON.stringify({ error: 'Daily cap reached', sentToday }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
