@@ -84,6 +84,17 @@ export default function InboxPage() {
     } catch { toast.error('Failed to update'); }
   };
 
+  const handleDeleteMessage = async (messageId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { error } = await supabase.from('message_logs').delete().eq('id', messageId);
+      if (error) throw error;
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      setConversation(prev => prev.filter((m: any) => m.id !== messageId));
+      toast.success('Message deleted');
+    } catch { toast.error('Failed to delete message'); }
+  };
+
   const handleSendReply = async () => {
     if (!selectedLeadId || !replyText.trim()) return;
     setSending(true);
