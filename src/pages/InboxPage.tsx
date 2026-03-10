@@ -233,6 +233,13 @@ export default function InboxPage() {
                               {a.label}
                             </button>
                           ))}
+                          <button
+                            onClick={(e) => handleDeleteMessage(m.id, e)}
+                            className="p-1 rounded hover:bg-destructive/15 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete message"
+                          >
+                            <X size={14} />
+                          </button>
                           <ChevronRight size={14} className="text-muted-foreground ml-1" />
                         </div>
                       </div>
