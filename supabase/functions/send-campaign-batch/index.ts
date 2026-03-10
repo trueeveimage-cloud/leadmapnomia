@@ -173,11 +173,12 @@ Deno.serve(async (req) => {
     const effectiveLimit = requestedBatch;
 
     // Build query for eligible leads
-    // CRITICAL: Exclude leads that already replied, are interested, or have any engaged status
-    const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost'];
+    // CRITICAL: Only send to leads that have NEVER been messaged before (no outbound ever)
+    const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
     let query = dbClient.from('leads').select('*')
       .eq('outreach_opt_out', false)
       .eq('has_replied', false)
+      .is('last_outbound_at', null)
       .not('phone', 'is', null)
       .not('status', 'in', `(${excludedStatuses.join(',')})`);
 
@@ -192,10 +193,6 @@ Deno.serve(async (req) => {
     }
     if (filter.minReviews) {
       query = query.gte('reviews_count', filter.minReviews);
-    }
-
-    if (cooldownDays > 0) {
-      query = query.or(`last_outbound_at.is.null,last_outbound_at.lt.${cooldownDate}`);
     }
     
     // Sort by highest reviews first — prioritise established businesses

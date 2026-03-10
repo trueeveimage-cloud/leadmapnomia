@@ -23,22 +23,49 @@ export default function CampaignStatsPage() {
   useEffect(() => {
     (async () => {
       try {
+        // Fetch active campaigns
         const campaigns = await fetchCampaigns();
+        const campaignMap = new Map(campaigns.map(c => [c.id, c]));
+
+        // Also fetch ALL campaign_runs (including from deleted campaigns)
+        const { data: allRuns } = await supabase
+          .from('campaign_runs')
+          .select('id, campaign_id, stats');
+
+        // Group runs by campaign_id
+        const runsByCampaign = new Map<string, typeof allRuns>();
+        for (const r of (allRuns || [])) {
+          const arr = runsByCampaign.get(r.campaign_id) || [];
+          arr.push(r);
+          runsByCampaign.set(r.campaign_id, arr);
+        }
+
+        // For deleted campaigns, fetch their name/template from campaign_runs stats or use fallback
+        // Get unique campaign IDs (includes deleted ones)
+        const allCampaignIds = [...runsByCampaign.keys()];
+
+        // Fetch deleted campaigns info directly
+        const { data: allCampaignsRaw } = await supabase
+          .from('campaigns')
+          .select('id, name, template_text')
+          .in('id', allCampaignIds);
+        const allCampaignsMap = new Map((allCampaignsRaw || []).map(c => [c.id, c]));
+
         const perfs: CampaignPerf[] = [];
         
-        for (const camp of campaigns) {
-          const { data: runs } = await supabase
-            .from('campaign_runs')
-            .select('id, stats')
-            .eq('campaign_id', camp.id);
+        for (const campId of allCampaignIds) {
+          const runs = runsByCampaign.get(campId) || [];
+          const campInfo = allCampaignsMap.get(campId) || campaignMap.get(campId);
           
-          const runIds = (runs || []).map(r => r.id);
+          const runIds = runs.map(r => r.id);
           let sent = 0, delivered = 0, replied = 0;
           
-          for (const r of (runs || [])) {
+          for (const r of runs) {
             const s = r.stats as any;
             sent += s?.sent || 0;
           }
+
+          if (sent === 0) continue; // Skip campaigns with no sends
 
           if (runIds.length > 0) {
             const { count: deliveredCount } = await supabase
@@ -48,7 +75,6 @@ export default function CampaignStatsPage() {
               .eq('status', 'delivered');
             delivered = deliveredCount || 0;
 
-            // Count leads that replied after being messaged in this campaign
             const { data: msgLeads } = await supabase
               .from('message_logs')
               .select('lead_id')
@@ -67,13 +93,13 @@ export default function CampaignStatsPage() {
           }
           
           perfs.push({
-            name: camp.name,
+            name: campInfo?.name || `Deleted Campaign`,
             sent,
             delivered,
             replied,
             replyRate: sent > 0 ? (replied / sent) * 100 : 0,
             deliveryRate: sent > 0 ? (delivered / sent) * 100 : 0,
-            template: camp.template_text,
+            template: campInfo?.template_text || '(template unavailable)',
           });
         }
         
