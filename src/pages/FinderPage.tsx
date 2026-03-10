@@ -10,7 +10,7 @@ import InfoTip from '@/components/InfoTip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createFinderRun, fetchFinderRuns, runFinderSearch, fetchFinderCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
 import { ALL_CITIES, getCitiesByCountry, findCity, searchCities, getAreaLabel, CityProfile, Country, COUNTRY_LABELS, COUNTRY_DEFAULT_KEYWORDS } from '@/lib/cities';
-import { getRecommendedSearches, SearchRecommendation } from '@/lib/recommendedSearches';
+import { getRecommendedSearches, SearchRecommendation, buildCampaignPerformance, CampaignPerformance } from '@/lib/recommendedSearches';
 import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, PresetConfig, PresetKey } from '@/lib/finderPresets';
 import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
@@ -326,10 +326,24 @@ export default function FinderPage() {
     return stats;
   }, [runs]);
 
+  // Campaign performance for recommendations
+  const [campaignPerf, setCampaignPerf] = useState<CampaignPerformance | undefined>();
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: leads }, { data: msgs }] = await Promise.all([
+          supabase.from('leads').select('id, category, address, has_replied').limit(5000),
+          supabase.from('message_logs').select('lead_id, direction, status').eq('direction', 'outbound').limit(5000),
+        ]);
+        if (leads && msgs) setCampaignPerf(buildCampaignPerformance(leads, msgs));
+      } catch { /* ignore */ }
+    })();
+  }, []);
+
   // Recommended searches
   const recommendations = useMemo(() => {
-    return getRecommendedSearches(runs, cityStats).filter(r => r.country === country);
-  }, [runs, cityStats, country]);
+    return getRecommendedSearches(runs, cityStats, campaignPerf).filter(r => r.country === country);
+  }, [runs, cityStats, country, campaignPerf]);
 
   const applyRecommendation = (rec: SearchRecommendation) => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
@@ -415,6 +429,11 @@ export default function FinderPage() {
                     <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
                       {rec.cities.slice(0, 5).map(c => c.name).join(', ')}{rec.cities.length > 5 ? ` +${rec.cities.length - 5} more` : ''}
                     </div>
+                    {rec.suggestedNiches && rec.suggestedNiches.length > 0 && (
+                      <div className="text-[10px] text-primary mt-0.5">
+                        🎯 Top niches: {rec.suggestedNiches.slice(0, 3).join(', ')}
+                      </div>
+                    )}
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${rec.priority === 'high' ? 'bg-green-500/20 text-green-400' : rec.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>
                     {rec.priority}
