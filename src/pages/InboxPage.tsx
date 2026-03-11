@@ -148,6 +148,14 @@ export default function InboxPage() {
               <Inbox size={20} className="text-primary" />
               <h1 className="text-2xl font-bold text-foreground">Inbox</h1>
               <InfoTip text="Inbound SMS replies from leads. Use quick actions to update lead status." />
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="ml-auto p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Refresh inbox"
+              >
+                <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+              </button>
             </div>
 
             {/* Status counters */}
