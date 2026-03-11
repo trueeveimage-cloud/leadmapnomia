@@ -161,15 +161,19 @@ Deno.serve(async (req) => {
       sentToday = count || 0;
     }
 
+    // If manual batchSize is provided, allow it to exceed the daily cap
+    const manualOverride = batchSize && Number(batchSize) > 0;
     const dailyCap = campaign.daily_cap || 100;
-    const remaining = Math.max(0, dailyCap - sentToday);
-    if (remaining === 0) {
+    const remaining = manualOverride ? Infinity : Math.max(0, dailyCap - sentToday);
+    if (!manualOverride && remaining === 0) {
       return new Response(JSON.stringify({ error: 'Daily cap reached', sentToday }), {
         status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const requestedBatch = (batchSize && Number(batchSize) > 0) ? Math.min(Number(batchSize), remaining) : Math.min(campaign.daily_cap || 100, remaining);
+    const requestedBatch = manualOverride
+      ? Number(batchSize)
+      : Math.min(dailyCap, remaining);
     const effectiveLimit = requestedBatch;
 
     // Build query for eligible leads

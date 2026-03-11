@@ -55,6 +55,7 @@ export default function CampaignDetailPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduledBatches, setScheduledBatches] = useState<{ id: number; at: Date; countries: Country[]; batchSize?: number; timerId: ReturnType<typeof setTimeout> }[]>([]);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
@@ -137,13 +138,37 @@ export default function CampaignDetailPage() {
     }
     const delay = scheduledAt.getTime() - now.getTime();
     const timeStr = scheduledAt.toLocaleString();
-    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`);
-    setShowSchedule(false);
-    
-    setTimeout(async () => {
+    const batchCountries = [...selectedCountries];
+    const batchSize = customBatchSize ? Number(customBatchSize) : undefined;
+    const batchId = Date.now();
+
+    const timerId = setTimeout(async () => {
       toast.info('Scheduled batch starting now...');
+      setScheduledBatches(prev => prev.filter(b => b.id !== batchId));
+      // Use the countries/size from when it was scheduled
+      const prevCountries = selectedCountries;
+      const prevBatch = customBatchSize;
+      setSelectedCountries(batchCountries);
+      if (batchSize) setCustomBatchSize(String(batchSize));
       await handleSendBatch();
+      setSelectedCountries(prevCountries);
+      setCustomBatchSize(prevBatch);
     }, delay);
+
+    setScheduledBatches(prev => [...prev, { id: batchId, at: scheduledAt, countries: batchCountries, batchSize, timerId }]);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
+    setShowSchedule(false);
+    setScheduleDate('');
+    setScheduleTime('09:00');
+  };
+
+  const cancelScheduledBatch = (batchId: number) => {
+    setScheduledBatches(prev => {
+      const batch = prev.find(b => b.id === batchId);
+      if (batch) clearTimeout(batch.timerId);
+      return prev.filter(b => b.id !== batchId);
+    });
+    toast.info('Scheduled batch cancelled');
   };
 
   const handleRetryFailed = async () => {
@@ -279,6 +304,25 @@ export default function CampaignDetailPage() {
                   <Clock size={12} /> Confirm
                 </Button>
               </div>
+            </div>
+          )}
+
+          {scheduledBatches.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Scheduled Batches</p>
+              {scheduledBatches.map(b => (
+                <div key={b.id} className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-md text-xs">
+                  <div className="flex items-center gap-2">
+                    <Clock size={12} className="text-primary" />
+                    <span className="text-foreground font-medium">{b.at.toLocaleString()}</span>
+                    <span className="text-muted-foreground">→ {b.countries.map(c => countryLabel(c)).join(', ')}</span>
+                    {b.batchSize && <Badge variant="secondary" className="text-[10px] px-1.5">{b.batchSize} msgs</Badge>}
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] text-destructive hover:text-destructive" onClick={() => cancelScheduledBatch(b.id)}>
+                    Cancel
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </div>
