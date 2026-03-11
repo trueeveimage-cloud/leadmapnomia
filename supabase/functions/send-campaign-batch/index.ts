@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const requestedBatch = batchSize ? Math.min(Number(batchSize), remaining) : Math.min(campaign.batch_cap || 200, remaining);
+    const requestedBatch = (batchSize && Number(batchSize) > 0) ? Math.min(Number(batchSize), remaining) : Math.min(campaign.daily_cap || 100, remaining);
     const effectiveLimit = requestedBatch;
 
     // Build query for eligible leads
