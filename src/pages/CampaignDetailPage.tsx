@@ -55,6 +55,7 @@ export default function CampaignDetailPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduledBatches, setScheduledBatches] = useState<{ id: number; at: Date; countries: Country[]; batchSize?: number; timerId: ReturnType<typeof setTimeout> }[]>([]);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
