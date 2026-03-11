@@ -306,6 +306,25 @@ export default function CampaignDetailPage() {
               </div>
             </div>
           )}
+
+          {scheduledBatches.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Scheduled Batches</p>
+              {scheduledBatches.map(b => (
+                <div key={b.id} className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-md text-xs">
+                  <div className="flex items-center gap-2">
+                    <Clock size={12} className="text-primary" />
+                    <span className="text-foreground font-medium">{b.at.toLocaleString()}</span>
+                    <span className="text-muted-foreground">→ {b.countries.map(c => countryLabel(c)).join(', ')}</span>
+                    {b.batchSize && <Badge variant="secondary" className="text-[10px] px-1.5">{b.batchSize} msgs</Badge>}
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] text-destructive hover:text-destructive" onClick={() => cancelScheduledBatch(b.id)}>
+                    Cancel
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Schedule / Progress */}
