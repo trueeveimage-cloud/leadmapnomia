@@ -302,7 +302,25 @@ export default function InboxPage() {
 
               <div className="mb-4">
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Status</p>
-                <span className="text-sm font-medium text-foreground capitalize">{leadDetail.status.replace('_', ' ')}</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {QUICK_ACTIONS.map(a => (
+                    <button
+                      key={a.status}
+                      onClick={() => {
+                        const newStatus = leadDetail.status === a.status ? 'contacted' : a.status;
+                        handleQuickAction(selectedLeadId!, newStatus);
+                        setLeadDetail(prev => prev ? { ...prev, status: newStatus } : prev);
+                      }}
+                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                        leadDetail.status === a.status
+                          ? a.color + ' ring-1 ring-offset-1'
+                          : 'bg-muted text-muted-foreground border-border hover:opacity-80'
+                      }`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {leadDetail.notes && (

@@ -117,7 +117,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     refreshCounts();
     refreshNotifications();
     // Refresh notifications every 60 seconds
-    const interval = setInterval(refreshNotifications, 60000);
+    const interval = setInterval(refreshNotifications, 15000);
     return () => clearInterval(interval);
   }, [refreshCounts, refreshNotifications]);
 
