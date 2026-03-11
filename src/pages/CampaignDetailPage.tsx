@@ -138,13 +138,37 @@ export default function CampaignDetailPage() {
     }
     const delay = scheduledAt.getTime() - now.getTime();
     const timeStr = scheduledAt.toLocaleString();
-    toast.success(`Batch scheduled for ${timeStr} — sending to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`);
-    setShowSchedule(false);
-    
-    setTimeout(async () => {
+    const batchCountries = [...selectedCountries];
+    const batchSize = customBatchSize ? Number(customBatchSize) : undefined;
+    const batchId = Date.now();
+
+    const timerId = setTimeout(async () => {
       toast.info('Scheduled batch starting now...');
+      setScheduledBatches(prev => prev.filter(b => b.id !== batchId));
+      // Use the countries/size from when it was scheduled
+      const prevCountries = selectedCountries;
+      const prevBatch = customBatchSize;
+      setSelectedCountries(batchCountries);
+      if (batchSize) setCustomBatchSize(String(batchSize));
       await handleSendBatch();
+      setSelectedCountries(prevCountries);
+      setCustomBatchSize(prevBatch);
     }, delay);
+
+    setScheduledBatches(prev => [...prev, { id: batchId, at: scheduledAt, countries: batchCountries, batchSize, timerId }]);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
+    setShowSchedule(false);
+    setScheduleDate('');
+    setScheduleTime('09:00');
+  };
+
+  const cancelScheduledBatch = (batchId: number) => {
+    setScheduledBatches(prev => {
+      const batch = prev.find(b => b.id === batchId);
+      if (batch) clearTimeout(batch.timerId);
+      return prev.filter(b => b.id !== batchId);
+    });
+    toast.info('Scheduled batch cancelled');
   };
 
   const handleRetryFailed = async () => {
