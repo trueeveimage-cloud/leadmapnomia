@@ -66,6 +66,7 @@ export default function FinderBatchPage() {
     (async () => {
       setBulkAdding(true);
       let added = 0;
+      let dupes = 0;
       for (const c of qualifying) {
         try {
           const leadData = {
@@ -77,7 +78,10 @@ export default function FinderBatchPage() {
           };
           const section = determineSection(leadData);
           const { lead, duplicate, error } = await addLead({ ...leadData, section });
-          if (!duplicate && !error) {
+          if (duplicate) {
+            dupes++;
+            setAddedIds(s => new Set(s).add(c.id));
+          } else if (!error) {
             setAddedIds(s => new Set(s).add(c.id));
             added++;
           }
@@ -85,7 +89,10 @@ export default function FinderBatchPage() {
       }
       refreshCounts();
       setBulkAdding(false);
-      if (added > 0) toast.success(`Auto-added ${added} leads to CRM`);
+      const parts = [];
+      if (added > 0) parts.push(`${added} added`);
+      if (dupes > 0) parts.push(`${dupes} duplicates skipped`);
+      if (parts.length > 0) toast.success(`Auto-add: ${parts.join(', ')}`);
     })();
   }, [runs, candidates.length]);
 
