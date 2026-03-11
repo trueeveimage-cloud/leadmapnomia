@@ -240,11 +240,19 @@ export default function InboxPage() {
                           <p className="text-[10px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleString()}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {!answeredStatuses.includes(currentStatus) && QUICK_ACTIONS.map(a => (
+                          {QUICK_ACTIONS.map(a => (
                             <button
                               key={a.status}
-                              onClick={(e) => { e.stopPropagation(); handleQuickAction(m.lead_id, a.status); }}
-                              className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors hover:opacity-80 ${a.color}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newStatus = currentStatus === a.status ? 'contacted' : a.status;
+                                handleQuickAction(m.lead_id, newStatus);
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors hover:opacity-80 ${
+                                currentStatus === a.status
+                                  ? a.color + ' ring-1 ring-offset-1'
+                                  : a.color
+                              }`}
                             >
                               {a.label}
                             </button>
