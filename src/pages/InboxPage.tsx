@@ -39,31 +39,39 @@ export default function InboxPage() {
   const replyRef = React.useRef<HTMLTextAreaElement>(null);
   const [sending, setSending] = useState(false);
   const [conversation, setConversation] = useState<any[]>([]);
-  const { refreshCounts } = useCRM();
+  const { refreshCounts, refreshNotifications } = useCRM();
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('message_logs')
-          .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
-          .eq('direction', 'inbound')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        const mapped = (data || []).map((m: any) => ({
-          ...m,
-          lead_name: m.leads?.name,
-          lead_category: m.leads?.category,
-          lead_status: m.leads?.status,
-        }));
-        setMessages(mapped);
-      } catch { toast.error('Failed to load inbox'); }
-      finally { setLoading(false); }
-    };
-    load();
+  const loadInbox = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('message_logs')
+        .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      const mapped = (data || []).map((m: any) => ({
+        ...m,
+        lead_name: m.leads?.name,
+        lead_category: m.leads?.category,
+        lead_status: m.leads?.status,
+      }));
+      setMessages(mapped);
+    } catch { toast.error('Failed to load inbox'); }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInbox(false);
+    await refreshNotifications();
+    setRefreshing(false);
+    toast.success('Inbox refreshed');
+  };
 
   // Load lead detail + conversation when selected
   useEffect(() => {
