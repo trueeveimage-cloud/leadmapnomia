@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, Trash2 } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,31 +39,39 @@ export default function InboxPage() {
   const replyRef = React.useRef<HTMLTextAreaElement>(null);
   const [sending, setSending] = useState(false);
   const [conversation, setConversation] = useState<any[]>([]);
-  const { refreshCounts } = useCRM();
+  const { refreshCounts, refreshNotifications } = useCRM();
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('message_logs')
-          .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
-          .eq('direction', 'inbound')
-          .order('created_at', { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        const mapped = (data || []).map((m: any) => ({
-          ...m,
-          lead_name: m.leads?.name,
-          lead_category: m.leads?.category,
-          lead_status: m.leads?.status,
-        }));
-        setMessages(mapped);
-      } catch { toast.error('Failed to load inbox'); }
-      finally { setLoading(false); }
-    };
-    load();
+  const loadInbox = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('message_logs')
+        .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
+        .eq('direction', 'inbound')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      const mapped = (data || []).map((m: any) => ({
+        ...m,
+        lead_name: m.leads?.name,
+        lead_category: m.leads?.category,
+        lead_status: m.leads?.status,
+      }));
+      setMessages(mapped);
+    } catch { toast.error('Failed to load inbox'); }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInbox(false);
+    await refreshNotifications();
+    setRefreshing(false);
+    toast.success('Inbox refreshed');
+  };
 
   // Load lead detail + conversation when selected
   useEffect(() => {
@@ -140,6 +148,14 @@ export default function InboxPage() {
               <Inbox size={20} className="text-primary" />
               <h1 className="text-2xl font-bold text-foreground">Inbox</h1>
               <InfoTip text="Inbound SMS replies from leads. Use quick actions to update lead status." />
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="ml-auto p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Refresh inbox"
+              >
+                <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+              </button>
             </div>
 
             {/* Status counters */}
@@ -224,11 +240,19 @@ export default function InboxPage() {
                           <p className="text-[10px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleString()}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {!answeredStatuses.includes(currentStatus) && QUICK_ACTIONS.map(a => (
+                          {QUICK_ACTIONS.map(a => (
                             <button
                               key={a.status}
-                              onClick={(e) => { e.stopPropagation(); handleQuickAction(m.lead_id, a.status); }}
-                              className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors hover:opacity-80 ${a.color}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newStatus = currentStatus === a.status ? 'contacted' : a.status;
+                                handleQuickAction(m.lead_id, newStatus);
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-medium border transition-colors hover:opacity-80 ${
+                                currentStatus === a.status
+                                  ? a.color + ' ring-1 ring-offset-1'
+                                  : a.color
+                              }`}
                             >
                               {a.label}
                             </button>
