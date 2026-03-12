@@ -83,12 +83,19 @@ export default function CampaignDetailPage() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
+      const [c, r, scheduleRes] = await Promise.all([
+        fetchCampaign(id),
+        fetchCampaignRuns(id),
+        supabase.from('settings').select('value').eq('key', scheduleSettingKey(id)).maybeSingle(),
+      ]);
+
       setCampaign(c);
       setRuns(r);
-      // Set selected countries from campaign filter
+      setScheduledBatches(parseScheduledBatches(scheduleRes.data?.value));
+
       const campCountries = (c.audience_filter as any)?.countries;
       if (campCountries?.length) setSelectedCountries(campCountries);
+
       const runIds = r.map(run => run.id);
       if (runIds.length > 0) {
         const { data } = await supabase
@@ -98,9 +105,14 @@ export default function CampaignDetailPage() {
           .in('campaign_run_id', runIds)
           .order('created_at', { ascending: false });
         setMessages((data || []) as MessageLog[]);
+      } else {
+        setMessages([]);
       }
+
       setEligible(await countEligibleLeads(c.audience_filter as any, c.cooldown_days));
-    } catch { toast.error('Failed to load campaign'); }
+    } catch {
+      toast.error('Failed to load campaign');
+    }
   }, [id]);
 
   useEffect(() => {
@@ -120,6 +132,20 @@ export default function CampaignDetailPage() {
       prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
     );
   };
+
+  const persistScheduledBatches = useCallback(async (next: ScheduledBatch[]) => {
+    if (!id) return;
+    if (next.length === 0) {
+      const { error } = await supabase.from('settings').delete().eq('key', scheduleSettingKey(id));
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key: scheduleSettingKey(id), value: JSON.stringify(next) }, { onConflict: 'key' });
+    if (error) throw error;
+  }, [id]);
 
   const handleSendBatch = async () => {
     if (!campaign || !id) return;
@@ -147,50 +173,51 @@ export default function CampaignDetailPage() {
     finally { setSending(false); }
   };
 
-  const handleScheduleBatch = () => {
+  const handleScheduleBatch = async () => {
+    if (!id) return;
     if (!scheduleDate || !scheduleTime) {
       toast.error('Select date and time');
       return;
     }
+
     const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      toast.error('Invalid date/time');
+      return;
+    }
+
     const now = new Date();
     if (scheduledAt <= now) {
       toast.error('Schedule must be in the future');
       return;
     }
-    const delay = scheduledAt.getTime() - now.getTime();
-    const timeStr = scheduledAt.toLocaleString();
+
     const batchCountries = [...selectedCountries];
-    const batchSize = customBatchSize ? Number(customBatchSize) : undefined;
-    const batchId = Date.now();
+    const batchSize = customBatchSize && Number(customBatchSize) > 0 ? Number(customBatchSize) : undefined;
+    const batchId = crypto.randomUUID();
+    const next = [...scheduledBatches, { id: batchId, at: scheduledAt.toISOString(), countries: batchCountries, batchSize }];
 
-    const timerId = setTimeout(async () => {
-      toast.info('Scheduled batch starting now...');
-      setScheduledBatches(prev => prev.filter(b => b.id !== batchId));
-      // Use the countries/size from when it was scheduled
-      const prevCountries = selectedCountries;
-      const prevBatch = customBatchSize;
-      setSelectedCountries(batchCountries);
-      if (batchSize) setCustomBatchSize(String(batchSize));
-      await handleSendBatch();
-      setSelectedCountries(prevCountries);
-      setCustomBatchSize(prevBatch);
-    }, delay);
-
-    setScheduledBatches(prev => [...prev, { id: batchId, at: scheduledAt, countries: batchCountries, batchSize, timerId }]);
-    toast.success(`Batch scheduled for ${timeStr} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
-    setShowSchedule(false);
-    setScheduleDate('');
-    setScheduleTime('09:00');
+    try {
+      await persistScheduledBatches(next);
+      setScheduledBatches(next);
+      toast.success(`Batch scheduled for ${scheduledAt.toLocaleString()} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
+      setShowSchedule(false);
+      setScheduleDate('');
+      setScheduleTime('09:00');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to schedule batch');
+    }
   };
 
-  const cancelScheduledBatch = (batchId: number) => {
-    setScheduledBatches(prev => {
-      const batch = prev.find(b => b.id === batchId);
-      if (batch) clearTimeout(batch.timerId);
-      return prev.filter(b => b.id !== batchId);
-    });
-    toast.info('Scheduled batch cancelled');
+  const cancelScheduledBatch = async (batchId: string) => {
+    try {
+      const next = scheduledBatches.filter(b => b.id !== batchId);
+      await persistScheduledBatches(next);
+      setScheduledBatches(next);
+      toast.info('Scheduled batch cancelled');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel scheduled batch');
+    }
   };
 
   const handleRetryFailed = async () => {
