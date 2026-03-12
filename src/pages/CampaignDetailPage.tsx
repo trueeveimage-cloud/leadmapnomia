@@ -19,6 +19,28 @@ const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
   { value: 'DK', label: 'Denmark' },
 ];
 
+interface ScheduledBatch {
+  id: string;
+  at: string;
+  countries: Country[];
+  batchSize?: number;
+}
+
+const scheduleSettingKey = (campaignId: string) => `campaign_schedule_${campaignId}`;
+
+function parseScheduledBatches(value: string | null | undefined): ScheduledBatch[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ScheduledBatch => {
+      return !!item && typeof item.id === 'string' && typeof item.at === 'string' && Array.isArray(item.countries);
+    });
+  } catch {
+    return [];
+  }
+}
+
 function useNextBatchTimer() {
   const [timeLeft, setTimeLeft] = useState('');
   useEffect(() => {
