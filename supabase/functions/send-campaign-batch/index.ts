@@ -86,16 +86,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const isServiceRoleRequest = authHeader === `Bearer ${serviceRoleKey}`;
 
-    // Verify the user is authenticated
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    if (!isServiceRoleRequest) {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+      }
     }
 
     const { campaignId, batchSize, countries: requestedCountries } = await req.json();
@@ -199,8 +203,10 @@ Deno.serve(async (req) => {
       query = query.gte('reviews_count', filter.minReviews);
     }
     
-    // Sort by highest reviews first — prioritise established businesses
-    query = query.order('reviews_count', { ascending: false, nullsFirst: false });
+    // Sort by highest reviews first, then rating — prioritise established businesses
+    query = query
+      .order('reviews_count', { ascending: false, nullsFirst: false })
+      .order('rating', { ascending: false, nullsFirst: false });
 
     // Fetch MORE leads to account for landline skipping — we want effectiveLimit ACTUAL sends
     query = query.limit(effectiveLimit * 5);
