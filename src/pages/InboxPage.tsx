@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, Trash2, RefreshCw } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
@@ -88,6 +88,9 @@ export default function InboxPage() {
       await updateLead(leadId, { status } as Partial<Lead>);
       toast.success(`Lead marked as ${status.replace('_', ' ')}`);
       setMessages(prev => prev.map(m => m.lead_id === leadId ? { ...m, lead_status: status } : m));
+      if (leadDetail && leadDetail.id === leadId) {
+        setLeadDetail(prev => prev ? { ...prev, status } : prev);
+      }
       refreshCounts();
     } catch { toast.error('Failed to update'); }
   };
@@ -120,7 +123,6 @@ export default function InboxPage() {
       if (!res.ok) throw new Error(json.error || 'Failed to send');
       toast.success('SMS sent');
       setReplyText('');
-      // Refresh conversation
       const { data } = await supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
         .order('created_at', { ascending: true }).limit(50);
       setConversation(data || []);
@@ -128,11 +130,25 @@ export default function InboxPage() {
     finally { setSending(false); }
   };
 
-  const pendingMessages = messages.filter(m => !answeredStatuses.includes(m.lead_status || ''));
-  const answeredMessages = messages.filter(m => answeredStatuses.includes(m.lead_status || ''));
+  // Deduplicate: show only the latest message per lead_id
+  const deduped = (() => {
+    const seen = new Map<string, InboxMessage>();
+    for (const m of messages) {
+      const existing = seen.get(m.lead_id);
+      if (!existing || new Date(m.created_at) > new Date(existing.created_at)) {
+        // Keep the latest status from any message for this lead
+        seen.set(m.lead_id, { ...m, lead_status: m.lead_status });
+      }
+    }
+    return Array.from(seen.values());
+  })();
+
+  // Filter by tab but keep original insertion order (no re-sorting)
+  const pendingMessages = deduped.filter(m => !answeredStatuses.includes(m.lead_status || ''));
+  const answeredMessages = deduped.filter(m => answeredStatuses.includes(m.lead_status || ''));
   const displayed = tab === 'pending' ? pendingMessages : answeredMessages;
 
-  const statusCounts = messages.reduce((acc, m) => {
+  const statusCounts = deduped.reduce((acc, m) => {
     const s = m.lead_status || 'unknown';
     acc[s] = (acc[s] || 0) + 1;
     return acc;
@@ -211,7 +227,7 @@ export default function InboxPage() {
                   const currentStatus = m.lead_status || '';
                   return (
                     <div
-                      key={m.id}
+                      key={m.lead_id}
                       className={cn(
                         "bg-card border rounded-lg p-4 cursor-pointer transition-all",
                         isSelected ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
@@ -279,7 +295,16 @@ export default function InboxPage() {
         {selectedLeadId && leadDetail && (
           <div className="w-[45%] border-l border-border bg-card flex flex-col">
             <div className="flex-1 overflow-y-auto p-6">
-              <h2 className="text-lg font-bold text-foreground mb-1">{leadDetail.name}</h2>
+              <div className="flex items-start justify-between mb-1">
+                <h2 className="text-lg font-bold text-foreground">{leadDetail.name}</h2>
+                <button
+                  onClick={() => setSelectedLeadId(null)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  title="Close panel"
+                >
+                  <X size={18} />
+                </button>
+              </div>
               {leadDetail.category && <p className="text-xs text-muted-foreground mb-4">{leadDetail.category}</p>}
 
               <div className="space-y-3 mb-6">
@@ -323,29 +348,6 @@ export default function InboxPage() {
                   {leadDetail.reviews_count !== null && <span>({leadDetail.reviews_count} reviews)</span>}
                 </div>
               )}
-
-              <div className="mb-4">
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Status</p>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {QUICK_ACTIONS.map(a => (
-                    <button
-                      key={a.status}
-                      onClick={() => {
-                        const newStatus = leadDetail.status === a.status ? 'contacted' : a.status;
-                        handleQuickAction(selectedLeadId!, newStatus);
-                        setLeadDetail(prev => prev ? { ...prev, status: newStatus } : prev);
-                      }}
-                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                        leadDetail.status === a.status
-                          ? a.color + ' ring-1 ring-offset-1'
-                          : 'bg-muted text-muted-foreground border-border hover:opacity-80'
-                      }`}
-                    >
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               {leadDetail.notes && (
                 <div className="mb-4">
