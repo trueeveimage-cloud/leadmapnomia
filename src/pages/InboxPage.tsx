@@ -89,7 +89,7 @@ export default function InboxPage() {
       toast.success(`Lead marked as ${status.replace('_', ' ')}`);
       setMessages(prev => prev.map(m => m.lead_id === leadId ? { ...m, lead_status: status } : m));
       if (leadDetail && leadDetail.id === leadId) {
-        setLeadDetail(prev => prev ? { ...prev, status } : prev);
+        setLeadDetail(prev => prev ? { ...prev, status: status as Lead['status'] } : prev);
       }
       refreshCounts();
     } catch { toast.error('Failed to update'); }
