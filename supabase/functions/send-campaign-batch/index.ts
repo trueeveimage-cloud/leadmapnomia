@@ -199,8 +199,10 @@ Deno.serve(async (req) => {
       query = query.gte('reviews_count', filter.minReviews);
     }
     
-    // Sort by highest reviews first — prioritise established businesses
-    query = query.order('reviews_count', { ascending: false, nullsFirst: false });
+    // Sort by highest reviews first, then rating — prioritise established businesses
+    query = query
+      .order('reviews_count', { ascending: false, nullsFirst: false })
+      .order('rating', { ascending: false, nullsFirst: false });
 
     // Fetch MORE leads to account for landline skipping — we want effectiveLimit ACTUAL sends
     query = query.limit(effectiveLimit * 5);
