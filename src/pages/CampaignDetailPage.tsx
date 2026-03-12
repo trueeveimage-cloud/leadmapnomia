@@ -19,28 +19,6 @@ const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
   { value: 'DK', label: 'Denmark' },
 ];
 
-interface ScheduledBatch {
-  id: string;
-  at: string;
-  countries: Country[];
-  batchSize?: number;
-}
-
-const scheduleSettingKey = (campaignId: string) => `campaign_schedule_${campaignId}`;
-
-function parseScheduledBatches(value: string | null | undefined): ScheduledBatch[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is ScheduledBatch => {
-      return !!item && typeof item.id === 'string' && typeof item.at === 'string' && Array.isArray(item.countries);
-    });
-  } catch {
-    return [];
-  }
-}
-
 function useNextBatchTimer() {
   const [timeLeft, setTimeLeft] = useState('');
   useEffect(() => {
@@ -77,25 +55,18 @@ export default function CampaignDetailPage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
-  const [scheduledBatches, setScheduledBatches] = useState<ScheduledBatch[]>([]);
+  const [scheduledBatches, setScheduledBatches] = useState<{ id: number; at: Date; countries: Country[]; batchSize?: number; timerId: ReturnType<typeof setTimeout> }[]>([]);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [c, r, scheduleRes] = await Promise.all([
-        fetchCampaign(id),
-        fetchCampaignRuns(id),
-        supabase.from('settings').select('value').eq('key', scheduleSettingKey(id)).maybeSingle(),
-      ]);
-
+      const [c, r] = await Promise.all([fetchCampaign(id), fetchCampaignRuns(id)]);
       setCampaign(c);
       setRuns(r);
-      setScheduledBatches(parseScheduledBatches(scheduleRes.data?.value));
-
+      // Set selected countries from campaign filter
       const campCountries = (c.audience_filter as any)?.countries;
       if (campCountries?.length) setSelectedCountries(campCountries);
-
       const runIds = r.map(run => run.id);
       if (runIds.length > 0) {
         const { data } = await supabase
@@ -105,14 +76,9 @@ export default function CampaignDetailPage() {
           .in('campaign_run_id', runIds)
           .order('created_at', { ascending: false });
         setMessages((data || []) as MessageLog[]);
-      } else {
-        setMessages([]);
       }
-
       setEligible(await countEligibleLeads(c.audience_filter as any, c.cooldown_days));
-    } catch {
-      toast.error('Failed to load campaign');
-    }
+    } catch { toast.error('Failed to load campaign'); }
   }, [id]);
 
   useEffect(() => {
@@ -132,20 +98,6 @@ export default function CampaignDetailPage() {
       prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
     );
   };
-
-  const persistScheduledBatches = useCallback(async (next: ScheduledBatch[]) => {
-    if (!id) return;
-    if (next.length === 0) {
-      const { error } = await supabase.from('settings').delete().eq('key', scheduleSettingKey(id));
-      if (error) throw error;
-      return;
-    }
-
-    const { error } = await supabase
-      .from('settings')
-      .upsert({ key: scheduleSettingKey(id), value: JSON.stringify(next) }, { onConflict: 'key' });
-    if (error) throw error;
-  }, [id]);
 
   const handleSendBatch = async () => {
     if (!campaign || !id) return;
@@ -173,51 +125,50 @@ export default function CampaignDetailPage() {
     finally { setSending(false); }
   };
 
-  const handleScheduleBatch = async () => {
-    if (!id) return;
+  const handleScheduleBatch = () => {
     if (!scheduleDate || !scheduleTime) {
       toast.error('Select date and time');
       return;
     }
-
     const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
-    if (Number.isNaN(scheduledAt.getTime())) {
-      toast.error('Invalid date/time');
-      return;
-    }
-
     const now = new Date();
     if (scheduledAt <= now) {
       toast.error('Schedule must be in the future');
       return;
     }
-
+    const delay = scheduledAt.getTime() - now.getTime();
+    const timeStr = scheduledAt.toLocaleString();
     const batchCountries = [...selectedCountries];
-    const batchSize = customBatchSize && Number(customBatchSize) > 0 ? Number(customBatchSize) : undefined;
-    const batchId = crypto.randomUUID();
-    const next = [...scheduledBatches, { id: batchId, at: scheduledAt.toISOString(), countries: batchCountries, batchSize }];
+    const batchSize = customBatchSize ? Number(customBatchSize) : undefined;
+    const batchId = Date.now();
 
-    try {
-      await persistScheduledBatches(next);
-      setScheduledBatches(next);
-      toast.success(`Batch scheduled for ${scheduledAt.toLocaleString()} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
-      setShowSchedule(false);
-      setScheduleDate('');
-      setScheduleTime('09:00');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to schedule batch');
-    }
+    const timerId = setTimeout(async () => {
+      toast.info('Scheduled batch starting now...');
+      setScheduledBatches(prev => prev.filter(b => b.id !== batchId));
+      // Use the countries/size from when it was scheduled
+      const prevCountries = selectedCountries;
+      const prevBatch = customBatchSize;
+      setSelectedCountries(batchCountries);
+      if (batchSize) setCustomBatchSize(String(batchSize));
+      await handleSendBatch();
+      setSelectedCountries(prevCountries);
+      setCustomBatchSize(prevBatch);
+    }, delay);
+
+    setScheduledBatches(prev => [...prev, { id: batchId, at: scheduledAt, countries: batchCountries, batchSize, timerId }]);
+    toast.success(`Batch scheduled for ${timeStr} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
+    setShowSchedule(false);
+    setScheduleDate('');
+    setScheduleTime('09:00');
   };
 
-  const cancelScheduledBatch = async (batchId: string) => {
-    try {
-      const next = scheduledBatches.filter(b => b.id !== batchId);
-      await persistScheduledBatches(next);
-      setScheduledBatches(next);
-      toast.info('Scheduled batch cancelled');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to cancel scheduled batch');
-    }
+  const cancelScheduledBatch = (batchId: number) => {
+    setScheduledBatches(prev => {
+      const batch = prev.find(b => b.id === batchId);
+      if (batch) clearTimeout(batch.timerId);
+      return prev.filter(b => b.id !== batchId);
+    });
+    toast.info('Scheduled batch cancelled');
   };
 
   const handleRetryFailed = async () => {
@@ -363,7 +314,7 @@ export default function CampaignDetailPage() {
                 <div key={b.id} className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-md text-xs">
                   <div className="flex items-center gap-2">
                     <Clock size={12} className="text-primary" />
-                    <span className="text-foreground font-medium">{new Date(b.at).toLocaleString()}</span>
+                    <span className="text-foreground font-medium">{b.at.toLocaleString()}</span>
                     <span className="text-muted-foreground">→ {b.countries.map(c => countryLabel(c)).join(', ')}</span>
                     {b.batchSize && <Badge variant="secondary" className="text-[10px] px-1.5">{b.batchSize} msgs</Badge>}
                   </div>
