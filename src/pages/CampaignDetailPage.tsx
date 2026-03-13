@@ -8,7 +8,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
@@ -249,11 +249,19 @@ export default function CampaignDetailPage() {
   const failed = messages.filter(m => m.status === 'failed');
   const undelivered = messages.filter(m => m.status === 'undelivered');
 
+  const SMS_COST = 0.065;
   const totalTarget = campaign?.batch_cap ?? 0;
   const dailyCap = campaign?.daily_cap ?? 100;
   const totalSent = messages.length;
   const remaining = Math.max(0, totalTarget - totalSent);
   const daysLeft = dailyCap > 0 ? Math.ceil(remaining / dailyCap) : 0;
+  const totalSpent = totalSent * SMS_COST;
+
+  const getRunCost = (s: any) => {
+    const sent = s?.sent || 0;
+    const failedCount = s?.failed || 0;
+    return ((sent + failedCount) * SMS_COST).toFixed(2);
+  };
 
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
@@ -382,7 +390,7 @@ export default function CampaignDetailPage() {
             { label: 'Total Target', value: totalTarget, icon: Hash },
             { label: 'Daily Cap', value: dailyCap, icon: Clock },
             { label: 'Sent So Far', value: totalSent, icon: Send },
-            { label: 'Next Batch', value: remaining > 0 ? Math.min(dailyCap, remaining) : 0, icon: Send },
+            { label: 'Total Spent', value: `$${totalSpent.toFixed(2)}`, icon: DollarSign },
             { label: 'Days Left', value: remaining > 0 ? `~${daysLeft}d` : 'Done', icon: Clock },
             { label: 'Next Auto-Send', value: campaign.status === 'running' && remaining > 0 ? nextBatch : '—', icon: Timer },
           ].map(s => (
@@ -488,6 +496,8 @@ export default function CampaignDetailPage() {
                       {s?.sent !== undefined && <span>sent: <span className="text-foreground font-semibold">{s.sent}</span></span>}
                       {s?.failed !== undefined && s.failed > 0 && <span className="text-destructive">failed: {s.failed}</span>}
                       {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines: {s.skipped_landline}</span>}
+                      <span className="text-amber-500 font-medium">💰 ${getRunCost(s)}</span>
+                      {s?.failed > 0 && <span className="text-destructive/70">({(s.failed * SMS_COST).toFixed(2)} wasted)</span>}
                     </div>
                   </div>
                 );
