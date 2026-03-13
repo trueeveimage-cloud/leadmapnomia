@@ -8,7 +8,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
