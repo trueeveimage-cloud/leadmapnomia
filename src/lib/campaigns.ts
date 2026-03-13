@@ -126,7 +126,7 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
   while (true) {
     const { data, error } = await supabase
       .from('leads')
-      .select('id, phone, section, rating, reviews_count, website, outreach_opt_out, has_replied, last_outbound_at')
+      .select('id, phone, address, section, rating, reviews_count, website, outreach_opt_out, has_replied, last_outbound_at, status')
       .range(from, from + pageSize - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
@@ -135,7 +135,8 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
     from += pageSize;
   }
 
-  const cooldownDate = new Date(Date.now() - cooldownDays * 86400000);
+  const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
+
   const breakdown: EligibilityBreakdown = {
     total: allLeads.length,
     eligible: 0,
@@ -161,11 +162,14 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
     if (!isMobileNumber(lead.phone, lead.address)) { breakdown.landline++; continue; }
     if (filter.excludeOptOut !== false && lead.outreach_opt_out) { breakdown.optedOut++; continue; }
     if (filter.excludeReplied !== false && lead.has_replied) { breakdown.replied++; continue; }
+    // Exclude already contacted leads (last_outbound_at is set = already messaged)
+    if (lead.last_outbound_at) { breakdown.cooldown++; continue; }
+    // Exclude leads with engaged/contacted statuses
+    if (excludedStatuses.includes(lead.status)) { breakdown.cooldown++; continue; }
     if (filter.sections?.length && !filter.sections.includes(lead.section)) { breakdown.wrongSection++; continue; }
     if (filter.hasWebsite === false && lead.website) { breakdown.hasWebsite++; continue; }
     if (filter.minRating && (lead.rating == null || lead.rating < filter.minRating)) { breakdown.lowRating++; continue; }
     if (filter.minReviews && (lead.reviews_count == null || lead.reviews_count < filter.minReviews)) { breakdown.lowReviews++; continue; }
-    if (lead.last_outbound_at && new Date(lead.last_outbound_at) > cooldownDate) { breakdown.cooldown++; continue; }
     breakdown.eligible++;
   }
 
