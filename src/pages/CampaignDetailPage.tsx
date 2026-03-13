@@ -496,6 +496,8 @@ export default function CampaignDetailPage() {
                       {s?.sent !== undefined && <span>sent: <span className="text-foreground font-semibold">{s.sent}</span></span>}
                       {s?.failed !== undefined && s.failed > 0 && <span className="text-destructive">failed: {s.failed}</span>}
                       {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines: {s.skipped_landline}</span>}
+                      <span className="text-amber-500 font-medium">💰 ${getRunCost(s)}</span>
+                      {s?.failed > 0 && <span className="text-destructive/70">({(s.failed * SMS_COST).toFixed(2)} wasted)</span>}
                     </div>
                   </div>
                 );
