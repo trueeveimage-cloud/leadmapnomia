@@ -22,18 +22,13 @@ function detectCountry(address?: string | null, phone?: string | null): string {
 function isSmsEligible(phone: string, address?: string | null): boolean {
   const cleaned = phone.replace(/\s|-/g, '');
   const country = detectCountry(address, phone);
-  
-  // For Norway and Denmark: send to ALL numbers — Twilio handles landline rejection
   if (country === 'NO' || country === 'DK') return true;
-  
-  // Sweden: only mobile numbers (landlines go to call list)
   return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
 }
 
 function normalizeToE164(phone: string, address?: string | null): string {
   let e164 = phone.replace(/\s|-/g, '');
   const country = detectCountry(address, phone);
-  
   if (country === 'NO') {
     if (/^\d{8}$/.test(e164)) e164 = '+47' + e164;
     else if (/^47\d{8}$/.test(e164)) e164 = '+' + e164;
@@ -41,22 +36,15 @@ function normalizeToE164(phone: string, address?: string | null): string {
     if (/^\d{8}$/.test(e164)) e164 = '+45' + e164;
     else if (/^45\d{8}$/.test(e164)) e164 = '+' + e164;
   } else {
-    // Sweden
     if (e164.startsWith('07')) e164 = '+46' + e164.slice(1);
     else if (e164.startsWith('467')) e164 = '+' + e164;
   }
-  
   if (!e164.startsWith('+')) e164 = '+' + e164;
   return e164;
 }
 
 async function sendTwilioSms(
-  accountSid: string,
-  authToken: string,
-  from: string,
-  to: string,
-  body: string,
-  statusCallback: string,
+  accountSid: string, authToken: string, from: string, to: string, body: string, statusCallback: string,
 ): Promise<{ sid: string; status: string; error?: string }> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
   const params = new URLSearchParams({ From: from, To: to, Body: body, StatusCallback: statusCallback });
@@ -69,16 +57,12 @@ async function sendTwilioSms(
     body: params.toString(),
   });
   const json = await resp.json();
-  if (!resp.ok) {
-    return { sid: '', status: 'failed', error: json.message || json.code || 'Twilio error' };
-  }
+  if (!resp.ok) return { sid: '', status: 'failed', error: json.message || json.code || 'Twilio error' };
   return { sid: json.sid, status: json.status };
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -91,11 +75,9 @@ Deno.serve(async (req) => {
 
     if (!isServiceRoleRequest) {
       const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
+        Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
         { global: { headers: { Authorization: authHeader } } }
       );
-
       const { data: { user }, error: authErr } = await supabase.auth.getUser();
       if (authErr || !user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
@@ -107,7 +89,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'campaignId required' }), { status: 400, headers: corsHeaders });
     }
 
-    // Check Twilio credentials
     const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID');
     const twilioToken = Deno.env.get('TWILIO_AUTH_TOKEN');
     const twilioFrom = Deno.env.get('TWILIO_PHONE_NUMBER');
@@ -116,11 +97,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const statusCallbackUrl = `${supabaseUrl}/functions/v1/twilio-status`;
 
-    // Use service role for DB operations
-    const dbClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+    const dbClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
     // Fetch campaign
     const { data: campaign, error: campErr } = await dbClient
@@ -130,42 +107,31 @@ Deno.serve(async (req) => {
     }
 
     const filter = campaign.audience_filter || {};
-    const cooldownDays = campaign.cooldown_days || 0;
-    const cooldownDate = new Date(Date.now() - cooldownDays * 86400000).toISOString();
 
-    // Determine which countries to send to
-    // Priority: 1) request body param, 2) campaign filter, 3) default to Sweden only
     const targetCountries: string[] = requestedCountries?.length
       ? requestedCountries
       : filter.countries?.length
         ? filter.countries
         : ['SE'];
 
-    // Check how many messages THIS CAMPAIGN sent today (per-campaign daily cap)
+    // Check daily cap
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    // Get today's run IDs for this campaign
     const { data: todayRuns } = await dbClient
-      .from('campaign_runs')
-      .select('id')
-      .eq('campaign_id', campaignId)
+      .from('campaign_runs').select('id').eq('campaign_id', campaignId)
       .gte('created_at', todayStart.toISOString());
-    
     const todayRunIds = (todayRuns || []).map((r: any) => r.id);
-    
+
     let sentToday = 0;
     if (todayRunIds.length > 0) {
-      const { count } = await dbClient
-        .from('message_logs')
+      const { count } = await dbClient.from('message_logs')
         .select('id', { count: 'exact', head: true })
-        .eq('direction', 'outbound')
-        .not('status', 'eq', 'failed')
+        .eq('direction', 'outbound').not('status', 'eq', 'failed')
         .in('campaign_run_id', todayRunIds);
       sentToday = count || 0;
     }
 
-    // If manual batchSize is provided, allow it to exceed the daily cap
     const manualOverride = batchSize && Number(batchSize) > 0;
     const dailyCap = campaign.daily_cap || 100;
     const remaining = manualOverride ? Infinity : Math.max(0, dailyCap - sentToday);
@@ -175,57 +141,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const requestedBatch = manualOverride
-      ? Number(batchSize)
-      : Math.min(dailyCap, remaining);
-    const effectiveLimit = requestedBatch;
+    const effectiveLimit = manualOverride ? Number(batchSize) : Math.min(dailyCap, remaining);
 
-    // Build query for eligible leads
-    // CRITICAL: Only send to leads that have NEVER been messaged before (no outbound ever)
+    // Build base query filters (reused across pages)
     const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
-    let query = dbClient.from('leads').select('*')
-      .eq('outreach_opt_out', false)
-      .eq('has_replied', false)
-      .is('last_outbound_at', null)
-      .not('phone', 'is', null)
-      .not('status', 'in', `(${excludedStatuses.join(',')})`);
-
-    if (filter.sections?.length) {
-      query = query.in('section', filter.sections);
-    }
-    if (filter.hasWebsite === false) {
-      query = query.is('website', null);
-    }
-    if (filter.minRating) {
-      query = query.gte('rating', filter.minRating);
-    }
-    if (filter.minReviews) {
-      query = query.gte('reviews_count', filter.minReviews);
-    }
-    
-    // Sort by highest reviews first, then rating — prioritise established businesses
-    query = query
-      .order('reviews_count', { ascending: false, nullsFirst: false })
-      .order('rating', { ascending: false, nullsFirst: false });
-
-    // Fetch MORE leads to account for landline skipping — we want effectiveLimit ACTUAL sends
-    query = query.limit(effectiveLimit * 5);
-
-    const { data: leads, error: leadErr } = await query;
-    if (leadErr) throw leadErr;
-
-    // Filter by target countries
-    const filteredLeads = (leads || []).filter((lead: any) => {
-      const country = detectCountry(lead.address, lead.phone);
-      return targetCountries.includes(country);
-    });
 
     // Create campaign run
     const { data: run, error: runErr } = await dbClient
-      .from('campaign_runs')
-      .insert({ campaign_id: campaignId })
-      .select()
-      .single();
+      .from('campaign_runs').insert({ campaign_id: campaignId }).select().single();
     if (runErr) throw runErr;
 
     const stats = {
@@ -236,101 +159,121 @@ Deno.serve(async (req) => {
       countries: targetCountries,
     };
 
-    // Loop until we've SENT effectiveLimit messages (not just attempted)
-    for (const lead of filteredLeads) {
-      // Stop once we've sent enough
-      if (stats.sent >= effectiveLimit) break;
+    // PAGINATION LOOP: Keep fetching pages of leads until we hit the send target or run out
+    const PAGE_SIZE = 500;
+    let offset = 0;
+    const MAX_PAGES = 50; // Safety limit: 50 * 500 = 25,000 leads max scan
+    let exhausted = false;
 
-      stats.attempted++;
+    for (let page = 0; page < MAX_PAGES && stats.sent < effectiveLimit && !exhausted; page++) {
+      let query = dbClient.from('leads').select('*')
+        .eq('outreach_opt_out', false)
+        .eq('has_replied', false)
+        .is('last_outbound_at', null)
+        .not('phone', 'is', null)
+        .not('status', 'in', `(${excludedStatuses.join(',')})`)
+        .order('reviews_count', { ascending: false, nullsFirst: false })
+        .order('rating', { ascending: false, nullsFirst: false })
+        .range(offset, offset + PAGE_SIZE - 1);
 
-      const toNumber = lead.phone_e164 || lead.phone;
-      if (!toNumber) { stats.skipped_no_phone++; continue; }
+      if (filter.sections?.length) query = query.in('section', filter.sections);
+      if (filter.hasWebsite === false) query = query.is('website', null);
+      if (filter.minRating) query = query.gte('rating', filter.minRating);
+      if (filter.minReviews) query = query.gte('reviews_count', filter.minReviews);
 
-      // Check SMS eligibility — landlines DON'T count toward batch limit
-      if (!isSmsEligible(toNumber, lead.address)) {
-        const country = detectCountry(lead.address, toNumber);
-        stats.skipped_landline++;
-        if (country === 'SE') {
-          await dbClient.from('leads').update({
-            needs_call: true,
-            outreach_stage: 'no_reply_call',
-            call_after_at: new Date().toISOString(),
-          }).eq('id', lead.id);
-        }
-        continue;
-      }
+      const { data: leads, error: leadErr } = await query;
+      if (leadErr) throw leadErr;
 
-      // Render template
-      const body = (campaign.template_text || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
-        return (lead as any)[key] ?? '';
+      // If we got fewer than PAGE_SIZE, this is the last page
+      if (!leads || leads.length < PAGE_SIZE) exhausted = true;
+      if (!leads || leads.length === 0) break;
+
+      offset += leads.length;
+
+      // Filter by target countries
+      const filteredLeads = leads.filter((lead: any) => {
+        const country = detectCountry(lead.address, lead.phone);
+        return targetCountries.includes(country);
       });
 
-      // Normalize to E164
-      const e164 = normalizeToE164(toNumber, lead.address);
+      for (const lead of filteredLeads) {
+        if (stats.sent >= effectiveLimit) break;
 
-      if (useTwilio) {
-        const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
+        stats.attempted++;
 
-        await dbClient.from('message_logs').insert({
-          lead_id: lead.id,
-          direction: 'outbound',
-          channel: 'sms',
-          from_number: twilioFrom,
-          to_number: e164,
-          body,
-          provider: 'twilio',
-          provider_message_sid: result.sid || null,
-          status: result.error ? 'failed' : result.status,
-          error_message: result.error || null,
-          campaign_run_id: run.id,
-        });
+        const toNumber = lead.phone_e164 || lead.phone;
+        if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-        if (!lead.phone_e164 && e164 !== toNumber) {
-          await dbClient.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
-        }
-
-        if (result.error) {
-          stats.failed++;
-          console.error(`SMS failed for ${lead.id}: ${result.error}`);
+        // Check SMS eligibility — landlines skip, don't count toward limit
+        if (!isSmsEligible(toNumber, lead.address)) {
+          const country = detectCountry(lead.address, toNumber);
+          stats.skipped_landline++;
+          if (country === 'SE') {
+            await dbClient.from('leads').update({
+              needs_call: true,
+              outreach_stage: 'no_reply_call',
+              call_after_at: new Date().toISOString(),
+            }).eq('id', lead.id);
+          }
           continue;
         }
 
-        stats.sent++;
-      } else {
-        await dbClient.from('message_logs').insert({
-          lead_id: lead.id,
-          direction: 'outbound',
-          channel: 'sms',
-          from_number: 'MOCK',
-          to_number: e164,
-          body,
-          provider: 'mock',
-          provider_message_sid: `mock_${crypto.randomUUID()}`,
-          status: 'delivered',
-          campaign_run_id: run.id,
+        // Render template
+        const body = (campaign.template_text || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
+          return (lead as any)[key] ?? '';
         });
 
-        stats.sent++;
-        stats.delivered++;
-      }
+        const e164 = normalizeToE164(toNumber, lead.address);
 
-      // Update lead
-      await dbClient.from('leads').update({
-        last_outbound_at: new Date().toISOString(),
-        outreach_stage: 'sms_sent',
-        last_message_preview: body.slice(0, 80),
-        last_message_direction: 'outbound',
-        last_message_status: useTwilio ? 'queued' : 'delivered',
-        last_contact_method: 'sms',
-        last_contacted_at: new Date().toISOString(),
-        status: 'contacted',
-      }).eq('id', lead.id);
+        if (useTwilio) {
+          const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
+
+          await dbClient.from('message_logs').insert({
+            lead_id: lead.id, direction: 'outbound', channel: 'sms',
+            from_number: twilioFrom, to_number: e164, body,
+            provider: 'twilio', provider_message_sid: result.sid || null,
+            status: result.error ? 'failed' : result.status,
+            error_message: result.error || null, campaign_run_id: run.id,
+          });
+
+          if (!lead.phone_e164 && e164 !== toNumber) {
+            await dbClient.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
+          }
+
+          if (result.error) {
+            stats.failed++;
+            console.error(`SMS failed for ${lead.id}: ${result.error}`);
+            continue;
+          }
+          stats.sent++;
+        } else {
+          await dbClient.from('message_logs').insert({
+            lead_id: lead.id, direction: 'outbound', channel: 'sms',
+            from_number: 'MOCK', to_number: e164, body,
+            provider: 'mock', provider_message_sid: `mock_${crypto.randomUUID()}`,
+            status: 'delivered', campaign_run_id: run.id,
+          });
+          stats.sent++;
+          stats.delivered++;
+        }
+
+        // Update lead
+        await dbClient.from('leads').update({
+          last_outbound_at: new Date().toISOString(),
+          outreach_stage: 'sms_sent',
+          last_message_preview: body.slice(0, 80),
+          last_message_direction: 'outbound',
+          last_message_status: useTwilio ? 'queued' : 'delivered',
+          last_contact_method: 'sms',
+          last_contacted_at: new Date().toISOString(),
+          status: 'contacted',
+        }).eq('id', lead.id);
+      }
     }
 
     // Update run stats
     await dbClient.from('campaign_runs').update({
-      stats,
-      ended_at: new Date().toISOString(),
+      stats, ended_at: new Date().toISOString(),
     }).eq('id', run.id);
 
     return new Response(JSON.stringify({ success: true, stats, runId: run.id, provider: useTwilio ? 'twilio' : 'mock' }), {
@@ -339,8 +282,7 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
