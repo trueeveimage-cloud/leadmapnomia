@@ -249,11 +249,19 @@ export default function CampaignDetailPage() {
   const failed = messages.filter(m => m.status === 'failed');
   const undelivered = messages.filter(m => m.status === 'undelivered');
 
+  const SMS_COST = 0.065;
   const totalTarget = campaign?.batch_cap ?? 0;
   const dailyCap = campaign?.daily_cap ?? 100;
   const totalSent = messages.length;
   const remaining = Math.max(0, totalTarget - totalSent);
   const daysLeft = dailyCap > 0 ? Math.ceil(remaining / dailyCap) : 0;
+  const totalSpent = totalSent * SMS_COST;
+
+  const getRunCost = (s: any) => {
+    const sent = s?.sent || 0;
+    const failedCount = s?.failed || 0;
+    return ((sent + failedCount) * SMS_COST).toFixed(2);
+  };
 
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
