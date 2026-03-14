@@ -8,7 +8,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
@@ -62,6 +62,8 @@ function useNextBatchTimer() {
   return timeLeft;
 }
 
+const SMS_COST_PER_SEGMENT = 0.065;
+
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -78,6 +80,7 @@ export default function CampaignDetailPage() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [scheduledBatches, setScheduledBatches] = useState<ScheduledBatch[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
@@ -140,7 +143,6 @@ export default function CampaignDetailPage() {
       if (error) throw error;
       return;
     }
-
     const { error } = await supabase
       .from('settings')
       .upsert({ key: scheduleSettingKey(id), value: JSON.stringify(next) }, { onConflict: 'key' });
@@ -148,7 +150,7 @@ export default function CampaignDetailPage() {
   }, [id]);
 
   const handleSendBatch = async () => {
-    if (!campaign || !id) return;
+    if (!campaign || !id || sending) return;
     if (selectedCountries.length === 0) {
       toast.error('Select at least one country');
       return;
@@ -165,7 +167,7 @@ export default function CampaignDetailPage() {
       if (data.error) {
         toast.error(data.error);
       } else {
-        toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.failed ?? 0} failed, ${data.stats?.skipped_landline ?? 0} landlines skipped)`);
+        toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.failed ?? 0} failed, ${data.stats?.skipped_landline ?? 0} landlines, ${data.stats?.skipped_idempotency ?? 0} duplicates skipped)`);
       }
       setCustomBatchSize('');
       await load();
@@ -179,19 +181,15 @@ export default function CampaignDetailPage() {
       toast.error('Select date and time');
       return;
     }
-
     const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
     if (Number.isNaN(scheduledAt.getTime())) {
       toast.error('Invalid date/time');
       return;
     }
-
-    const now = new Date();
-    if (scheduledAt <= now) {
+    if (scheduledAt <= new Date()) {
       toast.error('Schedule must be in the future');
       return;
     }
-
     const batchCountries = [...selectedCountries];
     const batchSize = customBatchSize && Number(customBatchSize) > 0 ? Number(customBatchSize) : undefined;
     const batchId = crypto.randomUUID();
@@ -200,7 +198,7 @@ export default function CampaignDetailPage() {
     try {
       await persistScheduledBatches(next);
       setScheduledBatches(next);
-      toast.success(`Batch scheduled for ${scheduledAt.toLocaleString()} — sending to ${batchCountries.map(c => countryLabel(c)).join(', ')}`);
+      toast.success(`Batch scheduled for ${scheduledAt.toLocaleString()}`);
       setShowSchedule(false);
       setScheduleDate('');
       setScheduleTime('09:00');
@@ -221,7 +219,7 @@ export default function CampaignDetailPage() {
   };
 
   const handleRetryFailed = async () => {
-    if (!id) return;
+    if (!id || retrying) return;
     setRetrying(true);
     try {
       const failedIds = messages.filter(m => m.status === 'failed').map(m => m.id);
@@ -245,28 +243,38 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
-  const delivered = messages.filter(m => m.status === 'delivered' || m.status === 'sent');
-  const failed = messages.filter(m => m.status === 'failed');
-  const undelivered = messages.filter(m => m.status === 'undelivered');
+  // Compute real stats from message_logs
+  const deliveredMsgs = messages.filter(m => m.status === 'delivered');
+  const sentMsgs = messages.filter(m => m.status === 'sent' || m.status === 'queued');
+  const failedMsgs = messages.filter(m => m.status === 'failed');
+  const undeliveredMsgs = messages.filter(m => m.status === 'undelivered');
 
-  const SMS_COST = 0.065;
+  // Cost from actual messages with provider_message_sid (actually sent to Twilio)
+  const computeCost = (msgs: MessageLog[]) => {
+    return msgs
+      .filter(m => m.provider_message_sid && m.provider_message_sid !== '')
+      .reduce((sum, m) => sum + ((m as any).num_segments || 1) * SMS_COST_PER_SEGMENT, 0);
+  };
+
+  const deliveredCost = computeCost(deliveredMsgs);
+  const failedCost = computeCost(failedMsgs);
+  const totalCost = computeCost(messages);
+
   const totalTarget = campaign?.batch_cap ?? 0;
   const dailyCap = campaign?.daily_cap ?? 100;
+  const totalDelivered = deliveredMsgs.length;
   const totalSent = messages.length;
-  const remaining = Math.max(0, totalTarget - totalSent);
+  const remaining = Math.max(0, totalTarget - totalDelivered);
   const daysLeft = dailyCap > 0 ? Math.ceil(remaining / dailyCap) : 0;
-  const totalSpent = totalSent * SMS_COST;
 
   const getRunCost = (s: any) => {
     const sent = s?.sent || 0;
     const failedCount = s?.failed || 0;
-    return ((sent + failedCount) * SMS_COST).toFixed(2);
+    return ((sent + failedCount) * SMS_COST_PER_SEGMENT).toFixed(2);
   };
 
   if (loading) return <AppLayout><div className="p-10 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   if (!campaign) return <AppLayout><div className="p-10 text-sm text-destructive">Campaign not found</div></AppLayout>;
-
-  
 
   return (
     <AppLayout>
@@ -297,7 +305,6 @@ export default function CampaignDetailPage() {
         <div className="bg-card border border-border rounded-lg p-4 mb-6">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Send Batch</h3>
           
-          {/* Country selector */}
           <div className="mb-3">
             <label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1.5">
               <Globe size={12} /> Target Countries
@@ -325,7 +332,7 @@ export default function CampaignDetailPage() {
               <Input
                 type="number"
                 min="1"
-                max="1000"
+                max="500"
                 value={customBatchSize}
                 onChange={e => setCustomBatchSize(e.target.value)}
                 placeholder={String(campaign.daily_cap)}
@@ -344,19 +351,8 @@ export default function CampaignDetailPage() {
             <div className="mt-3 p-3 bg-muted/50 border border-border rounded-md space-y-2">
               <p className="text-xs font-medium text-foreground">Schedule batch for later</p>
               <div className="flex gap-2">
-                <Input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={e => setScheduleDate(e.target.value)}
-                  className="h-8 text-sm flex-1"
-                  min={new Date().toISOString().split('T')[0]}
-                />
-                <Input
-                  type="time"
-                  value={scheduleTime}
-                  onChange={e => setScheduleTime(e.target.value)}
-                  className="h-8 text-sm w-28"
-                />
+                <Input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} className="h-8 text-sm flex-1" min={new Date().toISOString().split('T')[0]} />
+                <Input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="h-8 text-sm w-28" />
                 <Button size="sm" onClick={handleScheduleBatch} className="gap-1.5 text-xs">
                   <Clock size={12} /> Confirm
                 </Button>
@@ -384,13 +380,13 @@ export default function CampaignDetailPage() {
           )}
         </div>
 
-        {/* Schedule / Progress */}
+        {/* Progress Metrics — delivery-based */}
         <div className="grid grid-cols-6 gap-3 mb-6">
           {[
-            { label: 'Total Target', value: totalTarget, icon: Hash },
+            { label: 'Total Target', value: totalTarget || '∞', icon: Hash },
             { label: 'Daily Cap', value: dailyCap, icon: Clock },
-            { label: 'Sent So Far', value: totalSent, icon: Send },
-            { label: 'Total Spent', value: `$${totalSpent.toFixed(2)}`, icon: DollarSign },
+            { label: 'Delivered', value: totalDelivered, icon: Send },
+            { label: 'Total Cost', value: `$${totalCost.toFixed(2)}`, icon: DollarSign },
             { label: 'Days Left', value: remaining > 0 ? `~${daysLeft}d` : 'Done', icon: Clock },
             { label: 'Next Auto-Send', value: campaign.status === 'running' && remaining > 0 ? nextBatch : '—', icon: Timer },
           ].map(s => (
@@ -402,17 +398,56 @@ export default function CampaignDetailPage() {
           ))}
         </div>
 
-        {/* Progress bar */}
+        {/* Status breakdown bar */}
+        <div className="mb-6 bg-card border border-border rounded-lg p-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Delivery Breakdown</h3>
+          <div className="grid grid-cols-4 gap-3 text-center text-xs">
+            <div>
+              <p className="text-lg font-bold text-foreground">{sentMsgs.length}</p>
+              <p className="text-muted-foreground">Queued/Sent</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-green-500">{deliveredMsgs.length}</p>
+              <p className="text-muted-foreground">Delivered ✓</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-destructive">{failedMsgs.length}</p>
+              <p className="text-muted-foreground">Failed</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-amber-500">{undeliveredMsgs.length}</p>
+              <p className="text-muted-foreground">Undelivered</p>
+            </div>
+          </div>
+
+          {/* Cost breakdown */}
+          <div className="mt-3 pt-3 border-t border-border grid grid-cols-3 gap-3 text-center text-xs">
+            <div>
+              <p className="font-semibold text-foreground">${deliveredCost.toFixed(2)}</p>
+              <p className="text-muted-foreground">Delivered cost</p>
+            </div>
+            <div>
+              <p className="font-semibold text-destructive">${failedCost.toFixed(2)}</p>
+              <p className="text-muted-foreground">Wasted (failed)</p>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">${totalCost.toFixed(2)}</p>
+              <p className="text-muted-foreground">Total cost</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Progress bar — delivery-based */}
         {totalTarget > 0 && (
           <div className="mb-6">
             <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-              <span>{totalSent} / {totalTarget} sent</span>
-              <span>{Math.round((totalSent / totalTarget) * 100)}%</span>
+              <span>{totalDelivered} / {totalTarget} delivered</span>
+              <span>{Math.round((totalDelivered / totalTarget) * 100)}%</span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${Math.min(100, (totalSent / totalTarget) * 100)}%` }}
+                className="h-full bg-green-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, (totalDelivered / totalTarget) * 100)}%` }}
               />
             </div>
           </div>
@@ -428,10 +463,10 @@ export default function CampaignDetailPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-foreground">Messages ({messages.length})</h3>
-            {failed.length > 0 && (
+            {failedMsgs.length > 0 && (
               <Button variant="outline" size="sm" onClick={handleRetryFailed} disabled={retrying} className="gap-1.5 text-xs">
                 <RotateCcw size={12} className={retrying ? 'animate-spin' : ''} />
-                {retrying ? 'Retrying...' : `Retry ${failed.length} Failed`}
+                {retrying ? 'Retrying...' : `Retry ${failedMsgs.length} Failed`}
               </Button>
             )}
           </div>
@@ -439,38 +474,48 @@ export default function CampaignDetailPage() {
           <Tabs defaultValue="delivered">
             <TabsList className="mb-3">
               <TabsTrigger value="delivered" className="gap-1.5 text-xs">
-                ✅ Delivered <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">{delivered.length}</Badge>
+                ✅ Delivered <Badge variant="secondary" className="ml-1 text-[10px] px-1.5">{deliveredMsgs.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="failed" className="gap-1.5 text-xs">
-                ❌ Failed <Badge variant="destructive" className="ml-1 text-[10px] px-1.5">{failed.length}</Badge>
+                ❌ Failed <Badge variant="destructive" className="ml-1 text-[10px] px-1.5">{failedMsgs.length}</Badge>
               </TabsTrigger>
               <TabsTrigger value="undelivered" className="gap-1.5 text-xs">
-                ⚠️ Undelivered <Badge variant="outline" className="ml-1 text-[10px] px-1.5">{undelivered.length}</Badge>
+                ⚠️ Undelivered <Badge variant="outline" className="ml-1 text-[10px] px-1.5">{undeliveredMsgs.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="queued" className="gap-1.5 text-xs">
+                🕐 Queued <Badge variant="outline" className="ml-1 text-[10px] px-1.5">{sentMsgs.length}</Badge>
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="delivered">
-              <MessageTable msgs={delivered} />
+              <MessageTable msgs={deliveredMsgs} />
             </TabsContent>
             <TabsContent value="failed">
-              {failed.length === 0 ? (
+              {failedMsgs.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4">No failed messages 🎉</p>
               ) : (
-                <MessageTable msgs={failed} showError />
+                <MessageTable msgs={failedMsgs} showError />
               )}
             </TabsContent>
             <TabsContent value="undelivered">
-              {undelivered.length === 0 ? (
+              {undeliveredMsgs.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4">No undelivered messages</p>
               ) : (
-                <MessageTable msgs={undelivered} showError />
+                <MessageTable msgs={undeliveredMsgs} showError />
+              )}
+            </TabsContent>
+            <TabsContent value="queued">
+              {sentMsgs.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4">No queued messages</p>
+              ) : (
+                <MessageTable msgs={sentMsgs} />
               )}
             </TabsContent>
           </Tabs>
         </div>
 
         {/* Runs */}
-        <div className="mb-10">
+        <div className="mb-6">
           <h3 className="text-sm font-semibold text-foreground mb-3">Runs ({runs.length})</h3>
           {runs.length === 0 ? (
             <p className="text-xs text-muted-foreground">No runs yet. Click "Send Now" to start.</p>
@@ -496,12 +541,59 @@ export default function CampaignDetailPage() {
                       {s?.sent !== undefined && <span>sent: <span className="text-foreground font-semibold">{s.sent}</span></span>}
                       {s?.failed !== undefined && s.failed > 0 && <span className="text-destructive">failed: {s.failed}</span>}
                       {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines: {s.skipped_landline}</span>}
+                      {s?.skipped_idempotency !== undefined && s.skipped_idempotency > 0 && (
+                        <span className="text-amber-500">dupes skipped: {s.skipped_idempotency}</span>
+                      )}
                       <span className="text-amber-500 font-medium">💰 ${getRunCost(s)}</span>
-                      {s?.failed > 0 && <span className="text-destructive/70">({(s.failed * SMS_COST).toFixed(2)} wasted)</span>}
+                      {s?.failed > 0 && <span className="text-destructive/70">({(s.failed * SMS_COST_PER_SEGMENT).toFixed(2)} wasted)</span>}
                     </div>
+                    {/* Scan log */}
+                    {s?.scanLog && Array.isArray(s.scanLog) && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <p className="text-[10px] text-muted-foreground font-medium mb-1">Scan Log:</p>
+                        {(s.scanLog as string[]).map((line: string, i: number) => (
+                          <p key={i} className="text-[10px] text-muted-foreground font-mono">{line}</p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Debug Panel */}
+        <div className="mb-10">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+          >
+            <Bug size={14} />
+            <span className="font-semibold uppercase tracking-wider">Campaign Debug</span>
+            {showDebug ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+
+          {showDebug && (
+            <div className="bg-card border border-border rounded-lg p-4">
+              <p className="text-xs text-muted-foreground mb-2">Last 50 send attempts</p>
+              <div className="space-y-1 max-h-96 overflow-y-auto">
+                {messages.slice(0, 50).map(m => (
+                  <div key={m.id} className="flex items-start gap-2 py-1.5 border-b border-border/30 text-[10px] font-mono">
+                    <span className="text-muted-foreground w-16 shrink-0">{m.status}</span>
+                    <span className="text-muted-foreground w-28 shrink-0">{m.to_number}</span>
+                    <span className="text-muted-foreground w-20 shrink-0 truncate" title={m.provider_message_sid || ''}>{m.provider_message_sid?.slice(0, 12) || '—'}</span>
+                    <span className="text-muted-foreground w-8 shrink-0">{(m as any).num_segments || 1}seg</span>
+                    <span className="text-muted-foreground w-14 shrink-0">${(((m as any).num_segments || 1) * SMS_COST_PER_SEGMENT).toFixed(3)}</span>
+                    {m.error_message && (
+                      <span className="text-destructive truncate flex-1" title={m.error_message}>
+                        <AlertTriangle size={10} className="inline mr-1" />{m.error_message}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground shrink-0">{new Date(m.created_at).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -517,7 +609,7 @@ function MessageTable({ msgs, showError }: { msgs: MessageLog[]; showError?: boo
       {msgs.map(m => (
         <div key={m.id} className="flex items-start gap-3 py-2 border-b border-border/50 text-xs">
           <span className="text-muted-foreground w-28 shrink-0">{m.to_number}</span>
-          <span className="text-foreground flex-1 truncate">{m.body}</span>
+          <span className="text-foreground flex-1 whitespace-pre-wrap break-words">{m.body}</span>
           {showError && m.error_message && (
             <span className="text-destructive shrink-0 max-w-48 truncate" title={m.error_message}>{m.error_message}</span>
           )}

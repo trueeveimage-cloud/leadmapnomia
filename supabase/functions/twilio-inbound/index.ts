@@ -16,7 +16,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Parse Twilio-style inbound webhook (form-encoded or JSON)
     let from = '', to = '', body = '', messageSid = '';
 
     const contentType = req.headers.get('content-type') || '';
@@ -29,7 +28,6 @@ Deno.serve(async (req) => {
       body = json.Body || json.body || '';
       messageSid = json.MessageSid || json.messageSid || '';
     } else {
-      // Twilio always sends application/x-www-form-urlencoded
       const params = new URLSearchParams(rawBody);
       from = params.get('From') || '';
       to = params.get('To') || '';
@@ -45,7 +43,7 @@ Deno.serve(async (req) => {
     const OPT_OUT_KEYWORDS = ['stop', 'avsluta', 'sluta', 'unsubscribe'];
     const isOptOut = OPT_OUT_KEYWORDS.some(k => body.toLowerCase().trim() === k);
 
-    // Find lead by phone (try phone_e164 first, then phone)
+    // Find lead by phone
     const normalizedFrom = from.replace(/\s/g, '');
     const { data: lead } = await supabase
       .from('leads')
@@ -72,7 +70,7 @@ Deno.serve(async (req) => {
       status: 'received',
     });
 
-    // Update lead
+    // Update lead — ONLY set reply metadata, do NOT auto-change status
     const updates: Record<string, any> = {
       has_replied: true,
       last_inbound_at: new Date().toISOString(),
@@ -86,19 +84,11 @@ Deno.serve(async (req) => {
       updates.outreach_opt_out = true;
     }
 
-    // Check for interest keywords and notify owner
-    const INTEREST_KEYWORDS = ['intresserad', 'interested', 'ja', 'yes', 'berätta mer', 'tell me more', 'absolut', 'gärna', 'sure', 'ok', 'visst', 'hemsida'];
-    const bodyLower = body.toLowerCase().trim();
-    const isInterested = INTEREST_KEYWORDS.some(k => bodyLower.includes(k));
-
-    if (isInterested && !isOptOut) {
-      updates.status = 'interested';
-      console.log('Interested lead detected:', lead.name, '- no SMS notification sent (disabled)');
-    }
+    // DO NOT auto-set status to 'interested' — user decides manually
+    console.log('Inbound from:', lead.name, '- status NOT auto-changed');
 
     await supabase.from('leads').update(updates).eq('id', lead.id);
 
-    // Return TwiML empty response
     return new Response('<Response></Response>', {
       headers: { ...corsHeaders, 'Content-Type': 'text/xml' },
     });

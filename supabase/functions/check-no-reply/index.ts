@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 // Cron-style edge function: finds leads who sent SMS but got no reply after X hours
-// and marks them as needs_call
+// and marks them as needs_call — but does NOT change their status (user decides)
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -18,7 +18,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Get default call_after_hours from settings, fallback to 48
     const { data: setting } = await supabase
       .from('settings')
       .select('value')
@@ -42,10 +41,10 @@ Deno.serve(async (req) => {
 
     let updated = 0;
     for (const lead of (leads || [])) {
+      // Only set needs_call and outreach_stage — do NOT change status
       const { error: upErr } = await supabase.from('leads').update({
         needs_call: true,
         outreach_stage: 'no_reply_call',
-        status: 'not_contacted',
       }).eq('id', lead.id);
       if (!upErr) updated++;
     }
