@@ -252,7 +252,7 @@ export default function InboxPage() {
                               </span>
                             )}
                           </div>
-                          <p className="text-sm text-foreground">{m.body}</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{m.body}</p>
                           <p className="text-[10px] text-muted-foreground mt-1">{new Date(m.created_at).toLocaleString()}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -375,7 +375,7 @@ export default function InboxPage() {
                         >
                           <X size={10} />
                         </button>
-                        <p>{msg.body}</p>
+                        <p className="whitespace-pre-wrap break-words">{msg.body}</p>
                         <p className="text-[9px] text-muted-foreground mt-1">
                           {new Date(msg.created_at).toLocaleString()}
                         </p>

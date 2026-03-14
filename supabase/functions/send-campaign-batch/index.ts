@@ -61,6 +61,11 @@ async function sendTwilioSms(
   return { sid: json.sid, status: json.status };
 }
 
+// Safety limits
+const HARD_MAX_PER_RUN = 500;
+const HARD_MAX_PER_HOUR = 300;
+const HARD_MAX_DAILY = 1000;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -132,6 +137,15 @@ Deno.serve(async (req) => {
       sentToday = count || 0;
     }
 
+    // Safety: check global daily limit
+    if (sentToday >= HARD_MAX_DAILY) {
+      // Auto-pause campaign
+      await dbClient.from('campaigns').update({ status: 'paused' }).eq('id', campaignId);
+      return new Response(JSON.stringify({ error: `Safety limit: ${HARD_MAX_DAILY} messages/day reached. Campaign paused.`, sentToday }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const manualOverride = batchSize && Number(batchSize) > 0;
     const dailyCap = campaign.daily_cap || 100;
     const remaining = manualOverride ? Infinity : Math.max(0, dailyCap - sentToday);
@@ -141,9 +155,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const effectiveLimit = manualOverride ? Number(batchSize) : Math.min(dailyCap, remaining);
+    let effectiveLimit = manualOverride ? Number(batchSize) : Math.min(dailyCap, remaining);
+    // Apply safety hard cap per run
+    effectiveLimit = Math.min(effectiveLimit, HARD_MAX_PER_RUN);
 
-    // Build base query filters (reused across pages)
+    // Build base query filters
     const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
 
     // Create campaign run
@@ -151,18 +167,19 @@ Deno.serve(async (req) => {
       .from('campaign_runs').insert({ campaign_id: campaignId }).select().single();
     if (runErr) throw runErr;
 
+    const scanLog: string[] = [];
     const stats = {
       attempted: 0, sent: 0, delivered: 0, failed: 0,
       skipped_no_phone: 0, skipped_opt_out: 0, skipped_cooldown: 0, skipped_duplicate: 0,
-      skipped_landline: 0,
+      skipped_landline: 0, skipped_idempotency: 0,
       provider: useTwilio ? 'twilio' : 'mock',
       countries: targetCountries,
     };
 
-    // PAGINATION LOOP: Keep fetching pages of leads until we hit the send target or run out
+    // PAGINATION LOOP
     const PAGE_SIZE = 500;
     let offset = 0;
-    const MAX_PAGES = 50; // Safety limit: 50 * 500 = 25,000 leads max scan
+    const MAX_PAGES = 50;
     let exhausted = false;
 
     for (let page = 0; page < MAX_PAGES && stats.sent < effectiveLimit && !exhausted; page++) {
@@ -184,17 +201,20 @@ Deno.serve(async (req) => {
       const { data: leads, error: leadErr } = await query;
       if (leadErr) throw leadErr;
 
-      // If we got fewer than PAGE_SIZE, this is the last page
       if (!leads || leads.length < PAGE_SIZE) exhausted = true;
-      if (!leads || leads.length === 0) break;
-
-      offset += leads.length;
+      if (!leads || leads.length === 0) {
+        scanLog.push(`Page ${page + 1}: 0 leads (exhausted)`);
+        break;
+      }
 
       // Filter by target countries
       const filteredLeads = leads.filter((lead: any) => {
         const country = detectCountry(lead.address, lead.phone);
         return targetCountries.includes(country);
       });
+
+      scanLog.push(`Page ${page + 1}: ${leads.length} loaded, ${filteredLeads.length} match country filter`);
+      offset += leads.length;
 
       for (const lead of filteredLeads) {
         if (stats.sent >= effectiveLimit) break;
@@ -204,7 +224,7 @@ Deno.serve(async (req) => {
         const toNumber = lead.phone_e164 || lead.phone;
         if (!toNumber) { stats.skipped_no_phone++; continue; }
 
-        // Check SMS eligibility — landlines skip, don't count toward limit
+        // Check SMS eligibility — landlines skip
         if (!isSmsEligible(toNumber, lead.address)) {
           const country = detectCountry(lead.address, toNumber);
           stats.skipped_landline++;
@@ -218,6 +238,20 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // IDEMPOTENCY CHECK: Skip if we already sent to this lead in this run
+        // The unique index (campaign_run_id, lead_id) WHERE direction='outbound' prevents DB duplicates
+        // But also check across ALL runs for this campaign to prevent cross-run duplicates
+        const { count: existingCount } = await dbClient.from('message_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('lead_id', lead.id)
+          .eq('direction', 'outbound')
+          .not('campaign_run_id', 'is', null);
+
+        if (existingCount && existingCount > 0) {
+          stats.skipped_idempotency++;
+          continue;
+        }
+
         // Render template
         const body = (campaign.template_text || '').replace(/\{(\w+)\}/g, (_: string, key: string) => {
           return (lead as any)[key] ?? '';
@@ -228,13 +262,24 @@ Deno.serve(async (req) => {
         if (useTwilio) {
           const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
 
-          await dbClient.from('message_logs').insert({
+          // Insert with unique constraint protection
+          const { error: insertErr } = await dbClient.from('message_logs').insert({
             lead_id: lead.id, direction: 'outbound', channel: 'sms',
             from_number: twilioFrom, to_number: e164, body,
             provider: 'twilio', provider_message_sid: result.sid || null,
             status: result.error ? 'failed' : result.status,
             error_message: result.error || null, campaign_run_id: run.id,
+            num_segments: 1,
           });
+
+          // If insert fails due to unique constraint, skip (already sent)
+          if (insertErr) {
+            if (insertErr.code === '23505') {
+              stats.skipped_idempotency++;
+              continue;
+            }
+            console.error('Insert error:', insertErr);
+          }
 
           if (!lead.phone_e164 && e164 !== toNumber) {
             await dbClient.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
@@ -247,12 +292,17 @@ Deno.serve(async (req) => {
           }
           stats.sent++;
         } else {
-          await dbClient.from('message_logs').insert({
+          const { error: insertErr } = await dbClient.from('message_logs').insert({
             lead_id: lead.id, direction: 'outbound', channel: 'sms',
             from_number: 'MOCK', to_number: e164, body,
             provider: 'mock', provider_message_sid: `mock_${crypto.randomUUID()}`,
             status: 'delivered', campaign_run_id: run.id,
+            num_segments: 1,
           });
+          if (insertErr && insertErr.code === '23505') {
+            stats.skipped_idempotency++;
+            continue;
+          }
           stats.sent++;
           stats.delivered++;
         }
@@ -271,12 +321,14 @@ Deno.serve(async (req) => {
       }
     }
 
+    scanLog.push(`Final: sent=${stats.sent}, failed=${stats.failed}, skipped_landline=${stats.skipped_landline}, skipped_idempotency=${stats.skipped_idempotency}`);
+
     // Update run stats
     await dbClient.from('campaign_runs').update({
-      stats, ended_at: new Date().toISOString(),
+      stats: { ...stats, scanLog }, ended_at: new Date().toISOString(),
     }).eq('id', run.id);
 
-    return new Response(JSON.stringify({ success: true, stats, runId: run.id, provider: useTwilio ? 'twilio' : 'mock' }), {
+    return new Response(JSON.stringify({ success: true, stats: { ...stats, scanLog }, runId: run.id, provider: useTwilio ? 'twilio' : 'mock' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

@@ -16,8 +16,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Parse Twilio status callback
-    let messageSid = '', messageStatus = '';
+    let messageSid = '', messageStatus = '', numSegments: number | null = null;
 
     const contentType = req.headers.get('content-type') || '';
     const rawBody = await req.text();
@@ -26,11 +25,13 @@ Deno.serve(async (req) => {
       const json = JSON.parse(rawBody);
       messageSid = json.MessageSid || json.messageSid || '';
       messageStatus = json.MessageStatus || json.messageStatus || '';
+      if (json.NumSegments) numSegments = parseInt(json.NumSegments, 10);
     } else {
-      // Twilio always sends application/x-www-form-urlencoded
       const params = new URLSearchParams(rawBody);
       messageSid = params.get('MessageSid') || '';
       messageStatus = params.get('MessageStatus') || '';
+      const seg = params.get('NumSegments');
+      if (seg) numSegments = parseInt(seg, 10);
     }
 
     if (!messageSid || !messageStatus) {
@@ -39,15 +40,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Update message log
+    // Update message log with status and num_segments
+    const updateData: Record<string, any> = { status: messageStatus };
+    if (numSegments && numSegments > 0) {
+      updateData.num_segments = numSegments;
+    }
+
     const { data: msg } = await supabase
       .from('message_logs')
-      .update({ status: messageStatus })
+      .update(updateData)
       .eq('provider_message_sid', messageSid)
       .select('lead_id')
       .maybeSingle();
 
-    // Update lead status if we found the message
     if (msg?.lead_id) {
       await supabase.from('leads').update({
         last_message_status: messageStatus,
