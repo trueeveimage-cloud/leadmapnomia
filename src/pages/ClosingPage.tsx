@@ -329,7 +329,7 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                             : "bg-muted text-foreground"
                         )}
                       >
-                        <div>{msg.body}</div>
+                        <div className="whitespace-pre-wrap">{msg.body}</div>
                         <div className="text-[10px] text-muted-foreground mt-1">
                           {format(new Date(msg.created_at), 'MMM d, h:mm a')}
                           {msg.status && msg.status !== 'delivered' && ` · ${msg.status}`}
