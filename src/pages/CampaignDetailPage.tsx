@@ -243,6 +243,14 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
+  const handleCompleteCampaign = async () => {
+    if (!campaign || !id) return;
+    if (!window.confirm('Mark this campaign as completed? It will no longer send messages.')) return;
+    const updated = await updateCampaign(id, { status: 'completed' });
+    setCampaign(updated);
+    toast.success('Campaign marked as completed');
+  };
+
   // Compute real stats from message_logs
   const deliveredMsgs = messages.filter(m => m.status === 'delivered');
   const sentMsgs = messages.filter(m => m.status === 'sent' || m.status === 'queued');
