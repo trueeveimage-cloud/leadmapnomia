@@ -118,6 +118,7 @@ export default function InboxPage() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
+    await loadConversations();
     await refreshNotifications();
     setRefreshing(false);
     toast.success('Inbox refreshed');
