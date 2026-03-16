@@ -260,6 +260,15 @@ export default function InboxPage() {
               >
                 Answered ({answeredMessages.length})
               </button>
+              <button
+                onClick={() => setTab('conversations')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  tab === 'conversations' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Conversations ({convos.length})
+              </button>
             </div>
           </div>
 
