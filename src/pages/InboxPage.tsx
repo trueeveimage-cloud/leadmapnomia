@@ -32,7 +32,8 @@ const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback'];
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'pending' | 'answered'>('pending');
+  const [tab, setTab] = useState<'pending' | 'answered' | 'conversations'>('pending');
+  const [convos, setConvos] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_message_body: string | null; last_message_at: string; last_direction: string; has_new_inbound: boolean }[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadDetail, setLeadDetail] = useState<Lead | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -63,11 +64,61 @@ export default function InboxPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadInbox(); }, [loadInbox]);
+  const loadConversations = useCallback(async () => {
+    try {
+      // Get all leads that have any messages, with their latest message info
+      const { data, error } = await supabase
+        .from('message_logs')
+        .select('lead_id, body, created_at, direction, leads!message_logs_lead_id_fkey(name, category, status, last_inbound_at, last_outbound_at)')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      // Group by lead_id, keep latest message per lead
+      const map = new Map<string, any>();
+      for (const m of (data || [])) {
+        if (map.has(m.lead_id)) {
+          const existing = map.get(m.lead_id);
+          // Track if there's any inbound after last outbound
+          if (m.direction === 'inbound' && !existing._hasInbound) {
+            existing._hasInbound = true;
+          }
+          continue;
+        }
+        const lead = m.leads as any;
+        map.set(m.lead_id, {
+          lead_id: m.lead_id,
+          lead_name: lead?.name || 'Unknown',
+          lead_category: lead?.category || null,
+          lead_status: lead?.status || 'unknown',
+          last_message_body: m.body,
+          last_message_at: m.created_at,
+          last_direction: m.direction,
+          _hasInbound: m.direction === 'inbound',
+          _lastInbound: lead?.last_inbound_at,
+          _lastOutbound: lead?.last_outbound_at,
+        });
+      }
+      // Determine "has new" = last inbound is after last outbound
+      const results = Array.from(map.values()).map(c => ({
+        lead_id: c.lead_id,
+        lead_name: c.lead_name,
+        lead_category: c.lead_category,
+        lead_status: c.lead_status,
+        last_message_body: c.last_message_body,
+        last_message_at: c.last_message_at,
+        last_direction: c.last_direction,
+        has_new_inbound: c._lastInbound && (!c._lastOutbound || new Date(c._lastInbound) > new Date(c._lastOutbound)),
+      }));
+      setConvos(results);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadInbox(); loadConversations(); }, [loadInbox, loadConversations]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
+    await loadConversations();
     await refreshNotifications();
     setRefreshing(false);
     toast.success('Inbox refreshed');
@@ -209,12 +260,78 @@ export default function InboxPage() {
               >
                 Answered ({answeredMessages.length})
               </button>
+              <button
+                onClick={() => setTab('conversations')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  tab === 'conversations' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Conversations ({convos.length})
+              </button>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             {loading ? (
               <div className="text-sm text-muted-foreground py-20 text-center">Loading inbox...</div>
+            ) : tab === 'conversations' ? (
+              convos.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <MessageCircle size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No conversations yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {convos.map(c => {
+                    const isSelected = selectedLeadId === c.lead_id;
+                    return (
+                      <div
+                        key={c.lead_id}
+                        className={cn(
+                          "bg-card border rounded-lg p-4 cursor-pointer transition-all",
+                          isSelected ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30",
+                          c.has_new_inbound && !isSelected && "border-l-4 border-l-primary"
+                        )}
+                        onClick={() => setSelectedLeadId(isSelected ? null : c.lead_id)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground">{c.lead_name}</span>
+                              {c.lead_category && <span className="text-[10px] text-muted-foreground">{c.lead_category}</span>}
+                              {c.has_new_inbound && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-primary/15 text-primary border border-primary/30">
+                                  New reply
+                                </span>
+                              )}
+                              {answeredStatuses.includes(c.lead_status) && (
+                                <span className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
+                                  c.lead_status === 'interested' && 'bg-green-500/15 text-green-600 border-green-500/30',
+                                  c.lead_status === 'not_interested' && 'bg-destructive/15 text-destructive border-destructive/30',
+                                  c.lead_status === 'unsure' && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                  c.lead_status === 'callback' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+                                )}>
+                                  {c.lead_status.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words truncate">
+                              <span className="text-[10px] font-medium text-muted-foreground mr-1">
+                                {c.last_direction === 'outbound' ? 'You:' : 'Them:'}
+                              </span>
+                              {c.last_message_body}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-1">{new Date(c.last_message_at).toLocaleString()}</p>
+                          </div>
+                          <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-1" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : displayed.length === 0 ? (
               <div className="text-center py-20 text-muted-foreground">
                 <MessageCircle size={40} className="mx-auto mb-3 opacity-30" />
