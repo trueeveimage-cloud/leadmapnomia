@@ -275,6 +275,63 @@ export default function InboxPage() {
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             {loading ? (
               <div className="text-sm text-muted-foreground py-20 text-center">Loading inbox...</div>
+            ) : tab === 'conversations' ? (
+              convos.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <MessageCircle size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No conversations yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {convos.map(c => {
+                    const isSelected = selectedLeadId === c.lead_id;
+                    return (
+                      <div
+                        key={c.lead_id}
+                        className={cn(
+                          "bg-card border rounded-lg p-4 cursor-pointer transition-all",
+                          isSelected ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30",
+                          c.has_new_inbound && !isSelected && "border-l-4 border-l-primary"
+                        )}
+                        onClick={() => setSelectedLeadId(isSelected ? null : c.lead_id)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground">{c.lead_name}</span>
+                              {c.lead_category && <span className="text-[10px] text-muted-foreground">{c.lead_category}</span>}
+                              {c.has_new_inbound && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-primary/15 text-primary border border-primary/30">
+                                  New reply
+                                </span>
+                              )}
+                              {answeredStatuses.includes(c.lead_status) && (
+                                <span className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
+                                  c.lead_status === 'interested' && 'bg-green-500/15 text-green-600 border-green-500/30',
+                                  c.lead_status === 'not_interested' && 'bg-destructive/15 text-destructive border-destructive/30',
+                                  c.lead_status === 'unsure' && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                  c.lead_status === 'callback' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+                                )}>
+                                  {c.lead_status.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words truncate">
+                              <span className="text-[10px] font-medium text-muted-foreground mr-1">
+                                {c.last_direction === 'outbound' ? 'You:' : 'Them:'}
+                              </span>
+                              {c.last_message_body}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-1">{new Date(c.last_message_at).toLocaleString()}</p>
+                          </div>
+                          <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-1" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : displayed.length === 0 ? (
               <div className="text-center py-20 text-muted-foreground">
                 <MessageCircle size={40} className="mx-auto mb-3 opacity-30" />
