@@ -8,7 +8,7 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, C
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
@@ -243,6 +243,14 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
+  const handleCompleteCampaign = async () => {
+    if (!campaign || !id) return;
+    if (!window.confirm('Mark this campaign as completed? It will no longer send messages.')) return;
+    const updated = await updateCampaign(id, { status: 'completed' });
+    setCampaign(updated);
+    toast.success('Campaign marked as completed');
+  };
+
   // Compute real stats from message_logs
   const deliveredMsgs = messages.filter(m => m.status === 'delivered');
   const sentMsgs = messages.filter(m => m.status === 'sent' || m.status === 'queued');
@@ -295,9 +303,19 @@ export default function CampaignDetailPage() {
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
-              {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
-            </Button>
+            {campaign.status !== 'completed' && (
+              <>
+                <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
+                  {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCompleteCampaign} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                  <CheckCircle size={13} /> Complete
+                </Button>
+              </>
+            )}
+            {campaign.status === 'completed' && (
+              <Badge variant="secondary" className="text-xs">Completed</Badge>
+            )}
           </div>
         </div>
 
