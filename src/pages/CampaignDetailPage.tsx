@@ -303,9 +303,19 @@ export default function CampaignDetailPage() {
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
-              {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
-            </Button>
+            {campaign.status !== 'completed' && (
+              <>
+                <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
+                  {campaign.status === 'running' ? <><Pause size={13} /> Pause</> : <><Play size={13} /> Activate</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCompleteCampaign} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                  <CheckCircle size={13} /> Complete
+                </Button>
+              </>
+            )}
+            {campaign.status === 'completed' && (
+              <Badge variant="secondary" className="text-xs">Completed</Badge>
+            )}
           </div>
         </div>
 
