@@ -64,7 +64,56 @@ export default function InboxPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadInbox(); }, [loadInbox]);
+  const loadConversations = useCallback(async () => {
+    try {
+      // Get all leads that have any messages, with their latest message info
+      const { data, error } = await supabase
+        .from('message_logs')
+        .select('lead_id, body, created_at, direction, leads!message_logs_lead_id_fkey(name, category, status, last_inbound_at, last_outbound_at)')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      // Group by lead_id, keep latest message per lead
+      const map = new Map<string, any>();
+      for (const m of (data || [])) {
+        if (map.has(m.lead_id)) {
+          const existing = map.get(m.lead_id);
+          // Track if there's any inbound after last outbound
+          if (m.direction === 'inbound' && !existing._hasInbound) {
+            existing._hasInbound = true;
+          }
+          continue;
+        }
+        const lead = m.leads as any;
+        map.set(m.lead_id, {
+          lead_id: m.lead_id,
+          lead_name: lead?.name || 'Unknown',
+          lead_category: lead?.category || null,
+          lead_status: lead?.status || 'unknown',
+          last_message_body: m.body,
+          last_message_at: m.created_at,
+          last_direction: m.direction,
+          _hasInbound: m.direction === 'inbound',
+          _lastInbound: lead?.last_inbound_at,
+          _lastOutbound: lead?.last_outbound_at,
+        });
+      }
+      // Determine "has new" = last inbound is after last outbound
+      const results = Array.from(map.values()).map(c => ({
+        lead_id: c.lead_id,
+        lead_name: c.lead_name,
+        lead_category: c.lead_category,
+        lead_status: c.lead_status,
+        last_message_body: c.last_message_body,
+        last_message_at: c.last_message_at,
+        last_direction: c.last_direction,
+        has_new_inbound: c._lastInbound && (!c._lastOutbound || new Date(c._lastInbound) > new Date(c._lastOutbound)),
+      }));
+      setConvos(results);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadInbox(); loadConversations(); }, [loadInbox, loadConversations]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
