@@ -27,7 +27,7 @@ const QUICK_ACTIONS = [
   { status: 'callback', label: 'Callback', color: 'bg-purple-500/15 text-purple-600 border-purple-500/30' },
 ] as const;
 
-const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback'];
+const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'demo', 'closed_won', 'closed_lost'];
 
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
