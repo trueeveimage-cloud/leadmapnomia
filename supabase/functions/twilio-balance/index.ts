@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const GATEWAY_URL = 'https://connector-gateway.lovable.dev/twilio';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -27,21 +29,25 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
-    const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const twilioToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const TWILIO_API_KEY = Deno.env.get('TWILIO_AUTH_TOKEN');
 
-    if (!twilioSid || !twilioToken) {
+    if (!LOVABLE_API_KEY || !TWILIO_API_KEY) {
       return new Response(JSON.stringify({ error: 'Twilio not configured' }), { status: 500, headers: corsHeaders });
     }
 
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Balance.json`;
-    const resp = await fetch(url, {
+    // The gateway auto-prepends /2010-04-01/Accounts/{AccountSid}
+    const resp = await fetch(`${GATEWAY_URL}/Balance.json`, {
+      method: 'GET',
       headers: {
-        'Authorization': 'Basic ' + btoa(`${twilioSid}:${twilioToken}`),
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'X-Connection-Api-Key': TWILIO_API_KEY,
       },
     });
 
     if (!resp.ok) {
+      const errText = await resp.text();
+      console.error('Twilio balance error:', resp.status, errText);
       return new Response(JSON.stringify({ error: 'Failed to fetch balance' }), { status: 500, headers: corsHeaders });
     }
 
@@ -54,6 +60,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    console.error('Balance function error:', err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
