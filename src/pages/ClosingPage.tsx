@@ -303,7 +303,7 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(['interested', 'demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
+                    {(['interested', 'unsure', 'demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
                       <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
                     ))}
                   </SelectContent>
