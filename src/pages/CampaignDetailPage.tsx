@@ -322,6 +322,9 @@ export default function CampaignDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleDuplicate} className="gap-1.5">
+              <Copy size={13} /> Duplicate
+            </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
             </Button>
