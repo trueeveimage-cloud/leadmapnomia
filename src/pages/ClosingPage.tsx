@@ -114,6 +114,24 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
     if (selectedLead?.id === id) setSelectedLead(null);
   }, [selectedLead]);
 
+  const handleStatusChange = useCallback(async (newStatus: LeadStatus) => {
+    if (!selectedLead || newStatus === selectedLead.status) return;
+    try {
+      const updated = await updateLead(selectedLead.id, { status: newStatus } as any);
+      // Remove from this list if status changed away from current page status
+      if (newStatus !== status) {
+        setLeads(prev => prev.filter(l => l.id !== selectedLead.id));
+        setSelectedLead(null);
+      } else {
+        handleUpdate(updated);
+      }
+      refreshCounts();
+      toast.success(`Status changed to ${STATUS_LABELS[newStatus]}`);
+    } catch {
+      toast.error('Failed to update status');
+    }
+  }, [selectedLead, status, handleUpdate, refreshCounts]);
+
   const handleSendReply = async () => {
     if (!reply.trim() || !selectedLead?.phone) return;
     setSending(true);
