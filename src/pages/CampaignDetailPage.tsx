@@ -244,6 +244,27 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
+  const handleDuplicate = async () => {
+    if (!campaign) return;
+    try {
+      const copy = await createCampaign({
+        name: `${campaign.name} (copy)`,
+        audience_filter: campaign.audience_filter as any,
+        template_text: campaign.template_text,
+        variables_used: campaign.variables_used as any,
+        daily_cap: campaign.daily_cap,
+        batch_cap: campaign.batch_cap,
+        cooldown_days: campaign.cooldown_days,
+        call_after_hours: campaign.call_after_hours,
+        status: 'draft',
+      });
+      toast.success('Campaign duplicated');
+      navigate(`/campaigns/${copy.id}`);
+    } catch {
+      toast.error('Failed to duplicate campaign');
+    }
+  };
+
   const handleCompleteCampaign = async () => {
     if (!campaign || !id) return;
     if (!window.confirm('Mark this campaign as completed? It will no longer send messages.')) return;
