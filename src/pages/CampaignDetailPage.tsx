@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
+import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, createCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
-import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
@@ -66,6 +66,7 @@ const SMS_COST_PER_SEGMENT = 0.065;
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [runs, setRuns] = useState<CampaignRun[]>([]);
   const [messages, setMessages] = useState<MessageLog[]>([]);
@@ -243,6 +244,27 @@ export default function CampaignDetailPage() {
     toast.success(`Campaign ${newStatus}`);
   };
 
+  const handleDuplicate = async () => {
+    if (!campaign) return;
+    try {
+      const copy = await createCampaign({
+        name: `${campaign.name} (copy)`,
+        audience_filter: campaign.audience_filter as any,
+        template_text: campaign.template_text,
+        variables_used: campaign.variables_used as any,
+        daily_cap: campaign.daily_cap,
+        batch_cap: campaign.batch_cap,
+        cooldown_days: campaign.cooldown_days,
+        call_after_hours: campaign.call_after_hours,
+        status: 'draft',
+      });
+      toast.success('Campaign duplicated');
+      navigate(`/campaigns/${copy.id}`);
+    } catch {
+      toast.error('Failed to duplicate campaign');
+    }
+  };
+
   const handleCompleteCampaign = async () => {
     if (!campaign || !id) return;
     if (!window.confirm('Mark this campaign as completed? It will no longer send messages.')) return;
@@ -300,6 +322,9 @@ export default function CampaignDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleDuplicate} className="gap-1.5">
+              <Copy size={13} /> Duplicate
+            </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
               <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
             </Button>
