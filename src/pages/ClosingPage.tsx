@@ -296,9 +296,18 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                   </a>
                 )}
               </div>
-              <div className="mt-2 text-xs">
-                <span className="text-muted-foreground">Status: </span>
-                <span className="font-medium text-foreground">{STATUS_LABELS[selectedLead.status as LeadStatus]}</span>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Status:</span>
+                <Select value={selectedLead.status} onValueChange={(v) => handleStatusChange(v as LeadStatus)}>
+                  <SelectTrigger className="h-7 w-auto min-w-[140px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(['interested', 'demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
+                      <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
