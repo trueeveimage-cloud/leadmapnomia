@@ -66,6 +66,7 @@ const SMS_COST_PER_SEGMENT = 0.065;
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [runs, setRuns] = useState<CampaignRun[]>([]);
   const [messages, setMessages] = useState<MessageLog[]>([]);
