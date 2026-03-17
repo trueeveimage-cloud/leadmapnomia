@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote } from 'lucide-react';
+import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote, ChevronDown } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -112,6 +113,24 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
     setLeads(prev => prev.filter(l => l.id !== id));
     if (selectedLead?.id === id) setSelectedLead(null);
   }, [selectedLead]);
+
+  const handleStatusChange = useCallback(async (newStatus: LeadStatus) => {
+    if (!selectedLead || newStatus === selectedLead.status) return;
+    try {
+      const updated = await updateLead(selectedLead.id, { status: newStatus } as any);
+      // Remove from this list if status changed away from current page status
+      if (newStatus !== status) {
+        setLeads(prev => prev.filter(l => l.id !== selectedLead.id));
+        setSelectedLead(null);
+      } else {
+        handleUpdate(updated);
+      }
+      refreshCounts();
+      toast.success(`Status changed to ${STATUS_LABELS[newStatus]}`);
+    } catch {
+      toast.error('Failed to update status');
+    }
+  }, [selectedLead, status, handleUpdate, refreshCounts]);
 
   const handleSendReply = async () => {
     if (!reply.trim() || !selectedLead?.phone) return;
@@ -277,9 +296,18 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                   </a>
                 )}
               </div>
-              <div className="mt-2 text-xs">
-                <span className="text-muted-foreground">Status: </span>
-                <span className="font-medium text-foreground">{STATUS_LABELS[selectedLead.status as LeadStatus]}</span>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Status:</span>
+                <Select value={selectedLead.status} onValueChange={(v) => handleStatusChange(v as LeadStatus)}>
+                  <SelectTrigger className="h-7 w-auto min-w-[140px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(['interested', 'demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
+                      <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
