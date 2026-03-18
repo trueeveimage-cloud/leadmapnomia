@@ -269,7 +269,6 @@ Deno.serve(async (req) => {
             provider: 'twilio', provider_message_sid: result.sid || null,
             status: result.error ? 'failed' : result.status,
             error_message: result.error || null, campaign_run_id: run.id,
-            num_segments: 1,
           });
 
           // If insert fails due to unique constraint, skip (already sent)
