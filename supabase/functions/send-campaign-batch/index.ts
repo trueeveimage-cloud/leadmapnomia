@@ -269,7 +269,6 @@ Deno.serve(async (req) => {
             provider: 'twilio', provider_message_sid: result.sid || null,
             status: result.error ? 'failed' : result.status,
             error_message: result.error || null, campaign_run_id: run.id,
-            num_segments: 1,
           });
 
           // If insert fails due to unique constraint, skip (already sent)
@@ -297,7 +296,6 @@ Deno.serve(async (req) => {
             from_number: 'MOCK', to_number: e164, body,
             provider: 'mock', provider_message_sid: `mock_${crypto.randomUUID()}`,
             status: 'delivered', campaign_run_id: run.id,
-            num_segments: 1,
           });
           if (insertErr && insertErr.code === '23505') {
             stats.skipped_idempotency++;
