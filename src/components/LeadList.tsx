@@ -80,6 +80,15 @@ export default function LeadList({ section, allSections, status, optOut, showTri
 
   useEffect(() => { load(); }, [load]);
 
+  // Extract unique categories for the filter dropdown
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    leads.forEach(l => {
+      if (l.category) l.category.split(', ').forEach(c => cats.add(c.trim()));
+    });
+    return [...cats].sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
     let result = leads;
     if (search.trim()) {
@@ -93,6 +102,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       );
     }
     if (filterStatus) result = result.filter(l => l.status === filterStatus);
+    if (filterCategory) result = result.filter(l => l.category && l.category.toLowerCase().includes(filterCategory.toLowerCase()));
 
     switch (sort) {
       case 'rating': return [...result].sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -104,7 +114,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       });
       default: return [...result].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
-  }, [leads, search, sort, filterStatus]);
+  }, [leads, search, sort, filterStatus, filterCategory]);
 
   const handleUpdate = useCallback((updated: Lead) => {
     setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
