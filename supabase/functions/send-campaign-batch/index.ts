@@ -296,7 +296,6 @@ Deno.serve(async (req) => {
             from_number: 'MOCK', to_number: e164, body,
             provider: 'mock', provider_message_sid: `mock_${crypto.randomUUID()}`,
             status: 'delivered', campaign_run_id: run.id,
-            num_segments: 1,
           });
           if (insertErr && insertErr.code === '23505') {
             stats.skipped_idempotency++;
