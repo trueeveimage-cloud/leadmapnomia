@@ -238,14 +238,14 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // IDEMPOTENCY CHECK: Skip if we already sent to this lead in this run
-        // The unique index (campaign_run_id, lead_id) WHERE direction='outbound' prevents DB duplicates
-        // But also check across ALL runs for this campaign to prevent cross-run duplicates
+        // IDEMPOTENCY CHECK: Skip if we already SUCCESSFULLY sent to this lead
+        // Only skip if there's a delivered/sent/queued message (not failed ones)
         const { count: existingCount } = await dbClient.from('message_logs')
           .select('id', { count: 'exact', head: true })
           .eq('lead_id', lead.id)
           .eq('direction', 'outbound')
-          .not('campaign_run_id', 'is', null);
+          .not('campaign_run_id', 'is', null)
+          .not('status', 'eq', 'failed');
 
         if (existingCount && existingCount > 0) {
           stats.skipped_idempotency++;
