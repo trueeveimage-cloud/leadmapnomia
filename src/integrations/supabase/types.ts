@@ -582,6 +582,7 @@ export type Database = {
           from_number: string | null
           id: string
           lead_id: string
+          num_segments: number | null
           provider: string
           provider_message_sid: string | null
           status: string
@@ -598,6 +599,7 @@ export type Database = {
           from_number?: string | null
           id?: string
           lead_id: string
+          num_segments?: number | null
           provider?: string
           provider_message_sid?: string | null
           status?: string
@@ -614,6 +616,7 @@ export type Database = {
           from_number?: string | null
           id?: string
           lead_id?: string
+          num_segments?: number | null
           provider?: string
           provider_message_sid?: string | null
           status?: string

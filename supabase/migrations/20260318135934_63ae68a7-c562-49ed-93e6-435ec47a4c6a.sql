@@ -1,0 +1,1 @@
+ALTER TABLE public.message_logs ADD COLUMN IF NOT EXISTS num_segments integer DEFAULT 1;
