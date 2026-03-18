@@ -56,6 +56,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<LeadStatus | ''>('');
   const [filterStatus, setFilterStatus] = useState<LeadStatus | ''>('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [autoSorting, setAutoSorting] = useState(false);
 
   const load = useCallback(async () => {
