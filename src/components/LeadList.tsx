@@ -265,6 +265,18 @@ export default function LeadList({ section, allSections, status, optOut, showTri
             </div>
           )}
 
+          {/* Category filter */}
+          <div className="relative">
+            <select
+              value={filterCategory}
+              onChange={e => setFilterCategory(e.target.value)}
+              className="h-7 text-xs bg-muted border border-border rounded-md px-2 pr-6 text-foreground appearance-none cursor-pointer"
+            >
+              <option value="">All types</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </div>
           {/* Bulk actions */}
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-1.5 ml-auto flex-wrap">
