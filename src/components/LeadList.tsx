@@ -56,6 +56,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<LeadStatus | ''>('');
   const [filterStatus, setFilterStatus] = useState<LeadStatus | ''>('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [autoSorting, setAutoSorting] = useState(false);
 
   const load = useCallback(async () => {
@@ -79,6 +80,15 @@ export default function LeadList({ section, allSections, status, optOut, showTri
 
   useEffect(() => { load(); }, [load]);
 
+  // Extract unique categories for the filter dropdown
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    leads.forEach(l => {
+      if (l.category) l.category.split(', ').forEach(c => cats.add(c.trim()));
+    });
+    return [...cats].sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
     let result = leads;
     if (search.trim()) {
@@ -92,6 +102,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       );
     }
     if (filterStatus) result = result.filter(l => l.status === filterStatus);
+    if (filterCategory) result = result.filter(l => l.category && l.category.toLowerCase().includes(filterCategory.toLowerCase()));
 
     switch (sort) {
       case 'rating': return [...result].sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -103,7 +114,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       });
       default: return [...result].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
-  }, [leads, search, sort, filterStatus]);
+  }, [leads, search, sort, filterStatus, filterCategory]);
 
   const handleUpdate = useCallback((updated: Lead) => {
     setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
@@ -254,6 +265,18 @@ export default function LeadList({ section, allSections, status, optOut, showTri
             </div>
           )}
 
+          {/* Category filter */}
+          <div className="relative">
+            <select
+              value={filterCategory}
+              onChange={e => setFilterCategory(e.target.value)}
+              className="h-7 text-xs bg-muted border border-border rounded-md px-2 pr-6 text-foreground appearance-none cursor-pointer"
+            >
+              <option value="">All types</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          </div>
           {/* Bulk actions */}
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-1.5 ml-auto flex-wrap">
