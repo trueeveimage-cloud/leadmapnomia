@@ -238,8 +238,8 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // IDEMPOTENCY CHECK: Skip if we already SUCCESSFULLY sent to this lead
-        // Only skip if there's a delivered/sent/queued message (not failed ones)
+        // IDEMPOTENCY CHECK: Skip if we EVER successfully sent ANY campaign message to this lead
+        // This prevents a lead from receiving campaign messages more than once, across ALL campaigns
         const { count: existingCount } = await dbClient.from('message_logs')
           .select('id', { count: 'exact', head: true })
           .eq('lead_id', lead.id)
