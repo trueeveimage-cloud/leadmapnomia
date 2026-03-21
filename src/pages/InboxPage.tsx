@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,6 +42,38 @@ export default function InboxPage() {
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts, refreshNotifications } = useCRM();
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+
+  const loadUnreadCounts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('message_logs')
+        .select('lead_id, direction, created_at')
+        .order('created_at', { ascending: true })
+        .limit(2000);
+      if (error) throw error;
+      const lastOutbounds = new Map<string, Date>();
+      const inboundsAfter = new Map<string, number>();
+      const noOutboundInbounds = new Map<string, number>();
+      for (const m of (data || [])) {
+        if (m.direction === 'outbound') {
+          lastOutbounds.set(m.lead_id, new Date(m.created_at));
+          inboundsAfter.set(m.lead_id, 0);
+        } else if (m.direction === 'inbound') {
+          if (lastOutbounds.has(m.lead_id)) {
+            inboundsAfter.set(m.lead_id, (inboundsAfter.get(m.lead_id) || 0) + 1);
+          } else {
+            noOutboundInbounds.set(m.lead_id, (noOutboundInbounds.get(m.lead_id) || 0) + 1);
+          }
+        }
+      }
+      const final = new Map<string, number>();
+      for (const [id, count] of inboundsAfter) { if (count > 0) final.set(id, count); }
+      for (const [id, count] of noOutboundInbounds) { if (!final.has(id) && count > 0) final.set(id, count); }
+      setUnreadCounts(final);
+    } catch { /* silent */ }
+  }, []);
+
 
   const loadInbox = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -113,12 +145,13 @@ export default function InboxPage() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { loadInbox(); loadConversations(); }, [loadInbox, loadConversations]);
+  useEffect(() => { loadInbox(); loadConversations(); loadUnreadCounts(); }, [loadInbox, loadConversations, loadUnreadCounts]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
     await loadConversations();
+    await loadUnreadCounts();
     await refreshNotifications();
     setRefreshing(false);
     toast.success('Inbox refreshed');
@@ -205,6 +238,8 @@ export default function InboxPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  const totalUnread = Array.from(unreadCounts.values()).reduce((sum, c) => sum + c, 0);
+
   return (
     <AppLayout>
       <div className="flex h-full">
@@ -215,6 +250,12 @@ export default function InboxPage() {
               <Inbox size={20} className="text-primary" />
               <h1 className="text-2xl font-bold text-foreground">Inbox</h1>
               <InfoTip text="Inbound SMS replies from leads. Use quick actions to update lead status." />
+              {totalUnread > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold ml-2">
+                  <BellRing size={13} className="animate-pulse" />
+                  {totalUnread} unread
+                </div>
+              )}
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
@@ -299,6 +340,9 @@ export default function InboxPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-sm text-foreground">{c.lead_name}</span>
+                              {(unreadCounts.get(c.lead_id) || 0) > 0 && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{unreadCounts.get(c.lead_id)}</span>
+                              )}
                               {c.lead_category && <span className="text-[10px] text-muted-foreground">{c.lead_category}</span>}
                               {c.has_new_inbound && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-primary/15 text-primary border border-primary/30">
@@ -355,6 +399,9 @@ export default function InboxPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium text-sm text-foreground">{m.lead_name || 'Unknown'}</span>
+                            {(unreadCounts.get(m.lead_id) || 0) > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{unreadCounts.get(m.lead_id)}</span>
+                            )}
                             {m.lead_category && <span className="text-[10px] text-muted-foreground">{m.lead_category}</span>}
                             <span className="text-[10px] text-muted-foreground">{m.from_number}</span>
                             {answeredStatuses.includes(currentStatus) && (
