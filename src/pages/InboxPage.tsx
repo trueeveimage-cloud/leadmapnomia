@@ -32,7 +32,7 @@ const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback', 
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'pending' | 'answered' | 'conversations'>('pending');
+  const [tab, setTab] = useState<'unread' | 'pending' | 'answered' | 'conversations'>('unread');
   const [convos, setConvos] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_message_body: string | null; last_message_at: string; last_direction: string; has_new_inbound: boolean }[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadDetail, setLeadDetail] = useState<Lead | null>(null);
