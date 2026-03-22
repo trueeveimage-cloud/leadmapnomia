@@ -439,8 +439,8 @@ export default function InboxPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-sm text-foreground">{c.lead_name}</span>
-                              {(unreadCounts.get(c.lead_id) || 0) > 0 && (
-                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{unreadCounts.get(c.lead_id)}</span>
+                              {unreadLeads.some(u => u.lead_id === c.lead_id) && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">!</span>
                               )}
                               {c.lead_category && <span className="text-[10px] text-muted-foreground">{c.lead_category}</span>}
                               {c.has_new_inbound && (
