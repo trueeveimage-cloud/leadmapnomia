@@ -366,7 +366,13 @@ export default function InboxPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-sm text-foreground">{u.lead_name}</span>
-                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{u.unread}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleMarkAsRead(u.lead_id); }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium border border-primary/20 hover:bg-primary/20 transition-colors"
+                                title="Mark as read"
+                              >
+                                <CheckCheck size={10} /> Read
+                              </button>
                               {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
                               {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
                               {answeredStatuses.includes(currentStatus) && (
