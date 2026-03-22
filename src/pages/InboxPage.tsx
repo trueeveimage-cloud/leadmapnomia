@@ -142,16 +142,36 @@ export default function InboxPage() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { loadInbox(); loadConversations(); loadUnreadCounts(); }, [loadInbox, loadConversations, loadUnreadCounts]);
+  useEffect(() => { loadInbox(); loadConversations(); loadUnreadLeads(); }, [loadInbox, loadConversations, loadUnreadLeads]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
     await loadConversations();
-    await loadUnreadCounts();
+    await loadUnreadLeads();
     await refreshNotifications();
     setRefreshing(false);
     toast.success('Inbox refreshed');
+  };
+
+  const handleMarkAsRead = async (leadId: string) => {
+    try {
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', leadId);
+      setUnreadLeads(prev => prev.filter(u => u.lead_id !== leadId));
+      toast.success('Marked as read');
+      refreshNotifications();
+    } catch { toast.error('Failed to mark as read'); }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      const ids = unreadLeads.map(u => u.lead_id);
+      if (ids.length === 0) return;
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).in('id', ids);
+      setUnreadLeads([]);
+      toast.success('All marked as read');
+      refreshNotifications();
+    } catch { toast.error('Failed to mark all as read'); }
   };
 
   // Load lead detail + conversation when selected
