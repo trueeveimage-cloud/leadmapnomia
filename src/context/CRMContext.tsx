@@ -113,7 +113,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         return new Date(l.last_inbound_at) > new Date(l.read_at);
       }).length;
 
-      setNotifications({ batchReady, unreadInbox: unreadInbox || 0 });
+      setNotifications({ batchReady, unreadInbox });
     } catch {}
   }, []);
 
