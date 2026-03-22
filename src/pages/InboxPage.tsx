@@ -42,35 +42,32 @@ export default function InboxPage() {
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts, refreshNotifications } = useCRM();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null }[]>([]);
 
-  const loadUnreadCounts = useCallback(async () => {
+  const loadUnreadLeads = useCallback(async () => {
     try {
+      // Query leads that have inbound messages newer than read_at (or read_at is null)
       const { data, error } = await supabase
-        .from('message_logs')
-        .select('lead_id, direction, created_at')
-        .order('created_at', { ascending: true })
-        .limit(2000);
+        .from('leads')
+        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone')
+        .not('last_inbound_at', 'is', null);
       if (error) throw error;
-      const lastOutbounds = new Map<string, Date>();
-      const inboundsAfter = new Map<string, number>();
-      const noOutboundInbounds = new Map<string, number>();
-      for (const m of (data || [])) {
-        if (m.direction === 'outbound') {
-          lastOutbounds.set(m.lead_id, new Date(m.created_at));
-          inboundsAfter.set(m.lead_id, 0);
-        } else if (m.direction === 'inbound') {
-          if (lastOutbounds.has(m.lead_id)) {
-            inboundsAfter.set(m.lead_id, (inboundsAfter.get(m.lead_id) || 0) + 1);
-          } else {
-            noOutboundInbounds.set(m.lead_id, (noOutboundInbounds.get(m.lead_id) || 0) + 1);
-          }
-        }
-      }
-      const final = new Map<string, number>();
-      for (const [id, count] of inboundsAfter) { if (count > 0) final.set(id, count); }
-      for (const [id, count] of noOutboundInbounds) { if (!final.has(id) && count > 0) final.set(id, count); }
-      setUnreadCounts(final);
+      const unread = (data || []).filter(l => {
+        if (!l.last_inbound_at) return false;
+        if (!l.read_at) return true; // never read
+        return new Date(l.last_inbound_at) > new Date(l.read_at);
+      });
+      // Sort by most recent inbound first
+      unread.sort((a, b) => new Date(b.last_inbound_at!).getTime() - new Date(a.last_inbound_at!).getTime());
+      setUnreadLeads(unread.map(l => ({
+        lead_id: l.id,
+        lead_name: l.name,
+        lead_category: l.category,
+        lead_status: l.status,
+        last_body: l.last_message_preview,
+        last_at: l.last_inbound_at!,
+        from_number: l.phone,
+      })));
     } catch { /* silent */ }
   }, []);
 
