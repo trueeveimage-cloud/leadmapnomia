@@ -102,14 +102,18 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         .eq('status', 'active');
       const batchReady = (activeCampaigns?.length || 0) > 0;
 
-      // Count unread inbound messages (leads that replied but haven't been triaged)
-      const { count: unreadInbox } = await supabase
+      // Count unread: leads with last_inbound_at > read_at (or read_at is null)
+      const { data: unreadData } = await supabase
         .from('leads')
-        .select('id', { count: 'exact', head: true })
-        .eq('has_replied', true)
-        .eq('status', 'contacted');
+        .select('id, last_inbound_at, read_at')
+        .not('last_inbound_at', 'is', null);
+      const unreadInbox = (unreadData || []).filter((l: any) => {
+        if (!l.last_inbound_at) return false;
+        if (!l.read_at) return true;
+        return new Date(l.last_inbound_at) > new Date(l.read_at);
+      }).length;
 
-      setNotifications({ batchReady, unreadInbox: unreadInbox || 0 });
+      setNotifications({ batchReady, unreadInbox });
     } catch {}
   }, []);
 

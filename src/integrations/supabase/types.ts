@@ -477,6 +477,7 @@ export type Database = {
           phone_e164: string | null
           place_id: string | null
           rating: number | null
+          read_at: string | null
           reviews_count: number | null
           section: string
           status: string
@@ -515,6 +516,7 @@ export type Database = {
           phone_e164?: string | null
           place_id?: string | null
           rating?: number | null
+          read_at?: string | null
           reviews_count?: number | null
           section?: string
           status?: string
@@ -553,6 +555,7 @@ export type Database = {
           phone_e164?: string | null
           place_id?: string | null
           rating?: number | null
+          read_at?: string | null
           reviews_count?: number | null
           section?: string
           status?: string

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { updateLead, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
-import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw, BellRing } from 'lucide-react';
+import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw, BellRing, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import InfoTip from '@/components/InfoTip';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,35 +42,32 @@ export default function InboxPage() {
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts, refreshNotifications } = useCRM();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
+  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null }[]>([]);
 
-  const loadUnreadCounts = useCallback(async () => {
+  const loadUnreadLeads = useCallback(async () => {
     try {
+      // Query leads that have inbound messages newer than read_at (or read_at is null)
       const { data, error } = await supabase
-        .from('message_logs')
-        .select('lead_id, direction, created_at')
-        .order('created_at', { ascending: true })
-        .limit(2000);
+        .from('leads')
+        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone')
+        .not('last_inbound_at', 'is', null);
       if (error) throw error;
-      const lastOutbounds = new Map<string, Date>();
-      const inboundsAfter = new Map<string, number>();
-      const noOutboundInbounds = new Map<string, number>();
-      for (const m of (data || [])) {
-        if (m.direction === 'outbound') {
-          lastOutbounds.set(m.lead_id, new Date(m.created_at));
-          inboundsAfter.set(m.lead_id, 0);
-        } else if (m.direction === 'inbound') {
-          if (lastOutbounds.has(m.lead_id)) {
-            inboundsAfter.set(m.lead_id, (inboundsAfter.get(m.lead_id) || 0) + 1);
-          } else {
-            noOutboundInbounds.set(m.lead_id, (noOutboundInbounds.get(m.lead_id) || 0) + 1);
-          }
-        }
-      }
-      const final = new Map<string, number>();
-      for (const [id, count] of inboundsAfter) { if (count > 0) final.set(id, count); }
-      for (const [id, count] of noOutboundInbounds) { if (!final.has(id) && count > 0) final.set(id, count); }
-      setUnreadCounts(final);
+      const unread = (data || []).filter(l => {
+        if (!l.last_inbound_at) return false;
+        if (!l.read_at) return true; // never read
+        return new Date(l.last_inbound_at) > new Date(l.read_at);
+      });
+      // Sort by most recent inbound first
+      unread.sort((a, b) => new Date(b.last_inbound_at!).getTime() - new Date(a.last_inbound_at!).getTime());
+      setUnreadLeads(unread.map(l => ({
+        lead_id: l.id,
+        lead_name: l.name,
+        lead_category: l.category,
+        lead_status: l.status,
+        last_body: l.last_message_preview,
+        last_at: l.last_inbound_at!,
+        from_number: l.phone,
+      })));
     } catch { /* silent */ }
   }, []);
 
@@ -145,16 +142,36 @@ export default function InboxPage() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { loadInbox(); loadConversations(); loadUnreadCounts(); }, [loadInbox, loadConversations, loadUnreadCounts]);
+  useEffect(() => { loadInbox(); loadConversations(); loadUnreadLeads(); }, [loadInbox, loadConversations, loadUnreadLeads]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
     await loadConversations();
-    await loadUnreadCounts();
+    await loadUnreadLeads();
     await refreshNotifications();
     setRefreshing(false);
     toast.success('Inbox refreshed');
+  };
+
+  const handleMarkAsRead = async (leadId: string) => {
+    try {
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', leadId);
+      setUnreadLeads(prev => prev.filter(u => u.lead_id !== leadId));
+      toast.success('Marked as read');
+      refreshNotifications();
+    } catch { toast.error('Failed to mark as read'); }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      const ids = unreadLeads.map(u => u.lead_id);
+      if (ids.length === 0) return;
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).in('id', ids);
+      setUnreadLeads([]);
+      toast.success('All marked as read');
+      refreshNotifications();
+    } catch { toast.error('Failed to mark all as read'); }
   };
 
   // Load lead detail + conversation when selected
@@ -207,6 +224,9 @@ export default function InboxPage() {
       if (!res.ok) throw new Error(json.error || 'Failed to send');
       toast.success('SMS sent');
       setReplyText('');
+      // Mark as read since we just replied
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', selectedLeadId);
+      setUnreadLeads(prev => prev.filter(u => u.lead_id !== selectedLeadId));
       const { data } = await supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
         .order('created_at', { ascending: true }).limit(50);
       setConversation(data || []);
@@ -238,32 +258,7 @@ export default function InboxPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const totalUnread = Array.from(unreadCounts.values()).reduce((sum, c) => sum + c, 0);
-
-  // Build unread leads list: leads with unread messages, with their latest inbound message
-  const unreadLeads = React.useMemo(() => {
-    const leads: { lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; unread: number; last_body: string | null; last_at: string; from_number: string | null }[] = [];
-    for (const [leadId, count] of unreadCounts) {
-      if (count <= 0) continue;
-      // Find from messages (inbound)
-      const msg = messages.find(m => m.lead_id === leadId);
-      // Or from convos
-      const convo = convos.find(c => c.lead_id === leadId);
-      leads.push({
-        lead_id: leadId,
-        lead_name: msg?.lead_name || convo?.lead_name || 'Unknown',
-        lead_category: msg?.lead_category || convo?.lead_category || null,
-        lead_status: msg?.lead_status || convo?.lead_status || 'unknown',
-        unread: count,
-        last_body: msg?.body || convo?.last_message_body || null,
-        last_at: msg?.created_at || convo?.last_message_at || '',
-        from_number: msg?.from_number || null,
-      });
-    }
-    // Sort by most recent first
-    leads.sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime());
-    return leads;
-  }, [unreadCounts, messages, convos]);
+  const totalUnread = unreadLeads.length;
 
   return (
     <AppLayout>
@@ -358,6 +353,14 @@ export default function InboxPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    >
+                      <CheckCheck size={13} /> Mark all as read
+                    </button>
+                  </div>
                   {unreadLeads.map(u => {
                     const isSelected = selectedLeadId === u.lead_id;
                     const currentStatus = u.lead_status || '';
@@ -374,7 +377,13 @@ export default function InboxPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-sm text-foreground">{u.lead_name}</span>
-                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{u.unread}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleMarkAsRead(u.lead_id); }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium border border-primary/20 hover:bg-primary/20 transition-colors"
+                                title="Mark as read"
+                              >
+                                <CheckCheck size={10} /> Read
+                              </button>
                               {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
                               {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
                               {answeredStatuses.includes(currentStatus) && (
@@ -441,8 +450,8 @@ export default function InboxPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium text-sm text-foreground">{c.lead_name}</span>
-                              {(unreadCounts.get(c.lead_id) || 0) > 0 && (
-                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{unreadCounts.get(c.lead_id)}</span>
+                              {unreadLeads.some(u => u.lead_id === c.lead_id) && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">!</span>
                               )}
                               {c.lead_category && <span className="text-[10px] text-muted-foreground">{c.lead_category}</span>}
                               {c.has_new_inbound && (
@@ -500,8 +509,8 @@ export default function InboxPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium text-sm text-foreground">{m.lead_name || 'Unknown'}</span>
-                            {(unreadCounts.get(m.lead_id) || 0) > 0 && (
-                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{unreadCounts.get(m.lead_id)}</span>
+                            {unreadLeads.some(u => u.lead_id === m.lead_id) && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">!</span>
                             )}
                             {m.lead_category && <span className="text-[10px] text-muted-foreground">{m.lead_category}</span>}
                             <span className="text-[10px] text-muted-foreground">{m.from_number}</span>
