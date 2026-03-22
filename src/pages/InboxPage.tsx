@@ -224,6 +224,9 @@ export default function InboxPage() {
       if (!res.ok) throw new Error(json.error || 'Failed to send');
       toast.success('SMS sent');
       setReplyText('');
+      // Mark as read since we just replied
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', selectedLeadId);
+      setUnreadLeads(prev => prev.filter(u => u.lead_id !== selectedLeadId));
       const { data } = await supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
         .order('created_at', { ascending: true }).limit(50);
       setConversation(data || []);
