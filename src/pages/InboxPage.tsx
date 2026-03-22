@@ -255,32 +255,7 @@ export default function InboxPage() {
     return acc;
   }, {} as Record<string, number>);
 
-  const totalUnread = Array.from(unreadCounts.values()).reduce((sum, c) => sum + c, 0);
-
-  // Build unread leads list: leads with unread messages, with their latest inbound message
-  const unreadLeads = React.useMemo(() => {
-    const leads: { lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; unread: number; last_body: string | null; last_at: string; from_number: string | null }[] = [];
-    for (const [leadId, count] of unreadCounts) {
-      if (count <= 0) continue;
-      // Find from messages (inbound)
-      const msg = messages.find(m => m.lead_id === leadId);
-      // Or from convos
-      const convo = convos.find(c => c.lead_id === leadId);
-      leads.push({
-        lead_id: leadId,
-        lead_name: msg?.lead_name || convo?.lead_name || 'Unknown',
-        lead_category: msg?.lead_category || convo?.lead_category || null,
-        lead_status: msg?.lead_status || convo?.lead_status || 'unknown',
-        unread: count,
-        last_body: msg?.body || convo?.last_message_body || null,
-        last_at: msg?.created_at || convo?.last_message_at || '',
-        from_number: msg?.from_number || null,
-      });
-    }
-    // Sort by most recent first
-    leads.sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime());
-    return leads;
-  }, [unreadCounts, messages, convos]);
+  const totalUnread = unreadLeads.length;
 
   return (
     <AppLayout>
