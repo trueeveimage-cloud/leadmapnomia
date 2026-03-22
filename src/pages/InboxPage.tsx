@@ -32,7 +32,7 @@ const answeredStatuses = ['interested', 'not_interested', 'unsure', 'callback', 
 export default function InboxPage() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'pending' | 'answered' | 'conversations'>('pending');
+  const [tab, setTab] = useState<'unread' | 'pending' | 'answered' | 'conversations'>('unread');
   const [convos, setConvos] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_message_body: string | null; last_message_at: string; last_direction: string; has_new_inbound: boolean }[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadDetail, setLeadDetail] = useState<Lead | null>(null);
@@ -240,6 +240,31 @@ export default function InboxPage() {
 
   const totalUnread = Array.from(unreadCounts.values()).reduce((sum, c) => sum + c, 0);
 
+  // Build unread leads list: leads with unread messages, with their latest inbound message
+  const unreadLeads = React.useMemo(() => {
+    const leads: { lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; unread: number; last_body: string | null; last_at: string; from_number: string | null }[] = [];
+    for (const [leadId, count] of unreadCounts) {
+      if (count <= 0) continue;
+      // Find from messages (inbound)
+      const msg = messages.find(m => m.lead_id === leadId);
+      // Or from convos
+      const convo = convos.find(c => c.lead_id === leadId);
+      leads.push({
+        lead_id: leadId,
+        lead_name: msg?.lead_name || convo?.lead_name || 'Unknown',
+        lead_category: msg?.lead_category || convo?.lead_category || null,
+        lead_status: msg?.lead_status || convo?.lead_status || 'unknown',
+        unread: count,
+        last_body: msg?.body || convo?.last_message_body || null,
+        last_at: msg?.created_at || convo?.last_message_at || '',
+        from_number: msg?.from_number || null,
+      });
+    }
+    // Sort by most recent first
+    leads.sort((a, b) => new Date(b.last_at).getTime() - new Date(a.last_at).getTime());
+    return leads;
+  }, [unreadCounts, messages, convos]);
+
   return (
     <AppLayout>
       <div className="flex h-full">
@@ -282,7 +307,16 @@ export default function InboxPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-muted/50 p-0.5 rounded-lg w-fit">
+            <div className="flex gap-1 bg-muted/50 p-0.5 rounded-lg w-fit flex-wrap">
+              <button
+                onClick={() => setTab('unread')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  tab === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Unread ({totalUnread})
+              </button>
               <button
                 onClick={() => setTab('pending')}
                 className={cn(
@@ -316,6 +350,73 @@ export default function InboxPage() {
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             {loading ? (
               <div className="text-sm text-muted-foreground py-20 text-center">Loading inbox...</div>
+            ) : tab === 'unread' ? (
+              unreadLeads.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <BellRing size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No unread messages — you're all caught up!</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {unreadLeads.map(u => {
+                    const isSelected = selectedLeadId === u.lead_id;
+                    const currentStatus = u.lead_status || '';
+                    return (
+                      <div
+                        key={u.lead_id}
+                        className={cn(
+                          "bg-card border rounded-lg p-4 cursor-pointer transition-all border-l-4 border-l-primary",
+                          isSelected ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
+                        )}
+                        onClick={() => setSelectedLeadId(isSelected ? null : u.lead_id)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground">{u.lead_name}</span>
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{u.unread}</span>
+                              {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
+                              {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
+                              {answeredStatuses.includes(currentStatus) && (
+                                <span className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
+                                  currentStatus === 'interested' && 'bg-green-500/15 text-green-600 border-green-500/30',
+                                  currentStatus === 'not_interested' && 'bg-destructive/15 text-destructive border-destructive/30',
+                                  currentStatus === 'unsure' && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                  currentStatus === 'callback' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+                                )}>
+                                  {currentStatus.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{u.last_body}</p>
+                            {u.last_at && <p className="text-[10px] text-muted-foreground mt-1">{new Date(u.last_at).toLocaleString()}</p>}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {QUICK_ACTIONS.map(a => (
+                              <button
+                                key={a.status}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newStatus = currentStatus === a.status ? 'contacted' : a.status;
+                                  handleQuickAction(u.lead_id, newStatus);
+                                }}
+                                className={cn(
+                                  'px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors',
+                                  currentStatus === a.status ? a.color + ' ring-1 ring-offset-1' : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                )}
+                              >
+                                {a.label}
+                              </button>
+                            ))}
+                            <ChevronRight size={14} className="text-muted-foreground ml-1" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : tab === 'conversations' ? (
               convos.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
