@@ -350,6 +350,14 @@ export default function InboxPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    >
+                      <CheckCheck size={13} /> Mark all as read
+                    </button>
+                  </div>
                   {unreadLeads.map(u => {
                     const isSelected = selectedLeadId === u.lead_id;
                     const currentStatus = u.lead_status || '';
