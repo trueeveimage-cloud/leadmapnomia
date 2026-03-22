@@ -307,7 +307,16 @@ export default function InboxPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-muted/50 p-0.5 rounded-lg w-fit">
+            <div className="flex gap-1 bg-muted/50 p-0.5 rounded-lg w-fit flex-wrap">
+              <button
+                onClick={() => setTab('unread')}
+                className={cn(
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  tab === 'unread' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Unread ({totalUnread})
+              </button>
               <button
                 onClick={() => setTab('pending')}
                 className={cn(
@@ -341,6 +350,73 @@ export default function InboxPage() {
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             {loading ? (
               <div className="text-sm text-muted-foreground py-20 text-center">Loading inbox...</div>
+            ) : tab === 'unread' ? (
+              unreadLeads.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <BellRing size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No unread messages — you're all caught up!</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {unreadLeads.map(u => {
+                    const isSelected = selectedLeadId === u.lead_id;
+                    const currentStatus = u.lead_status || '';
+                    return (
+                      <div
+                        key={u.lead_id}
+                        className={cn(
+                          "bg-card border rounded-lg p-4 cursor-pointer transition-all border-l-4 border-l-primary",
+                          isSelected ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-primary/30"
+                        )}
+                        onClick={() => setSelectedLeadId(isSelected ? null : u.lead_id)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground">{u.lead_name}</span>
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">{u.unread}</span>
+                              {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
+                              {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
+                              {answeredStatuses.includes(currentStatus) && (
+                                <span className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
+                                  currentStatus === 'interested' && 'bg-green-500/15 text-green-600 border-green-500/30',
+                                  currentStatus === 'not_interested' && 'bg-destructive/15 text-destructive border-destructive/30',
+                                  currentStatus === 'unsure' && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                                  currentStatus === 'callback' && 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+                                )}>
+                                  {currentStatus.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-foreground whitespace-pre-wrap break-words">{u.last_body}</p>
+                            {u.last_at && <p className="text-[10px] text-muted-foreground mt-1">{new Date(u.last_at).toLocaleString()}</p>}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {QUICK_ACTIONS.map(a => (
+                              <button
+                                key={a.status}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newStatus = currentStatus === a.status ? 'contacted' : a.status;
+                                  handleQuickAction(u.lead_id, newStatus);
+                                }}
+                                className={cn(
+                                  'px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors',
+                                  currentStatus === a.status ? a.color + ' ring-1 ring-offset-1' : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                                )}
+                              >
+                                {a.label}
+                              </button>
+                            ))}
+                            <ChevronRight size={14} className="text-muted-foreground ml-1" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : tab === 'conversations' ? (
               convos.length === 0 ? (
                 <div className="text-center py-20 text-muted-foreground">
