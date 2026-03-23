@@ -144,6 +144,41 @@ export default function InboxPage() {
 
   useEffect(() => { loadInbox(); loadConversations(); loadUnreadLeads(); }, [loadInbox, loadConversations, loadUnreadLeads]);
 
+  // Realtime: listen for new inbound messages and lead updates → auto-refresh unread list
+  useEffect(() => {
+    const channel = supabase
+      .channel('inbox-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'message_logs', filter: 'direction=eq.inbound' },
+        () => {
+          loadUnreadLeads();
+          loadInbox(false);
+          loadConversations();
+          refreshNotifications();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leads' },
+        (payload) => {
+          const newRow = payload.new as any;
+          // If last_inbound_at changed, refresh unread
+          if (newRow.last_inbound_at) {
+            loadUnreadLeads();
+            refreshNotifications();
+          }
+          // Update selected lead detail if viewing it
+          if (newRow.id === selectedLeadId) {
+            setLeadDetail(prev => prev ? { ...prev, ...newRow } : prev);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [loadUnreadLeads, loadInbox, loadConversations, refreshNotifications, selectedLeadId]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadInbox(false);
