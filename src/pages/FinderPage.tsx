@@ -350,7 +350,13 @@ export default function FinderPage() {
     const newCities = rec.cities.filter(c => !selectedNames.has(c.name));
     if (newCities.length === 0) { toast.info('All recommended cities already selected'); return; }
     setSelectedCities(prev => [...prev, ...newCities]);
-    toast.success(`Added ${newCities.length} recommended cities`);
+    // Auto-fill niches if recommendation has them
+    if (rec.suggestedNiches && rec.suggestedNiches.length > 0) {
+      setKeywords(rec.suggestedNiches.join('\n'));
+      toast.success(`Added ${newCities.length} cities + ${rec.suggestedNiches.length} top niches`);
+    } else {
+      toast.success(`Added ${newCities.length} cities`);
+    }
   };
 
   return (
