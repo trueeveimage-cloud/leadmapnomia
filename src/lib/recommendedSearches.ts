@@ -108,17 +108,54 @@ function avgLeadsPerRun(
 /**
  * Generate recommended searches — max 3, focused and actionable.
  */
+/**
+ * Get the best niches for a country — uses local-language keywords from
+ * COUNTRY_DEFAULT_KEYWORDS, boosted by historical campaign reply data.
+ */
+function getBestNichesForCountry(country: Country, campaignPerf?: CampaignPerformance): string[] {
+  // Start with the country's default keywords (already in local language)
+  const defaults = COUNTRY_DEFAULT_KEYWORDS[country].split('\n').map(k => k.trim()).filter(Boolean);
+
+  if (!campaignPerf) return defaults.slice(0, 5);
+
+  // Find top-performing niches from campaign data
+  const topFromCampaign = getTopNiches(campaignPerf);
+
+  if (topFromCampaign.length === 0) return defaults.slice(0, 5);
+
+  // Cross-reference: if a campaign niche loosely matches a default keyword, boost it
+  const boosted: string[] = [];
+  const remaining = [...defaults];
+
+  for (const defaultKw of defaults) {
+    const match = topFromCampaign.some(cn =>
+      cn.toLowerCase().includes(defaultKw.toLowerCase()) ||
+      defaultKw.toLowerCase().includes(cn.toLowerCase())
+    );
+    if (match) {
+      boosted.push(defaultKw);
+      remaining.splice(remaining.indexOf(defaultKw), 1);
+    }
+  }
+
+  // Return boosted first, then remaining defaults
+  return [...boosted, ...remaining].slice(0, 5);
+}
+
+/**
+ * Generate recommended searches — max 6, focused and actionable.
+ */
 export function getRecommendedSearches(
   runs: FinderRun[],
   cityStats: Record<string, { runs: number; leads: number; candidates: number }>,
   campaignPerf?: CampaignPerformance
 ): SearchRecommendation[] {
   const recommendations: SearchRecommendation[] = [];
-  const topNiches = campaignPerf ? getTopNiches(campaignPerf) : [];
 
   for (const country of ['SE', 'NO', 'DK'] as Country[]) {
     const cities = getCitiesByCountry(country);
     const avgLpc = avgLeadsPerRun(cityStats, cities);
+    const niches = getBestNichesForCountry(country, campaignPerf);
 
     // 1. HIGH PRIORITY: Large unsearched cities (METRO/CITY only, top 5)
     const unsearchedLarge = cities
@@ -132,7 +169,7 @@ export function getRecommendedSearches(
         cities: pick,
         reason: `${pick.length} untapped ${pick.length === 1 ? 'city' : 'cities'} with ${pick.reduce((s, c) => s + c.population, 0).toLocaleString()}+ people`,
         priority: 'high',
-        suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+        suggestedNiches: niches,
         estimatedLeadsPerCity: avgLpc || undefined,
         actionLabel: `Search ${pick.length} ${pick.length === 1 ? 'city' : 'cities'}`,
       });
@@ -161,7 +198,7 @@ export function getRecommendedSearches(
           cities: highReplyCities,
           reason: `${topRate}% reply rate in ${topCity.name} — find more leads in hot areas`,
           priority: 'high',
-          suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+          suggestedNiches: niches,
           estimatedLeadsPerCity: avgLpc || undefined,
           actionLabel: 'Double down',
         });
@@ -191,7 +228,7 @@ export function getRecommendedSearches(
         cities: highPerformers,
         reason: `${topRate}% hit rate in ${topCity.name} — room for more runs`,
         priority: 'medium',
-        suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+        suggestedNiches: niches,
         estimatedLeadsPerCity: Math.round(cityStats[topCity.name].leads / cityStats[topCity.name].runs),
         actionLabel: 'Re-search',
       });
@@ -203,5 +240,5 @@ export function getRecommendedSearches(
       const prio = { high: 0, medium: 1, low: 2 };
       return prio[a.priority] - prio[b.priority];
     })
-    .slice(0, 6); // max 2 per country
+    .slice(0, 6);
 }
