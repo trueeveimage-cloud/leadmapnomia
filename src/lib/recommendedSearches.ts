@@ -13,6 +13,10 @@ export interface SearchRecommendation {
   priority: 'high' | 'medium' | 'low';
   /** Optional: suggested niches based on reply data */
   suggestedNiches?: string[];
+  /** Estimated leads per city based on historical avg */
+  estimatedLeadsPerCity?: number;
+  /** Action label for the button */
+  actionLabel?: string;
 }
 
 export interface CampaignPerformance {
@@ -28,7 +32,6 @@ export interface CampaignPerformance {
 
 /**
  * Build campaign performance data from leads + message_logs.
- * Call this from the component and pass it in.
  */
 export function buildCampaignPerformance(
   leads: Array<{ id: string; category?: string | null; address?: string | null; has_replied?: boolean }>,
@@ -46,7 +49,6 @@ export function buildCampaignPerformance(
     const niche = (lead.category || 'unknown').toLowerCase();
     perf.nicheSent[niche] = (perf.nicheSent[niche] || 0) + 1;
 
-    // Extract city from address (last part before country)
     const addr = lead.address || '';
     const parts = addr.split(',').map(p => p.trim());
     const city = parts.length >= 2 ? parts[parts.length - 2] : '';
@@ -84,8 +86,27 @@ export function getTopNiches(perf: CampaignPerformance, minSent = 3): string[] {
 }
 
 /**
- * Generate recommended searches for each country based on coverage gaps
- * and optionally campaign reply performance.
+ * Calculate average leads per run from historical data.
+ */
+function avgLeadsPerRun(
+  cityStats: Record<string, { runs: number; leads: number; candidates: number }>,
+  cities: CityProfile[]
+): number {
+  let totalLeads = 0;
+  let totalRuns = 0;
+  for (const city of cities) {
+    const cs = cityStats[city.name];
+    if (cs) {
+      totalLeads += cs.leads;
+      totalRuns += cs.runs;
+    }
+  }
+  if (totalRuns === 0) return 0;
+  return Math.round(totalLeads / totalRuns);
+}
+
+/**
+ * Generate recommended searches — max 3, focused and actionable.
  */
 export function getRecommendedSearches(
   runs: FinderRun[],
@@ -97,87 +118,90 @@ export function getRecommendedSearches(
 
   for (const country of ['SE', 'NO', 'DK'] as Country[]) {
     const cities = getCitiesByCountry(country);
-    
-    // Find unsearched cities sorted by population (high first)
-    const unsearched = cities
-      .filter(c => !cityStats[c.name])
+    const avgLpc = avgLeadsPerRun(cityStats, cities);
+
+    // 1. HIGH PRIORITY: Large unsearched cities (METRO/CITY only, top 5)
+    const unsearchedLarge = cities
+      .filter(c => !cityStats[c.name] && (c.type === 'METRO' || c.type === 'CITY'))
       .sort((a, b) => b.population - a.population);
-    
-    // Find cities with high success rate that could yield more
+
+    if (unsearchedLarge.length > 0) {
+      const pick = unsearchedLarge.slice(0, 5);
+      recommendations.push({
+        country,
+        cities: pick,
+        reason: `${pick.length} untapped ${pick.length === 1 ? 'city' : 'cities'} with ${pick.reduce((s, c) => s + c.population, 0).toLocaleString()}+ people`,
+        priority: 'high',
+        suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+        estimatedLeadsPerCity: avgLpc || undefined,
+        actionLabel: `Search ${pick.length} ${pick.length === 1 ? 'city' : 'cities'}`,
+      });
+    }
+
+    // 2. HIGH PRIORITY: Cities with high SMS reply rates — double down
+    if (campaignPerf) {
+      const highReplyCities = cities
+        .filter(c => {
+          const sent = campaignPerf.citySent[c.name] || 0;
+          const replies = campaignPerf.cityReplies[c.name] || 0;
+          return sent >= 3 && (replies / sent) > 0.05;
+        })
+        .sort((a, b) => {
+          const aRate = (campaignPerf.cityReplies[a.name] || 0) / (campaignPerf.citySent[a.name] || 1);
+          const bRate = (campaignPerf.cityReplies[b.name] || 0) / (campaignPerf.citySent[b.name] || 1);
+          return bRate - aRate;
+        })
+        .slice(0, 4);
+
+      if (highReplyCities.length > 0) {
+        const topCity = highReplyCities[0];
+        const topRate = Math.round(((campaignPerf.cityReplies[topCity.name] || 0) / (campaignPerf.citySent[topCity.name] || 1)) * 100);
+        recommendations.push({
+          country,
+          cities: highReplyCities,
+          reason: `${topRate}% reply rate in ${topCity.name} — find more leads in hot areas`,
+          priority: 'high',
+          suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+          estimatedLeadsPerCity: avgLpc || undefined,
+          actionLabel: 'Double down',
+        });
+      }
+    }
+
+    // 3. MEDIUM: High success rate cities that haven't been fully explored
     const highPerformers = cities
       .filter(c => {
         const cs = cityStats[c.name];
         if (!cs || cs.runs < 1) return false;
         const rate = cs.candidates > 0 ? cs.leads / cs.candidates : 0;
-        return rate > 0.15 && cs.runs < 3; // High success but few runs
+        return rate > 0.15 && cs.runs < 3;
       })
       .sort((a, b) => {
         const aRate = cityStats[a.name].candidates > 0 ? cityStats[a.name].leads / cityStats[a.name].candidates : 0;
         const bRate = cityStats[b.name].candidates > 0 ? cityStats[b.name].leads / cityStats[b.name].candidates : 0;
         return bRate - aRate;
-      });
-
-    // Find cities with high SMS reply rates
-    const highReplyCities = campaignPerf ? cities
-      .filter(c => {
-        const sent = campaignPerf.citySent[c.name] || 0;
-        const replies = campaignPerf.cityReplies[c.name] || 0;
-        return sent >= 3 && (replies / sent) > 0.05;
       })
-      .sort((a, b) => {
-        const aRate = (campaignPerf.cityReplies[a.name] || 0) / (campaignPerf.citySent[a.name] || 1);
-        const bRate = (campaignPerf.cityReplies[b.name] || 0) / (campaignPerf.citySent[b.name] || 1);
-        return bRate - aRate;
-      }) : [];
-    
-    // Recommend large unsearched cities
-    const largeCities = unsearched.filter(c => c.type === 'METRO' || c.type === 'CITY');
-    if (largeCities.length > 0) {
-      recommendations.push({
-        country,
-        cities: largeCities.slice(0, 8),
-        reason: `${largeCities.length} major cities not yet searched`,
-        priority: 'high',
-        suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
-      });
-    }
-    
-    // Recommend unsearched towns
-    const towns = unsearched.filter(c => c.type === 'TOWN');
-    if (towns.length > 0) {
-      recommendations.push({
-        country,
-        cities: towns.slice(0, 10),
-        reason: `${towns.length} towns not yet covered`,
-        priority: unsearched.length === towns.length ? 'medium' : 'low',
-      });
-    }
-    
-    // Recommend re-running high performers
+      .slice(0, 4);
+
     if (highPerformers.length > 0) {
+      const topCity = highPerformers[0];
+      const topRate = Math.round((cityStats[topCity.name].leads / (cityStats[topCity.name].candidates || 1)) * 100);
       recommendations.push({
         country,
-        cities: highPerformers.slice(0, 5),
-        reason: `High success rate cities worth re-searching`,
+        cities: highPerformers,
+        reason: `${topRate}% hit rate in ${topCity.name} — room for more runs`,
         priority: 'medium',
         suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
-      });
-    }
-
-    // Recommend cities with high reply rates for more finder runs
-    if (highReplyCities.length > 0) {
-      recommendations.push({
-        country,
-        cities: highReplyCities.slice(0, 5),
-        reason: `High SMS reply rate — find more leads here`,
-        priority: 'high',
-        suggestedNiches: topNiches.length > 0 ? topNiches : undefined,
+        estimatedLeadsPerCity: Math.round(cityStats[topCity.name].leads / cityStats[topCity.name].runs),
+        actionLabel: 'Re-search',
       });
     }
   }
-  
-  return recommendations.sort((a, b) => {
-    const prio = { high: 0, medium: 1, low: 2 };
-    return prio[a.priority] - prio[b.priority];
-  });
+
+  return recommendations
+    .sort((a, b) => {
+      const prio = { high: 0, medium: 1, low: 2 };
+      return prio[a.priority] - prio[b.priority];
+    })
+    .slice(0, 6); // max 2 per country
 }
