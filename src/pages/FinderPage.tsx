@@ -423,27 +423,42 @@ export default function FinderPage() {
           {/* Recommended Search */}
           {recommendations.length > 0 && (
             <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={11} className="text-amber-400" /> Recommended
+              </label>
               {recommendations.map((rec, i) => (
                 <button
                   key={i}
                   onClick={() => applyRecommendation(rec)}
-                  className="w-full p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-all text-left flex items-center gap-3"
+                  className="w-full p-3 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-left group"
                 >
-                  <Sparkles size={16} className="text-amber-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-foreground">{rec.reason}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                      {rec.cities.slice(0, 5).map(c => c.name).join(', ')}{rec.cities.length > 5 ? ` +${rec.cities.length - 5} more` : ''}
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${rec.priority === 'high' ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                      {rec.priority === 'high' ? <Zap size={14} /> : <Target size={14} />}
                     </div>
-                    {rec.suggestedNiches && rec.suggestedNiches.length > 0 && (
-                      <div className="text-[10px] text-primary mt-0.5">
-                        🎯 Top niches: {rec.suggestedNiches.slice(0, 3).join(', ')}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground leading-tight">{rec.reason}</div>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {rec.cities.slice(0, 5).map(c => (
+                          <span key={c.name} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{c.name}</span>
+                        ))}
+                        {rec.cities.length > 5 && <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">+{rec.cities.length - 5}</span>}
                       </div>
-                    )}
+                      {rec.suggestedNiches && rec.suggestedNiches.length > 0 && (
+                        <div className="text-[10px] text-primary/80 mt-1">
+                          Will auto-fill: {rec.suggestedNiches.slice(0, 3).join(', ')}
+                        </div>
+                      )}
+                      {rec.estimatedLeadsPerCity && rec.estimatedLeadsPerCity > 0 && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          ~{rec.estimatedLeadsPerCity} leads/city avg
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1">
+                      {rec.actionLabel || 'Apply'} →
+                    </span>
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${rec.priority === 'high' ? 'bg-green-500/20 text-green-400' : rec.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'}`}>
-                    {rec.priority}
-                  </span>
                 </button>
               ))}
             </div>
