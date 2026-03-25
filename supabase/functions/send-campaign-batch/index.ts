@@ -1,47 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { detectCountry, isSmsEligible, normalizeToE164 } from "../_shared/campaign-batch-utils.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
-
-function detectCountry(address?: string | null, phone?: string | null): string {
-  const addr = (address || '').toLowerCase();
-  if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) return 'NO';
-  if (addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) return 'DK';
-  if (addr.includes('sverige') || addr.includes('sweden') || addr.includes(', se')) return 'SE';
-  if (phone) {
-    const clean = phone.replace(/\s|-/g, '');
-    if (clean.startsWith('+47') || (clean.startsWith('47') && clean.length >= 10)) return 'NO';
-    if (clean.startsWith('+45') || (clean.startsWith('45') && clean.length >= 10)) return 'DK';
-    if (clean.startsWith('+46') || (clean.startsWith('46') && clean.length >= 10)) return 'SE';
-  }
-  return 'SE';
-}
-
-function isSmsEligible(phone: string, address?: string | null): boolean {
-  const cleaned = phone.replace(/\s|-/g, '');
-  const country = detectCountry(address, phone);
-  if (country === 'NO' || country === 'DK') return true;
-  return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
-}
-
-function normalizeToE164(phone: string, address?: string | null): string {
-  let e164 = phone.replace(/\s|-/g, '');
-  const country = detectCountry(address, phone);
-  if (country === 'NO') {
-    if (/^\d{8}$/.test(e164)) e164 = '+47' + e164;
-    else if (/^47\d{8}$/.test(e164)) e164 = '+' + e164;
-  } else if (country === 'DK') {
-    if (/^\d{8}$/.test(e164)) e164 = '+45' + e164;
-    else if (/^45\d{8}$/.test(e164)) e164 = '+' + e164;
-  } else {
-    if (e164.startsWith('07')) e164 = '+46' + e164.slice(1);
-    else if (e164.startsWith('467')) e164 = '+' + e164;
-  }
-  if (!e164.startsWith('+')) e164 = '+' + e164;
-  return e164;
-}
 
 async function sendTwilioSms(
   accountSid: string, authToken: string, from: string, to: string, body: string, statusCallback: string,
@@ -169,7 +132,7 @@ Deno.serve(async (req) => {
 
     const scanLog: string[] = [];
     const stats = {
-      attempted: 0, sent: 0, delivered: 0, failed: 0,
+      scanned: 0, matched_country: 0, attempted: 0, sent: 0, delivered: 0, failed: 0,
       skipped_no_phone: 0, skipped_opt_out: 0, skipped_cooldown: 0, skipped_duplicate: 0,
       skipped_landline: 0, skipped_idempotency: 0,
       provider: useTwilio ? 'twilio' : 'mock',
@@ -213,13 +176,14 @@ Deno.serve(async (req) => {
         return targetCountries.includes(country);
       });
 
-      scanLog.push(`Page ${page + 1}: ${leads.length} loaded, ${filteredLeads.length} match country filter`);
+      stats.matched_country += filteredLeads.length;
+      scanLog.push(`Page ${page + 1}: ${leads.length} loaded, ${filteredLeads.length} matched country filter`);
       offset += leads.length;
 
       for (const lead of filteredLeads) {
         if (stats.sent >= effectiveLimit) break;
 
-        stats.attempted++;
+        stats.scanned++;
 
         const toNumber = lead.phone_e164 || lead.phone;
         if (!toNumber) { stats.skipped_no_phone++; continue; }
@@ -258,6 +222,7 @@ Deno.serve(async (req) => {
         });
 
         const e164 = normalizeToE164(toNumber, lead.address);
+        stats.attempted++;
 
         if (useTwilio) {
           const result = await sendTwilioSms(twilioSid!, twilioToken!, twilioFrom!, e164, body, statusCallbackUrl);
@@ -319,7 +284,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    scanLog.push(`Final: sent=${stats.sent}, failed=${stats.failed}, skipped_landline=${stats.skipped_landline}, skipped_idempotency=${stats.skipped_idempotency}`);
+    scanLog.push(`Final: scanned=${stats.scanned}, attempts=${stats.attempted}, sent=${stats.sent}, failed=${stats.failed}, skipped_landline=${stats.skipped_landline}, skipped_idempotency=${stats.skipped_idempotency}`);
 
     // Update run stats
     await dbClient.from('campaign_runs').update({
