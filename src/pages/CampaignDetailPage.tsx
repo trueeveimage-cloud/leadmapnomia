@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, updateCampaign, createCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
+import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, countSendableLeads, updateCampaign, createCampaign, Campaign, CampaignRun } from '@/lib/campaigns';
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -71,6 +71,7 @@ export default function CampaignDetailPage() {
   const [runs, setRuns] = useState<CampaignRun[]>([]);
   const [messages, setMessages] = useState<MessageLog[]>([]);
   const [eligible, setEligible] = useState<number | null>(null);
+  const [sendableNow, setSendableNow] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -124,6 +125,14 @@ export default function CampaignDetailPage() {
     load().finally(() => setLoading(false));
   }, [load]);
 
+  useEffect(() => {
+    if (!campaign) return;
+
+    countSendableLeads(campaign.audience_filter as any, selectedCountries)
+      .then(setSendableNow)
+      .catch(() => setSendableNow(null));
+  }, [campaign, selectedCountries]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -156,6 +165,21 @@ export default function CampaignDetailPage() {
       toast.error('Select at least one country');
       return;
     }
+
+    const requestedBatchSize = customBatchSize && Number(customBatchSize) > 0
+      ? Number(customBatchSize)
+      : campaign.daily_cap;
+
+    if (sendableNow === 0) {
+      toast.error(`No sendable leads available for ${selectedCountries.map(countryLabel).join(', ')}`);
+      return;
+    }
+
+    if (sendableNow !== null && requestedBatchSize > sendableNow) {
+      toast.error(`Only ${sendableNow} sendable leads available right now`);
+      return;
+    }
+
     setSending(true);
     try {
       const body: any = { campaignId: id, countries: selectedCountries };
@@ -168,7 +192,7 @@ export default function CampaignDetailPage() {
       if (data.error) {
         toast.error(data.error);
       } else {
-        toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.failed ?? 0} failed, ${data.stats?.skipped_landline ?? 0} landlines, ${data.stats?.skipped_idempotency ?? 0} duplicates skipped)`);
+        toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.scanned ?? data.stats?.attempted ?? 0} scanned, ${data.stats?.skipped_landline ?? 0} landlines skipped)`);
       }
       setCustomBatchSize('');
       await load();
@@ -289,6 +313,8 @@ export default function CampaignDetailPage() {
   const deliveredCost = computeCost(deliveredMsgs);
   const failedCost = computeCost(failedMsgs);
   const totalCost = computeCost(messages);
+  const requestedBatchSize = customBatchSize && Number(customBatchSize) > 0 ? Number(customBatchSize) : (campaign?.daily_cap ?? 0);
+  const requestExceedsAvailability = sendableNow !== null && requestedBatchSize > sendableNow;
 
   const totalTarget = campaign?.batch_cap ?? 0;
   const dailyCap = campaign?.daily_cap ?? 100;
@@ -319,6 +345,7 @@ export default function CampaignDetailPage() {
             <p className="text-xs text-muted-foreground mt-0.5">
               Status: <span className="text-foreground font-medium">{campaign.status}</span>
               {eligible !== null && <> · {eligible} leads eligible</>}
+              {sendableNow !== null && <> · {sendableNow} sendable now</>}
             </p>
           </div>
           <div className="flex gap-2">
@@ -381,8 +408,13 @@ export default function CampaignDetailPage() {
                 placeholder={String(campaign.daily_cap)}
                 className="h-8 text-sm"
               />
+              {sendableNow !== null && (
+                <p className={`mt-1 text-[11px] ${requestExceedsAvailability ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  Available now for {selectedCountries.map(countryLabel).join(', ')}: {sendableNow}
+                </p>
+              )}
             </div>
-            <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0} className="gap-1.5">
+            <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0 || requestExceedsAvailability || sendableNow === 0} className="gap-1.5">
               <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
@@ -566,6 +598,7 @@ export default function CampaignDetailPage() {
             <div className="space-y-2">
               {runs.slice(0, 10).map(r => {
                 const s = r.stats as any;
+                const scannedCount = s?.scanned ?? s?.attempted;
                 return (
                   <div key={r.id} className="bg-card border border-border rounded-lg p-3 text-xs">
                     <div className="flex justify-between mb-1">
@@ -580,10 +613,11 @@ export default function CampaignDetailPage() {
                       </div>
                     </div>
                     <div className="flex gap-3 text-muted-foreground flex-wrap">
-                      {s?.attempted !== undefined && <span>attempted: <span className="text-foreground">{s.attempted}</span></span>}
+                      {scannedCount !== undefined && <span>scanned: <span className="text-foreground">{scannedCount}</span></span>}
+                      {s?.scanned !== undefined && <span>send attempts: <span className="text-foreground">{s.attempted}</span></span>}
                       {s?.sent !== undefined && <span>sent: <span className="text-foreground font-semibold">{s.sent}</span></span>}
                       {s?.failed !== undefined && s.failed > 0 && <span className="text-destructive">failed: {s.failed}</span>}
-                      {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines: {s.skipped_landline}</span>}
+                      {s?.skipped_landline !== undefined && s.skipped_landline > 0 && <span>landlines skipped: {s.skipped_landline}</span>}
                       {s?.skipped_idempotency !== undefined && s.skipped_idempotency > 0 && (
                         <span className="text-amber-500">dupes skipped: {s.skipped_idempotency}</span>
                       )}
