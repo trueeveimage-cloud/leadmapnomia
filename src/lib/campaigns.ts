@@ -1,5 +1,22 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Country } from '@/lib/cities';
+import { detectLeadCountry } from '@/lib/countryRouting';
+
+type LeadEligibilityRow = {
+  id: string;
+  phone: string | null;
+  address: string | null;
+  section: string;
+  rating: number | null;
+  reviews_count: number | null;
+  website: string | null;
+  outreach_opt_out: boolean;
+  has_replied: boolean;
+  last_outbound_at: string | null;
+  status: string;
+};
+
+const EXCLUDED_STATUSES = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
 
 export interface AudienceFilter {
   sections?: string[];
@@ -94,8 +111,6 @@ export interface EligibilityBreakdown {
   lowReviews: number;
 }
 
-import { detectLeadCountry } from '@/lib/countryRouting';
-
 function isMobileNumber(phone: string, address?: string | null): boolean {
   const cleaned = phone.replace(/\s|-/g, '');
   const country = detectLeadCountry(address, phone);
@@ -113,16 +128,11 @@ function isMobileNumber(phone: string, address?: string | null): boolean {
   return /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/.test(cleaned);
 }
 
-export async function countEligibleLeads(filter: AudienceFilter, cooldownDays: number): Promise<number> {
-  const breakdown = await countEligibleLeadsDetailed(filter, cooldownDays);
-  return breakdown.eligible;
-}
-
-export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldownDays: number): Promise<EligibilityBreakdown> {
-  // Fetch all leads with minimal fields
-  const allLeads: any[] = [];
+async function fetchLeadEligibilityRows(): Promise<LeadEligibilityRow[]> {
+  const allLeads: LeadEligibilityRow[] = [];
   let from = 0;
   const pageSize = 1000;
+
   while (true) {
     const { data, error } = await supabase
       .from('leads')
@@ -130,12 +140,89 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
       .range(from, from + pageSize - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
-    allLeads.push(...data);
+    allLeads.push(...(data as LeadEligibilityRow[]));
     if (data.length < pageSize) break;
     from += pageSize;
   }
 
-  const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
+  return allLeads;
+}
+
+async function fetchPreviouslyMessagedLeadIds(): Promise<Set<string>> {
+  const leadIds = new Set<string>();
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('message_logs')
+      .select('lead_id')
+      .eq('direction', 'outbound')
+      .not('campaign_run_id', 'is', null)
+      .not('status', 'eq', 'failed')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      if (row.lead_id) leadIds.add(row.lead_id);
+    }
+
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return leadIds;
+}
+
+function getLeadIneligibilityReason(
+  lead: LeadEligibilityRow,
+  filter: AudienceFilter,
+  countries?: Country[],
+): keyof Omit<EligibilityBreakdown, 'total' | 'eligible'> | null {
+  const activeCountries = countries?.length ? countries : filter.countries;
+
+  if (activeCountries?.length) {
+    const leadCountry = detectLeadCountry(lead.address, lead.phone);
+    if (!activeCountries.includes(leadCountry)) return 'wrongSection';
+  }
+  if (!lead.phone) return 'noPhone';
+  if (!isMobileNumber(lead.phone, lead.address)) return 'landline';
+  if (filter.excludeOptOut !== false && lead.outreach_opt_out) return 'optedOut';
+  if (filter.excludeReplied !== false && lead.has_replied) return 'replied';
+  if (lead.last_outbound_at) return 'cooldown';
+  if (EXCLUDED_STATUSES.includes(lead.status)) return 'cooldown';
+  if (filter.sections?.length && !filter.sections.includes(lead.section)) return 'wrongSection';
+  if (filter.hasWebsite === false && lead.website) return 'hasWebsite';
+  if (filter.minRating && (lead.rating == null || lead.rating < filter.minRating)) return 'lowRating';
+  if (filter.minReviews && (lead.reviews_count == null || lead.reviews_count < filter.minReviews)) return 'lowReviews';
+
+  return null;
+}
+
+export async function countEligibleLeads(filter: AudienceFilter, cooldownDays: number): Promise<number> {
+  const breakdown = await countEligibleLeadsDetailed(filter, cooldownDays);
+  return breakdown.eligible;
+}
+
+export async function countSendableLeads(filter: AudienceFilter, countries?: Country[]): Promise<number> {
+  const [allLeads, previouslyMessagedLeadIds] = await Promise.all([
+    fetchLeadEligibilityRows(),
+    fetchPreviouslyMessagedLeadIds(),
+  ]);
+
+  let sendable = 0;
+  for (const lead of allLeads) {
+    if (getLeadIneligibilityReason(lead, filter, countries)) continue;
+    if (previouslyMessagedLeadIds.has(lead.id)) continue;
+    sendable++;
+  }
+
+  return sendable;
+}
+
+export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldownDays: number): Promise<EligibilityBreakdown> {
+  const allLeads = await fetchLeadEligibilityRows();
 
   const breakdown: EligibilityBreakdown = {
     total: allLeads.length,
@@ -152,24 +239,11 @@ export async function countEligibleLeadsDetailed(filter: AudienceFilter, cooldow
   };
 
   for (const lead of allLeads) {
-    // Country filter
-    if (filter.countries?.length) {
-      const leadCountry = detectLeadCountry(lead.address, lead.phone);
-      if (!filter.countries.includes(leadCountry)) { breakdown.wrongSection++; continue; }
+    const reason = getLeadIneligibilityReason(lead, filter);
+    if (reason) {
+      breakdown[reason]++;
+      continue;
     }
-    // Check each exclusion reason (a lead can only be counted in first matching reason)
-    if (!lead.phone) { breakdown.noPhone++; continue; }
-    if (!isMobileNumber(lead.phone, lead.address)) { breakdown.landline++; continue; }
-    if (filter.excludeOptOut !== false && lead.outreach_opt_out) { breakdown.optedOut++; continue; }
-    if (filter.excludeReplied !== false && lead.has_replied) { breakdown.replied++; continue; }
-    // Exclude already contacted leads (last_outbound_at is set = already messaged)
-    if (lead.last_outbound_at) { breakdown.cooldown++; continue; }
-    // Exclude leads with engaged/contacted statuses
-    if (excludedStatuses.includes(lead.status)) { breakdown.cooldown++; continue; }
-    if (filter.sections?.length && !filter.sections.includes(lead.section)) { breakdown.wrongSection++; continue; }
-    if (filter.hasWebsite === false && lead.website) { breakdown.hasWebsite++; continue; }
-    if (filter.minRating && (lead.rating == null || lead.rating < filter.minRating)) { breakdown.lowRating++; continue; }
-    if (filter.minReviews && (lead.reviews_count == null || lead.reviews_count < filter.minReviews)) { breakdown.lowReviews++; continue; }
     breakdown.eligible++;
   }
 
