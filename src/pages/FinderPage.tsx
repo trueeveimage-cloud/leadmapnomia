@@ -896,6 +896,18 @@ export default function FinderPage() {
                               {totalLeads > 0 && ` · ${totalLeads} leads`}
                             </div>
                           </div>
+                          {allDone && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0 h-7 w-7"
+                              title="Re-run this batch"
+                              disabled={running}
+                              onClick={(e) => handleRedoBatch(bRuns, e)}
+                            >
+                              <RotateCcw size={13} />
+                            </Button>
+                          )}
                         </div>
                       </Link>
                     );
