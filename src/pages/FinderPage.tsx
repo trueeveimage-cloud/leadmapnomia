@@ -561,10 +561,22 @@ export default function FinderPage() {
 
           {/* City Selector — Multi */}
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
-              <MapPin size={13} /> Cities / Areas
-              <InfoTip text="Select one or more cities. Settings will auto-adjust based on city size." />
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <MapPin size={13} /> Cities / Areas
+                <InfoTip text="Select one or more cities. Settings will auto-adjust based on city size." />
+              </label>
+              <button
+                onClick={() => {
+                  const all = getCitiesByCountry(country);
+                  setSelectedCities(all);
+                  setShowCityDropdown(false);
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              >
+                Select all {COUNTRY_LABELS[country].split(' ')[1]} ({getCitiesByCountry(country).length})
+              </button>
+            </div>
 
             {selectedCities.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
