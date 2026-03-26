@@ -935,20 +935,34 @@ export default function FinderPage() {
                               {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
                             </div>
                           </div>
-                          {isAutoAdding && (
-                            <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
-                              <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
-                            </span>
-                          )}
-                          {autoAddDone && (
-                            <span className="text-[10px] flex items-center gap-1 shrink-0">
-                              {progress.added > 0 ? (
-                                <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
-                              ) : (
-                                <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
-                              )}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isAutoAdding && (
+                              <span className="text-[10px] text-primary flex items-center gap-1">
+                                <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
+                              </span>
+                            )}
+                            {autoAddDone && (
+                              <span className="text-[10px] flex items-center gap-1">
+                                {progress.added > 0 ? (
+                                  <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
+                                ) : (
+                                  <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
+                                )}
+                              </span>
+                            )}
+                            {(run.status === 'done' || run.status === 'stopped') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                title="Re-run this search"
+                                disabled={running}
+                                onClick={(e) => handleRedoRun(run, e)}
+                              >
+                                <RotateCcw size={13} />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {isAutoAdding && (
                           <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
