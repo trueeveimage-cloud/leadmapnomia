@@ -1,6 +1,6 @@
 import { AreaType, Density, CityProfile } from './cities';
 
-export type PresetKey = 'high_success' | 'balanced' | 'volume';
+export type PresetKey = 'high_success' | 'balanced' | 'volume' | 'cleanse';
 
 export interface PresetConfig {
   key: PresetKey;
@@ -59,6 +59,16 @@ const PRESET_RANGES: Record<PresetKey, PresetRanges> = {
     maxReviews: 50,
     requirePhone: false,
   },
+  cleanse: {
+    radius: { METRO: [20000, 25000], CITY: [12000, 18000], TOWN: [8000, 12000] },
+    maxDetails: { METRO: [300, 500], CITY: [200, 350], TOWN: [150, 250] },
+    maxCandidates: { METRO: [1500, 2500], CITY: [1000, 1800], TOWN: [600, 1200] },
+    maxPages: { METRO: 2, CITY: 2, TOWN: 2 },
+    minRating: 3.5,
+    minReviews: { METRO: [0, 0], CITY: [0, 0], TOWN: [0, 0] },
+    maxReviews: 100,
+    requirePhone: false,
+  },
 };
 
 /** Pick value within range based on density */
@@ -87,6 +97,7 @@ export function computePreset(key: PresetKey, profile: CityProfile): PresetConfi
     high_success: { label: 'High Success', description: 'Call-ready leads with phone numbers, high ratings', icon: '🎯' },
     balanced: { label: 'Balanced', description: 'Daily outreach mix — good reach, good quality', icon: '⚖️' },
     volume: { label: 'Volume', description: 'Big list — maximum coverage, broader filters', icon: '📊' },
+    cleanse: { label: 'Cleanse 🇸🇪', description: 'Full country sweep — every niche, every city, no mercy', icon: '🧹' },
   };
 
   return {
@@ -104,7 +115,7 @@ export function computePreset(key: PresetKey, profile: CityProfile): PresetConfi
 }
 
 export function computeAllPresets(profile: CityProfile): PresetConfig[] {
-  return (['high_success', 'balanced', 'volume'] as PresetKey[]).map(k => computePreset(k, profile));
+  return (['high_success', 'balanced', 'volume', 'cleanse'] as PresetKey[]).map(k => computePreset(k, profile));
 }
 
 /** Adjust detail lookups based on leads target */
