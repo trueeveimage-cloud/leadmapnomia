@@ -699,7 +699,12 @@ export default function FinderPage() {
                   return (
                     <button
                       key={preset.key}
-                      onClick={() => setActivePreset(preset.key)}
+                      onClick={() => {
+                        setActivePreset(preset.key);
+                        if (preset.key === 'cleanse') {
+                          setKeywords(COUNTRY_DEFAULT_KEYWORDS[country]);
+                        }
+                      }}
                       className={`p-3 rounded-lg border text-left transition-all ${
                         isActive
                           ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
