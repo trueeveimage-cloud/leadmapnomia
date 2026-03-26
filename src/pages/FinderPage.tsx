@@ -345,6 +345,101 @@ export default function FinderPage() {
     return getRecommendedSearches(runs, cityStats, campaignPerf).filter(r => r.country === country);
   }, [runs, cityStats, country, campaignPerf]);
 
+  const handleRedoRun = async (run: FinderRun, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const city = findCity(run.city);
+    if (!city) { toast.error(`City "${run.city}" not found`); return; }
+
+    // Set country if different
+    if (city.country !== country) {
+      setCountry(city.country);
+    }
+
+    setRunning(true);
+    try {
+      const newRun = await createFinderRun({
+        city: run.city,
+        mode: run.mode,
+        keywords: run.keywords,
+        radius: run.radius,
+        maxPages: run.max_pages,
+        maxCandidates: run.max_candidates,
+        maxDetails: run.max_details,
+        minRating: run.min_rating,
+        minReviews: run.min_reviews,
+        requirePhone: run.require_phone,
+      });
+
+      runFinderSearch(newRun.id, {
+        city: run.city,
+        keywords: run.keywords,
+        radius: run.radius,
+        maxPages: run.max_pages,
+        maxCandidates: run.max_candidates,
+        maxDetails: run.max_details,
+        minRating: run.min_rating ?? undefined,
+        minReviews: run.min_reviews ?? undefined,
+        requirePhone: run.require_phone,
+      }).catch(err => console.error('Redo search error:', err));
+
+      toast.success(`Re-running: ${run.city}`);
+      navigate(`/finder/runs/${newRun.id}`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleRedoBatch = async (batchRuns: FinderRun[], e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRunning(true);
+    try {
+      const batchId = crypto.randomUUID();
+      const batchLabel = batchRuns.map(r => r.city).join(', ');
+      const createdRuns: { id: string; city: string }[] = [];
+
+      for (const run of batchRuns) {
+        const newRun = await createFinderRun({
+          city: run.city,
+          mode: run.mode,
+          keywords: run.keywords,
+          radius: run.radius,
+          maxPages: run.max_pages,
+          maxCandidates: run.max_candidates,
+          maxDetails: run.max_details,
+          minRating: run.min_rating,
+          minReviews: run.min_reviews,
+          requirePhone: run.require_phone,
+          batchId,
+          batchLabel,
+        });
+        createdRuns.push({ id: newRun.id, city: run.city });
+
+        runFinderSearch(newRun.id, {
+          city: run.city,
+          keywords: run.keywords,
+          radius: run.radius,
+          maxPages: run.max_pages,
+          maxCandidates: run.max_candidates,
+          maxDetails: run.max_details,
+          minRating: run.min_rating ?? undefined,
+          minReviews: run.min_reviews ?? undefined,
+          requirePhone: run.require_phone,
+        }).catch(err => console.error(`Redo search error (${run.city}):`, err));
+      }
+
+      toast.success(`Re-running ${createdRuns.length} cities!`);
+      navigate(`/finder/batch/${batchId}`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const applyRecommendation = (rec: SearchRecommendation) => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
     const newCities = rec.cities.filter(c => !selectedNames.has(c.name));
