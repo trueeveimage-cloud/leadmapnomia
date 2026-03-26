@@ -16,7 +16,7 @@ import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabas
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map, Globe, Sparkles } from 'lucide-react';
+import { Search, Loader2, Clock, CheckCircle, XCircle, Square, History, ChevronDown, Settings2, MapPin, Target, Zap, X, UserPlus, Map, Globe, Sparkles, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import CityPickerMap from '@/components/CityPickerMap';
 
@@ -344,6 +344,101 @@ export default function FinderPage() {
   const recommendations = useMemo(() => {
     return getRecommendedSearches(runs, cityStats, campaignPerf).filter(r => r.country === country);
   }, [runs, cityStats, country, campaignPerf]);
+
+  const handleRedoRun = async (run: FinderRun, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const city = findCity(run.city);
+    if (!city) { toast.error(`City "${run.city}" not found`); return; }
+
+    // Set country if different
+    if (city.country !== country) {
+      setCountry(city.country);
+    }
+
+    setRunning(true);
+    try {
+      const newRun = await createFinderRun({
+        city: run.city,
+        mode: run.mode,
+        keywords: run.keywords,
+        radius: run.radius,
+        maxPages: run.max_pages,
+        maxCandidates: run.max_candidates,
+        maxDetails: run.max_details,
+        minRating: run.min_rating,
+        minReviews: run.min_reviews,
+        requirePhone: run.require_phone,
+      });
+
+      runFinderSearch(newRun.id, {
+        city: run.city,
+        keywords: run.keywords,
+        radius: run.radius,
+        maxPages: run.max_pages,
+        maxCandidates: run.max_candidates,
+        maxDetails: run.max_details,
+        minRating: run.min_rating ?? undefined,
+        minReviews: run.min_reviews ?? undefined,
+        requirePhone: run.require_phone,
+      }).catch(err => console.error('Redo search error:', err));
+
+      toast.success(`Re-running: ${run.city}`);
+      navigate(`/finder/runs/${newRun.id}`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleRedoBatch = async (batchRuns: FinderRun[], e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRunning(true);
+    try {
+      const batchId = crypto.randomUUID();
+      const batchLabel = batchRuns.map(r => r.city).join(', ');
+      const createdRuns: { id: string; city: string }[] = [];
+
+      for (const run of batchRuns) {
+        const newRun = await createFinderRun({
+          city: run.city,
+          mode: run.mode,
+          keywords: run.keywords,
+          radius: run.radius,
+          maxPages: run.max_pages,
+          maxCandidates: run.max_candidates,
+          maxDetails: run.max_details,
+          minRating: run.min_rating,
+          minReviews: run.min_reviews,
+          requirePhone: run.require_phone,
+          batchId,
+          batchLabel,
+        });
+        createdRuns.push({ id: newRun.id, city: run.city });
+
+        runFinderSearch(newRun.id, {
+          city: run.city,
+          keywords: run.keywords,
+          radius: run.radius,
+          maxPages: run.max_pages,
+          maxCandidates: run.max_candidates,
+          maxDetails: run.max_details,
+          minRating: run.min_rating ?? undefined,
+          minReviews: run.min_reviews ?? undefined,
+          requirePhone: run.require_phone,
+        }).catch(err => console.error(`Redo search error (${run.city}):`, err));
+      }
+
+      toast.success(`Re-running ${createdRuns.length} cities!`);
+      navigate(`/finder/batch/${batchId}`);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const applyRecommendation = (rec: SearchRecommendation) => {
     const selectedNames = new Set(selectedCities.map(c => c.name));
@@ -801,6 +896,18 @@ export default function FinderPage() {
                               {totalLeads > 0 && ` · ${totalLeads} leads`}
                             </div>
                           </div>
+                          {allDone && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0 h-7 w-7"
+                              title="Re-run this batch"
+                              disabled={running}
+                              onClick={(e) => handleRedoBatch(bRuns, e)}
+                            >
+                              <RotateCcw size={13} />
+                            </Button>
+                          )}
                         </div>
                       </Link>
                     );
@@ -828,20 +935,34 @@ export default function FinderPage() {
                               {(run.stats as any)?.noWebsiteWithPhone != null && ` · ${(run.stats as any).noWebsiteWithPhone} leads`}
                             </div>
                           </div>
-                          {isAutoAdding && (
-                            <span className="text-[10px] text-primary flex items-center gap-1 shrink-0">
-                              <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
-                            </span>
-                          )}
-                          {autoAddDone && (
-                            <span className="text-[10px] flex items-center gap-1 shrink-0">
-                              {progress.added > 0 ? (
-                                <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
-                              ) : (
-                                <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
-                              )}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isAutoAdding && (
+                              <span className="text-[10px] text-primary flex items-center gap-1">
+                                <Loader2 size={10} className="animate-spin" /> Adding {progress.added}/{progress.total}
+                              </span>
+                            )}
+                            {autoAddDone && (
+                              <span className="text-[10px] flex items-center gap-1">
+                                {progress.added > 0 ? (
+                                  <span className="text-green flex items-center gap-1"><UserPlus size={10} /> {progress.added} added</span>
+                                ) : (
+                                  <span className="text-muted-foreground">{progress.duplicated > 0 ? `${progress.duplicated} already in CRM` : '0 new'}</span>
+                                )}
+                              </span>
+                            )}
+                            {(run.status === 'done' || run.status === 'stopped') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                title="Re-run this search"
+                                disabled={running}
+                                onClick={(e) => handleRedoRun(run, e)}
+                              >
+                                <RotateCcw size={13} />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {isAutoAdding && (
                           <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
