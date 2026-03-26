@@ -59,6 +59,16 @@ const PRESET_RANGES: Record<PresetKey, PresetRanges> = {
     maxReviews: 50,
     requirePhone: false,
   },
+  cleanse: {
+    radius: { METRO: [20000, 25000], CITY: [12000, 18000], TOWN: [8000, 12000] },
+    maxDetails: { METRO: [300, 500], CITY: [200, 350], TOWN: [150, 250] },
+    maxCandidates: { METRO: [1500, 2500], CITY: [1000, 1800], TOWN: [600, 1200] },
+    maxPages: { METRO: 2, CITY: 2, TOWN: 2 },
+    minRating: 3.5,
+    minReviews: { METRO: [0, 0], CITY: [0, 0], TOWN: [0, 0] },
+    maxReviews: 100,
+    requirePhone: false,
+  },
 };
 
 /** Pick value within range based on density */
