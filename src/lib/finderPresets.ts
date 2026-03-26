@@ -1,6 +1,6 @@
 import { AreaType, Density, CityProfile } from './cities';
 
-export type PresetKey = 'high_success' | 'balanced' | 'volume';
+export type PresetKey = 'high_success' | 'balanced' | 'volume' | 'cleanse';
 
 export interface PresetConfig {
   key: PresetKey;
