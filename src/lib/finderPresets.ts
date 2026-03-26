@@ -97,6 +97,7 @@ export function computePreset(key: PresetKey, profile: CityProfile): PresetConfi
     high_success: { label: 'High Success', description: 'Call-ready leads with phone numbers, high ratings', icon: '🎯' },
     balanced: { label: 'Balanced', description: 'Daily outreach mix — good reach, good quality', icon: '⚖️' },
     volume: { label: 'Volume', description: 'Big list — maximum coverage, broader filters', icon: '📊' },
+    cleanse: { label: 'Cleanse 🇸🇪', description: 'Full country sweep — every niche, every city, no mercy', icon: '🧹' },
   };
 
   return {
