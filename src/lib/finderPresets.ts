@@ -115,7 +115,7 @@ export function computePreset(key: PresetKey, profile: CityProfile): PresetConfi
 }
 
 export function computeAllPresets(profile: CityProfile): PresetConfig[] {
-  return (['high_success', 'balanced', 'volume'] as PresetKey[]).map(k => computePreset(k, profile));
+  return (['high_success', 'balanced', 'volume', 'cleanse'] as PresetKey[]).map(k => computePreset(k, profile));
 }
 
 /** Adjust detail lookups based on leads target */
