@@ -27,16 +27,67 @@ export const COUNTRY_CENTER: Record<Country, { lat: number; lng: number; zoom: n
 };
 
 export const COUNTRY_DEFAULT_KEYWORDS: Record<Country, string> = {
-  SE: `frisör
-bilverkstad
-pizzeria
-tandläkare
-restaurang
-cafe
+  SE: `bilverkstad
+bilvård
+biltvätt
+bilrekond
+däckverkstad
+lackering
+bilglas
+mc verkstad
 elektriker
 rörmokare
+vvs
+snickare
+byggfirma
+målare
+takläggare
+golvläggare
+glasmästare
+plåtslagare
+ventilation
+låssmed
+kakelugn
+markarbete
+isolering
+solceller
+värmepump
+frisör
+barberare
+nagelsalong
+skönhetssalong
+hudvård
+fransförlängning
+fotvård
+massage
+kiropraktor
+naprapat
+tandläkare
+fysioterapeut
 städfirma
-blomsterhandel`,
+flyttfirma
+fönsterputs
+trädgårdsservice
+hemstädning
+sotare
+spolbil
+hundtrimmare
+djurklinik
+veterinär
+hundpensionat
+fotograf
+tatuerare
+cykelverkstad
+skomakare
+skräddare
+begravningsbyrå
+redovisningsbyrå
+blomsterhandel
+pizzeria
+restaurang
+bageri
+konditori
+café`,
   NO: `frisør
 bilverksted
 pizzeria
