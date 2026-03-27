@@ -29,7 +29,7 @@ export default function FinderBatchPage() {
   const [scrapingEmails, setScrapingEmails] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<{ done: number; total: number; found: number } | null>(null);
   const [expandedCities, setExpandedCities] = useState(true);
-  const autoAddedRef = React.useRef(false);
+  
 
   const load = useCallback(async () => {
     if (!batchId) return;
@@ -53,48 +53,27 @@ export default function FinderBatchPage() {
     return () => clearInterval(interval);
   }, [load, runs.length]);
 
-  // Auto-add when all runs done
+  // Check which candidates already exist in CRM (by place_id)
   useEffect(() => {
-    if (runs.length === 0) return;
-    const allDone = runs.every(r => r.status === 'done' || r.status === 'stopped' || r.status === 'failed');
-    if (!allDone || autoAddedRef.current || bulkAdding) return;
-    const qualifying = candidates.filter(c =>
-      (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') && !addedIds.has(c.id)
-    );
-    if (qualifying.length === 0) return;
-    autoAddedRef.current = true;
+    if (candidates.length === 0) return;
+    const placeIds = candidates.filter(c => c.place_id).map(c => c.place_id);
+    if (placeIds.length === 0) return;
     (async () => {
-      setBulkAdding(true);
-      let added = 0;
-      let dupes = 0;
-      for (const c of qualifying) {
-        try {
-          const leadData = {
-            place_id: c.place_id, maps_url: c.maps_url, name: c.name,
-            category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
-            rating: c.rating, reviews_count: c.reviews_count,
-            phone: c.phone, email: c.email || null, address: c.address, website: c.website,
-            status: 'not_contacted' as const,
-          };
-          const section = determineSection(leadData);
-          const { lead, duplicate, error } = await addLead({ ...leadData, section });
-          if (duplicate) {
-            dupes++;
-            setAddedIds(s => new Set(s).add(c.id));
-          } else if (!error) {
-            setAddedIds(s => new Set(s).add(c.id));
-            added++;
-          }
-        } catch {}
+      // Check in batches of 100
+      const existing = new Set<string>();
+      for (let i = 0; i < placeIds.length; i += 100) {
+        const batch = placeIds.slice(i, i + 100);
+        const { data } = await supabase.from('leads').select('place_id').in('place_id', batch);
+        if (data) data.forEach((d: any) => existing.add(d.place_id));
       }
-      refreshCounts();
-      setBulkAdding(false);
-      const parts = [];
-      if (added > 0) parts.push(`${added} added`);
-      if (dupes > 0) parts.push(`${dupes} duplicates skipped`);
-      if (parts.length > 0) toast.success(`Auto-add: ${parts.join(', ')}`);
+      // Mark candidates whose place_id already exists
+      const alreadyAdded = new Set<string>();
+      candidates.forEach(c => {
+        if (existing.has(c.place_id)) alreadyAdded.add(c.id);
+      });
+      if (alreadyAdded.size > 0) setAddedIds(alreadyAdded);
     })();
-  }, [runs, candidates.length]);
+  }, [candidates.length]);
 
   const handleStopAll = async () => {
     const active = runs.filter(r => r.status === 'running' || r.status === 'pending');
