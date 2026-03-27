@@ -147,10 +147,10 @@ export default function FinderBatchPage() {
   };
 
   const bulkAddFiltered = async () => {
-    const targets = filtered.filter(c => !addedIds.has(c.id) && isAddable(c));
+    const targets = candidates.filter(c => isAddable(c));
     if (targets.length === 0) return;
     setBulkAdding(true);
-    let added = 0;
+    let added = 0, skipped = 0;
     for (const c of targets) {
       try {
         const leadData = {
@@ -162,11 +162,12 @@ export default function FinderBatchPage() {
         const section = determineSection(leadData);
         const { duplicate, error } = await addLead({ ...leadData, section, status: 'not_contacted' });
         if (!duplicate && !error) { setAddedIds(s => new Set(s).add(c.id)); added++; }
-      } catch {}
+        else skipped++;
+      } catch { skipped++; }
     }
     refreshCounts();
     setBulkAdding(false);
-    toast.success(`Added ${added} leads to CRM`);
+    toast.success(`Added ${added} leads to CRM${skipped > 0 ? ` (${skipped} skipped)` : ''}`);
   };
 
   const exportCsv = () => {
@@ -243,16 +244,32 @@ export default function FinderBatchPage() {
               {totalPending > 0 && <><span>·</span><span className="text-amber">{totalPending} pending</span></>}
             </div>
           </div>
-          {runningCount > 0 && (
-            <Button variant="destructive" size="sm" onClick={handleStopAll} className="gap-1.5 shrink-0">
-              <Square size={12} /> Stop All
-            </Button>
-          )}
-          {totalPending > 0 && runningCount === 0 && (
-            <Button variant="default" size="sm" onClick={handleResumeAll} className="gap-1.5 shrink-0">
-              <Play size={12} /> Resume ({totalPending})
-            </Button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {runningCount > 0 && (
+              <Button variant="destructive" size="sm" onClick={handleStopAll} className="gap-1.5">
+                <Square size={12} /> Stop All
+              </Button>
+            )}
+            {totalPending > 0 && runningCount === 0 && (
+              <Button variant="default" size="sm" onClick={handleResumeAll} className="gap-1.5">
+                <Play size={12} /> Resume ({totalPending})
+              </Button>
+            )}
+            {(() => {
+              const allAddable = candidates.filter(c => isAddable(c));
+              return allAddable.length > 0 ? (
+                <Button
+                  size="sm"
+                  onClick={bulkAddFiltered}
+                  disabled={bulkAdding}
+                  className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {bulkAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Add {allAddable.length} Leads
+                </Button>
+              ) : null;
+            })()}
+          </div>
         </div>
 
         {/* Overall progress */}
