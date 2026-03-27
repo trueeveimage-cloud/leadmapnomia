@@ -335,6 +335,50 @@ export default function FinderBatchPage() {
           ))}
         </div>
 
+        {/* Big Add All Leads button */}
+        {(() => {
+          const allAddable = candidates.filter(c => isAddable(c));
+          if (allAddable.length > 0) return (
+            <Button
+              size="lg"
+              onClick={async () => {
+                setBulkAdding(true);
+                let added = 0, dupes = 0;
+                const cities = [...new Set(runs.map(r => r.id))];
+                for (const runId of cities) {
+                  const cityCandidates = allAddable.filter(c => c.run_id === runId);
+                  for (const c of cityCandidates) {
+                    try {
+                      const leadData = {
+                        place_id: c.place_id, maps_url: c.maps_url, name: c.name,
+                        category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
+                        rating: c.rating, reviews_count: c.reviews_count,
+                        phone: c.phone, email: c.email || null, address: c.address, website: c.website,
+                      };
+                      const section = determineSection(leadData);
+                      const { duplicate, error } = await addLead({ ...leadData, section, status: 'not_contacted' });
+                      if (duplicate) { dupes++; setAddedIds(s => new Set(s).add(c.id)); }
+                      else if (!error) { setAddedIds(s => new Set(s).add(c.id)); added++; }
+                    } catch {}
+                  }
+                }
+                refreshCounts();
+                setBulkAdding(false);
+                const parts = [];
+                if (added > 0) parts.push(`${added} added`);
+                if (dupes > 0) parts.push(`${dupes} duplicates`);
+                toast.success(parts.join(', ') || 'Done');
+              }}
+              disabled={bulkAdding}
+              className="w-full mb-4 gap-2 text-base"
+            >
+              {bulkAdding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              {bulkAdding ? 'Adding leads…' : `Add All ${allAddable.length} Leads to CRM`}
+            </Button>
+          );
+          return null;
+        })()}
+
         {/* Email scraping + actions */}
         <div className="flex gap-2 mb-4 flex-wrap">
           <Button size="sm" variant="outline" onClick={handleScrapeEmails} disabled={scrapingEmails} className="gap-1.5">
@@ -343,12 +387,6 @@ export default function FinderBatchPage() {
           </Button>
           {scrapeProgress && (
             <span className="text-xs text-muted-foreground self-center">{scrapeProgress.done}/{scrapeProgress.total}</span>
-          )}
-          {tab === 'no_website_phone' && noWebsitePhone.length > 0 && (
-            <Button size="sm" onClick={bulkAddFiltered} disabled={bulkAdding} className="gap-1.5">
-              {bulkAdding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-              Add All ({noWebsitePhone.filter(c => !addedIds.has(c.id)).length})
-            </Button>
           )}
           <Button size="sm" variant="outline" onClick={exportCsv} className="gap-1.5">
             <Download size={12} /> Export CSV
