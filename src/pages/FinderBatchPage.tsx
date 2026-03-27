@@ -72,23 +72,8 @@ export default function FinderBatchPage() {
         if (existing.has(c.place_id)) alreadyAdded.add(c.id);
       });
       if (alreadyAdded.size > 0) setAddedIds(alreadyAdded);
-          if (duplicate) {
-            dupes++;
-            setAddedIds(s => new Set(s).add(c.id));
-          } else if (!error) {
-            setAddedIds(s => new Set(s).add(c.id));
-            added++;
-          }
-        } catch {}
-      }
-      refreshCounts();
-      setBulkAdding(false);
-      const parts = [];
-      if (added > 0) parts.push(`${added} added`);
-      if (dupes > 0) parts.push(`${dupes} duplicates skipped`);
-      if (parts.length > 0) toast.success(`Auto-add: ${parts.join(', ')}`);
     })();
-  }, [runs, candidates.length]);
+  }, [candidates.length]);
 
   const handleStopAll = async () => {
     const active = runs.filter(r => r.status === 'running' || r.status === 'pending');
