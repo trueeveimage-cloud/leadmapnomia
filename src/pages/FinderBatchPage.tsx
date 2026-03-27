@@ -147,10 +147,10 @@ export default function FinderBatchPage() {
   };
 
   const bulkAddFiltered = async () => {
-    const targets = filtered.filter(c => !addedIds.has(c.id) && isAddable(c));
+    const targets = candidates.filter(c => isAddable(c));
     if (targets.length === 0) return;
     setBulkAdding(true);
-    let added = 0;
+    let added = 0, skipped = 0;
     for (const c of targets) {
       try {
         const leadData = {
@@ -162,11 +162,12 @@ export default function FinderBatchPage() {
         const section = determineSection(leadData);
         const { duplicate, error } = await addLead({ ...leadData, section, status: 'not_contacted' });
         if (!duplicate && !error) { setAddedIds(s => new Set(s).add(c.id)); added++; }
-      } catch {}
+        else skipped++;
+      } catch { skipped++; }
     }
     refreshCounts();
     setBulkAdding(false);
-    toast.success(`Added ${added} leads to CRM`);
+    toast.success(`Added ${added} leads to CRM${skipped > 0 ? ` (${skipped} skipped)` : ''}`);
   };
 
   const exportCsv = () => {
