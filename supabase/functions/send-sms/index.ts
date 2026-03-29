@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 Deno.serve(async (req) => {
@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const supabase = createClient(
@@ -22,14 +22,15 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    const token = authHeader.replace('Bearer ', '');
+    const { data, error: authErr } = await supabase.auth.getClaims(token);
+    if (authErr || !data?.claims) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { leadId, body } = await req.json();
     if (!leadId || !body) {
-      return new Response(JSON.stringify({ error: 'leadId and body required' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'leadId and body required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -37,7 +38,8 @@ Deno.serve(async (req) => {
     const twilioFrom = Deno.env.get('TWILIO_PHONE_NUMBER');
 
     if (!twilioSid || !twilioToken || !twilioFrom) {
-      return new Response(JSON.stringify({ error: 'Twilio not configured' }), { status: 500, headers: corsHeaders });
+      console.error('Missing Twilio config:', { hasSid: !!twilioSid, hasToken: !!twilioToken, hasFrom: !!twilioFrom });
+      return new Response(JSON.stringify({ error: 'Twilio not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const dbClient = createClient(
@@ -49,12 +51,12 @@ Deno.serve(async (req) => {
     const { data: lead, error: leadErr } = await dbClient
       .from('leads').select('*').eq('id', leadId).single();
     if (leadErr || !lead) {
-      return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     let toNumber = lead.phone_e164 || lead.phone;
     if (!toNumber) {
-      return new Response(JSON.stringify({ error: 'Lead has no phone number' }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Lead has no phone number' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Normalize to E164
@@ -70,11 +72,15 @@ Deno.serve(async (req) => {
 
     // Send via Twilio
     const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+    const credentials = btoa(`${twilioSid}:${twilioToken}`);
     const params = new URLSearchParams({ From: twilioFrom, To: e164, Body: body, StatusCallback: statusCallbackUrl });
+    
+    console.log('Sending SMS to:', e164, 'from:', twilioFrom, 'SID prefix:', twilioSid.slice(0, 6));
+    
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': 'Basic ' + btoa(`${twilioSid}:${twilioToken}`),
+        'Authorization': `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params.toString(),
@@ -82,8 +88,11 @@ Deno.serve(async (req) => {
     const json = await resp.json();
 
     if (!resp.ok) {
-      return new Response(JSON.stringify({ error: json.message || 'Twilio error' }), { status: 500, headers: corsHeaders });
+      console.error('Twilio error:', resp.status, JSON.stringify(json));
+      return new Response(JSON.stringify({ error: json.message || 'Twilio error', code: json.code, status: resp.status }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    console.log('SMS sent successfully, SID:', json.sid);
 
     // Log message
     await dbClient.from('message_logs').insert({
@@ -113,6 +122,7 @@ Deno.serve(async (req) => {
     });
 
   } catch (err) {
+    console.error('send-sms error:', (err as Error).message);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
