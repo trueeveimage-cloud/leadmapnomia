@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const supabase = createClient(
@@ -22,24 +22,27 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    const token = authHeader.replace('Bearer ', '');
+    const { data, error: authErr } = await supabase.auth.getClaims(token);
+    if (authErr || !data?.claims) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const TWILIO_ACCOUNT_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
-    const TWILIO_AUTH_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const accountSid = (Deno.env.get('TWILIO_ACCOUNT_SID') || '').trim();
+    const authToken = (Deno.env.get('TWILIO_AUTH_TOKEN') || '').trim();
 
-    if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-      return new Response(JSON.stringify({ error: 'Twilio not configured' }), { status: 500, headers: corsHeaders });
+    if (!accountSid || !authToken) {
+      return new Response(JSON.stringify({ error: 'Twilio not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    console.log('Fetching Twilio balance, SID prefix:', accountSid.slice(0, 6));
 
     const resp = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Balance.json`,
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Balance.json`,
       {
         method: 'GET',
         headers: {
-          'Authorization': 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`),
+          'Authorization': 'Basic ' + btoa(`${accountSid}:${authToken}`),
         },
       }
     );
@@ -47,14 +50,14 @@ Deno.serve(async (req) => {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error('Twilio balance error:', resp.status, errText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch balance' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Failed to fetch balance', details: resp.status }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const data = await resp.json();
+    const balanceData = await resp.json();
 
     return new Response(JSON.stringify({
-      balance: parseFloat(data.balance),
-      currency: data.currency,
+      balance: parseFloat(balanceData.balance),
+      currency: balanceData.currency,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
