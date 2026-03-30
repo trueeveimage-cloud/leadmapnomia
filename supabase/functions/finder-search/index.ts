@@ -426,8 +426,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // --- $300 API spending cap ---
-    const COST_CAP = 500; // USD
+    // --- API spending cap ---
+    const COST_CAP = 1000; // USD
     const TEXT_SEARCH_COST = 0.032;
     const DETAIL_COST = 0.017;
     
