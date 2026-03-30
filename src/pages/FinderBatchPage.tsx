@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
@@ -29,7 +29,8 @@ export default function FinderBatchPage() {
   const [scrapingEmails, setScrapingEmails] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<{ done: number; total: number; found: number } | null>(null);
   const [expandedCities, setExpandedCities] = useState(true);
-  
+  const autoAddedRunIds = useRef<Set<string>>(new Set());
+
 
   const load = useCallback(async () => {
     if (!batchId) return;
@@ -74,6 +75,44 @@ export default function FinderBatchPage() {
       if (alreadyAdded.size > 0) setAddedIds(alreadyAdded);
     })();
   }, [candidates.length]);
+
+  // Auto-add qualifying candidates when runs finish
+  useEffect(() => {
+    if (bulkAdding || candidates.length === 0) return;
+    const doneRuns = runs.filter(r => (r.status === 'done' || r.status === 'stopped') && !autoAddedRunIds.current.has(r.id));
+    if (doneRuns.length === 0) return;
+    const doneRunIds = new Set(doneRuns.map(r => r.id));
+    const qualifying = candidates.filter(c =>
+      doneRunIds.has(c.run_id) &&
+      (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') &&
+      !addedIds.has(c.id)
+    );
+    // Mark these runs as processed immediately to prevent re-runs
+    doneRuns.forEach(r => autoAddedRunIds.current.add(r.id));
+    if (qualifying.length === 0) return;
+    (async () => {
+      setBulkAdding(true);
+      let added = 0;
+      for (const c of qualifying) {
+        try {
+          const leadData = {
+            place_id: c.place_id, maps_url: c.maps_url, name: c.name,
+            category: c.category, niche_label: c.category?.split(',')[0]?.trim() || null,
+            rating: c.rating, reviews_count: c.reviews_count,
+            phone: c.phone, email: c.email || null, address: c.address, website: c.website,
+          };
+          const section = determineSection(leadData);
+          const { duplicate, error } = await addLead({ ...leadData, section, status: 'not_contacted' });
+          if (!duplicate && !error) { setAddedIds(s => new Set(s).add(c.id)); added++; }
+          else if (duplicate) { setAddedIds(s => new Set(s).add(c.id)); }
+        } catch {}
+      }
+      refreshCounts();
+      setBulkAdding(false);
+      if (added > 0) toast.success(`Auto-added ${added} leads from ${doneRuns.length} cities`);
+    })();
+  }, [runs, candidates, addedIds, bulkAdding]);
+
 
   const handleStopAll = async () => {
     const active = runs.filter(r => r.status === 'running' || r.status === 'pending');
