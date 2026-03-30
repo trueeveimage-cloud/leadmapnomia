@@ -84,7 +84,7 @@ export default function FinderBatchPage() {
     const doneRunIds = new Set(doneRuns.map(r => r.id));
     const qualifying = candidates.filter(c =>
       doneRunIds.has(c.run_id) &&
-      (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') &&
+      c.outcome !== 'duplicate' && c.outcome !== 'pending' && c.outcome !== 'failed' &&
       !addedIds.has(c.id)
     );
     // Mark these runs as processed immediately to prevent re-runs
