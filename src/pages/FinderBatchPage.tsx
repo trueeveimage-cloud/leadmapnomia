@@ -84,7 +84,7 @@ export default function FinderBatchPage() {
     const doneRunIds = new Set(doneRuns.map(r => r.id));
     const qualifying = candidates.filter(c =>
       doneRunIds.has(c.run_id) &&
-      (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') &&
+      c.outcome !== 'duplicate' && c.outcome !== 'pending' && c.outcome !== 'failed' &&
       !addedIds.has(c.id)
     );
     // Mark these runs as processed immediately to prevent re-runs
@@ -242,7 +242,7 @@ export default function FinderBatchPage() {
   ];
 
   const isAddable = (c: FinderCandidate) =>
-    (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') && !addedIds.has(c.id);
+    c.outcome !== 'duplicate' && c.outcome !== 'pending' && c.outcome !== 'failed' && !addedIds.has(c.id);
 
   if (loading) return <AppLayout><div className="flex items-center justify-center pt-20"><Loader2 className="animate-spin text-primary" size={24} /></div></AppLayout>;
   if (runs.length === 0) return <AppLayout><div className="text-center pt-20 text-muted-foreground">Batch not found</div></AppLayout>;
@@ -256,7 +256,7 @@ export default function FinderBatchPage() {
   // Per-city breakdown
   const cityBreakdown = runs.map(r => {
     const cityCandidates = candidates.filter(c => c.run_id === r.id);
-    const leads = cityCandidates.filter(c => c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website').length;
+    const leads = cityCandidates.filter(c => c.outcome !== 'duplicate' && c.outcome !== 'pending' && c.outcome !== 'failed').length;
     const pending = cityCandidates.filter(c => c.outcome === 'pending').length;
     return { city: r.city, status: r.status, total: cityCandidates.length, leads, pending, runId: r.id };
   });
