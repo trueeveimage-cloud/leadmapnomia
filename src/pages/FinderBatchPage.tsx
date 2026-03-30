@@ -29,7 +29,8 @@ export default function FinderBatchPage() {
   const [scrapingEmails, setScrapingEmails] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<{ done: number; total: number; found: number } | null>(null);
   const [expandedCities, setExpandedCities] = useState(true);
-  
+  const autoAddedRunIds = useRef<Set<string>>(new Set());
+
 
   const load = useCallback(async () => {
     if (!batchId) return;
