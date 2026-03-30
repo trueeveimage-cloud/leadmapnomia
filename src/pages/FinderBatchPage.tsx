@@ -242,7 +242,7 @@ export default function FinderBatchPage() {
   ];
 
   const isAddable = (c: FinderCandidate) =>
-    (c.outcome === 'no_website_phone' || c.outcome === 'no_website_no_phone' || c.outcome === 'no_website') && !addedIds.has(c.id);
+    c.outcome !== 'duplicate' && c.outcome !== 'pending' && c.outcome !== 'failed' && !addedIds.has(c.id);
 
   if (loading) return <AppLayout><div className="flex items-center justify-center pt-20"><Loader2 className="animate-spin text-primary" size={24} /></div></AppLayout>;
   if (runs.length === 0) return <AppLayout><div className="text-center pt-20 text-muted-foreground">Batch not found</div></AppLayout>;
