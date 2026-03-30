@@ -114,6 +114,7 @@ export default function FinderBatchPage() {
   }, [runs, candidates, addedIds, bulkAdding]);
 
 
+  const handleStopAll = async () => {
     const active = runs.filter(r => r.status === 'running' || r.status === 'pending');
     for (const r of active) {
       await stopFinderRun(r.id);
