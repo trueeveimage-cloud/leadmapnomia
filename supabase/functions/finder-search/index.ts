@@ -427,7 +427,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // --- API spending cap ---
-    const COST_CAP = 1000; // USD
+    const COST_CAP = 2000; // USD
     const TEXT_SEARCH_COST = 0.032;
     const DETAIL_COST = 0.017;
     
