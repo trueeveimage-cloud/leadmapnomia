@@ -86,6 +86,9 @@ export default function CampaignDetailPage() {
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [scheduledBatches, setScheduledBatches] = useState<ScheduledBatch[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [editFilter, setEditFilter] = useState<AudienceFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
