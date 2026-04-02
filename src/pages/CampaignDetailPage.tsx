@@ -8,7 +8,10 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, countSendableLead
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Copy } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Copy, Save, Settings2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import type { AudienceFilter } from '@/lib/campaigns';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
