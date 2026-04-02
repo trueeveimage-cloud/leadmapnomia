@@ -8,7 +8,10 @@ import { fetchCampaign, fetchCampaignRuns, countEligibleLeads, countSendableLead
 import { fetchRecentOutbound, MessageLog } from '@/lib/messages';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Copy } from 'lucide-react';
+import { Play, Pause, Send, ArrowLeft, RefreshCw, RotateCcw, Clock, Hash, Timer, Calendar, Globe, DollarSign, Bug, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, Copy, Save, Settings2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import type { AudienceFilter } from '@/lib/campaigns';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
@@ -83,6 +86,9 @@ export default function CampaignDetailPage() {
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [scheduledBatches, setScheduledBatches] = useState<ScheduledBatch[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [editFilter, setEditFilter] = useState<AudienceFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
   const nextBatch = useNextBatchTimer();
 
   const load = useCallback(async () => {
@@ -295,6 +301,22 @@ export default function CampaignDetailPage() {
     const updated = await updateCampaign(id, { status: 'completed' });
     setCampaign(updated);
     toast.success('Campaign marked as completed');
+  };
+
+  const handleSaveFilters = async () => {
+    if (!campaign || !id || !editFilter) return;
+    setSavingFilter(true);
+    try {
+      const updated = await updateCampaign(id, { audience_filter: editFilter });
+      setCampaign(updated);
+      setEditFilter(null);
+      toast.success('Filters saved');
+      setEligible(await countEligibleLeads(updated.audience_filter as any, updated.cooldown_days));
+      countSendableLeads(updated.audience_filter as any, selectedCountries).then(setSendableNow);
+    } catch {
+      toast.error('Failed to save filters');
+    }
+    setSavingFilter(false);
   };
 
   // Compute real stats from message_logs
@@ -527,6 +549,135 @@ export default function CampaignDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Audience Filters */}
+        <div className="bg-card border border-border rounded-lg p-4 mb-6">
+          <button
+            onClick={() => {
+              if (!showFilters && !editFilter) setEditFilter({ ...(campaign.audience_filter as AudienceFilter) });
+              setShowFilters(!showFilters);
+            }}
+            className="flex items-center gap-2 w-full text-left"
+          >
+            <Settings2 size={14} className="text-muted-foreground" />
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Audience Filters</h3>
+            {showFilters ? <ChevronUp size={12} className="text-muted-foreground ml-auto" /> : <ChevronDown size={12} className="text-muted-foreground ml-auto" />}
+          </button>
+
+          {!showFilters && (
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              {(campaign.audience_filter as AudienceFilter)?.sections?.length ? (
+                <Badge variant="secondary" className="text-[10px]">Sections: {(campaign.audience_filter as AudienceFilter).sections!.join(', ')}</Badge>
+              ) : null}
+              {(campaign.audience_filter as AudienceFilter)?.minRating && <Badge variant="secondary" className="text-[10px]">Rating ≥ {(campaign.audience_filter as AudienceFilter).minRating}</Badge>}
+              {(campaign.audience_filter as AudienceFilter)?.minReviews != null && <Badge variant="secondary" className="text-[10px]">Reviews ≥ {(campaign.audience_filter as AudienceFilter).minReviews}</Badge>}
+              {(campaign.audience_filter as AudienceFilter)?.hasWebsite === false && <Badge variant="secondary" className="text-[10px]">No website</Badge>}
+              {(campaign.audience_filter as AudienceFilter)?.excludeOptOut !== false && <Badge variant="secondary" className="text-[10px]">Exclude opt-out</Badge>}
+              {(campaign.audience_filter as AudienceFilter)?.excludeReplied !== false && <Badge variant="secondary" className="text-[10px]">Exclude replied</Badge>}
+            </div>
+          )}
+
+          {showFilters && editFilter && (
+            <div className="mt-3 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Min Rating</Label>
+                  <Input
+                    type="number" step="0.1" min="0" max="5"
+                    value={editFilter.minRating ?? ''}
+                    onChange={e => setEditFilter({ ...editFilter, minRating: e.target.value ? Number(e.target.value) : undefined })}
+                    placeholder="No minimum"
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Min Reviews</Label>
+                  <Input
+                    type="number" min="0"
+                    value={editFilter.minReviews ?? ''}
+                    onChange={e => setEditFilter({ ...editFilter, minReviews: e.target.value ? Number(e.target.value) : undefined })}
+                    placeholder="No minimum"
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs text-muted-foreground">Sections (comma-separated, or leave empty for all)</Label>
+                <Input
+                  value={editFilter.sections?.join(', ') ?? ''}
+                  onChange={e => setEditFilter({ ...editFilter, sections: e.target.value.trim() ? e.target.value.split(',').map(s => s.trim()) : undefined })}
+                  placeholder="e.g. phone, email"
+                  className="h-8 text-sm mt-1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Daily Cap</Label>
+                  <Input
+                    type="number" min="1"
+                    value={campaign.daily_cap}
+                    onChange={async (e) => {
+                      const val = Number(e.target.value);
+                      if (val > 0) {
+                        const updated = await updateCampaign(id!, { daily_cap: val });
+                        setCampaign(updated);
+                      }
+                    }}
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Batch Cap (total target)</Label>
+                  <Input
+                    type="number" min="0"
+                    value={campaign.batch_cap}
+                    onChange={async (e) => {
+                      const val = Number(e.target.value);
+                      const updated = await updateCampaign(id!, { batch_cap: val });
+                      setCampaign(updated);
+                    }}
+                    className="h-8 text-sm mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={editFilter.hasWebsite === false}
+                    onCheckedChange={v => setEditFilter({ ...editFilter, hasWebsite: v ? false : undefined })}
+                  />
+                  <Label className="text-xs">Only without website</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={editFilter.excludeOptOut !== false}
+                    onCheckedChange={v => setEditFilter({ ...editFilter, excludeOptOut: v })}
+                  />
+                  <Label className="text-xs">Exclude opt-out</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={editFilter.excludeReplied !== false}
+                    onCheckedChange={v => setEditFilter({ ...editFilter, excludeReplied: v })}
+                  />
+                  <Label className="text-xs">Exclude replied</Label>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" onClick={handleSaveFilters} disabled={savingFilter} className="gap-1.5">
+                  <Save size={13} /> {savingFilter ? 'Saving...' : 'Save Filters'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setShowFilters(false); setEditFilter(null); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Template preview */}
         <div className="bg-card border border-border rounded-lg p-4 mb-6">
