@@ -303,6 +303,22 @@ export default function CampaignDetailPage() {
     toast.success('Campaign marked as completed');
   };
 
+  const handleSaveFilters = async () => {
+    if (!campaign || !id || !editFilter) return;
+    setSavingFilter(true);
+    try {
+      const updated = await updateCampaign(id, { audience_filter: editFilter });
+      setCampaign(updated);
+      setEditFilter(null);
+      toast.success('Filters saved');
+      setEligible(await countEligibleLeads(updated.audience_filter as any, updated.cooldown_days));
+      countSendableLeads(updated.audience_filter as any, selectedCountries).then(setSendableNow);
+    } catch {
+      toast.error('Failed to save filters');
+    }
+    setSavingFilter(false);
+  };
+
   // Compute real stats from message_logs
   const deliveredMsgs = messages.filter(m => m.status === 'delivered');
   const sentMsgs = messages.filter(m => m.status === 'sent' || m.status === 'queued');
