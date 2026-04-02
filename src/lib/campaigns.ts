@@ -159,7 +159,6 @@ async function fetchPreviouslyMessagedLeadIds(): Promise<Set<string>> {
       .select('lead_id')
       .eq('direction', 'outbound')
       .not('campaign_run_id', 'is', null)
-      .not('status', 'eq', 'failed')
       .range(from, from + pageSize - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
