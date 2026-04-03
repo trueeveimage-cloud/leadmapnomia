@@ -28,9 +28,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { leadId, body } = await req.json();
-    if (!leadId || !body) {
-      return new Response(JSON.stringify({ error: 'leadId and body required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const { leadId, body, phone } = await req.json();
+    
+    // Support direct phone sending (no lead required)
+    if (!body) {
+      return new Response(JSON.stringify({ error: 'body is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (!leadId && !phone) {
+      return new Response(JSON.stringify({ error: 'leadId or phone required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const twilioSid = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -47,16 +52,26 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Fetch lead
-    const { data: lead, error: leadErr } = await dbClient
-      .from('leads').select('*').eq('id', leadId).single();
-    if (leadErr || !lead) {
-      return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    let toNumber: string;
+    let resolvedLeadId: string | null = leadId || null;
 
-    let toNumber = lead.phone_e164 || lead.phone;
-    if (!toNumber) {
-      return new Response(JSON.stringify({ error: 'Lead has no phone number' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (leadId) {
+      // Fetch lead
+      const { data: lead, error: leadErr } = await dbClient
+        .from('leads').select('*').eq('id', leadId).single();
+      if (leadErr || !lead) {
+        return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      toNumber = lead.phone_e164 || lead.phone;
+      if (!toNumber) {
+        return new Response(JSON.stringify({ error: 'Lead has no phone number' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } else {
+      toNumber = phone;
+      // Try to find a lead by phone
+      const { data: matchedLeads } = await dbClient
+        .from('leads').select('id').or(`phone.eq.${phone},phone_e164.eq.${phone}`).limit(1);
+      if (matchedLeads?.length) resolvedLeadId = matchedLeads[0].id;
     }
 
     // Normalize to E164
