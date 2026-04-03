@@ -475,6 +475,7 @@ export type Database = {
           outreach_stage: string
           phone: string | null
           phone_e164: string | null
+          pinned: boolean
           place_id: string | null
           rating: number | null
           read_at: string | null
@@ -514,6 +515,7 @@ export type Database = {
           outreach_stage?: string
           phone?: string | null
           phone_e164?: string | null
+          pinned?: boolean
           place_id?: string | null
           rating?: number | null
           read_at?: string | null
@@ -553,6 +555,7 @@ export type Database = {
           outreach_stage?: string
           phone?: string | null
           phone_e164?: string | null
+          pinned?: boolean
           place_id?: string | null
           rating?: number | null
           read_at?: string | null
