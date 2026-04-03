@@ -109,28 +109,30 @@ Deno.serve(async (req) => {
 
     console.log('SMS sent successfully, SID:', json.sid);
 
-    // Log message
-    await dbClient.from('message_logs').insert({
-      lead_id: leadId,
-      direction: 'outbound',
-      channel: 'sms',
-      from_number: twilioFrom,
-      to_number: e164,
-      body,
-      provider: 'twilio',
-      provider_message_sid: json.sid,
-      status: json.status || 'queued',
-    });
+    // Log message (only if we have a lead)
+    if (resolvedLeadId) {
+      await dbClient.from('message_logs').insert({
+        lead_id: resolvedLeadId,
+        direction: 'outbound',
+        channel: 'sms',
+        from_number: twilioFrom,
+        to_number: e164,
+        body,
+        provider: 'twilio',
+        provider_message_sid: json.sid,
+        status: json.status || 'queued',
+      });
 
-    // Update lead
-    await dbClient.from('leads').update({
-      last_outbound_at: new Date().toISOString(),
-      last_message_preview: body.slice(0, 80),
-      last_message_direction: 'outbound',
-      last_message_status: json.status || 'queued',
-      last_contact_method: 'sms',
-      last_contacted_at: new Date().toISOString(),
-    }).eq('id', leadId);
+      // Update lead
+      await dbClient.from('leads').update({
+        last_outbound_at: new Date().toISOString(),
+        last_message_preview: body.slice(0, 80),
+        last_message_direction: 'outbound',
+        last_message_status: json.status || 'queued',
+        last_contact_method: 'sms',
+        last_contacted_at: new Date().toISOString(),
+      }).eq('id', resolvedLeadId);
+    }
 
     return new Response(JSON.stringify({ success: true, sid: json.sid }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

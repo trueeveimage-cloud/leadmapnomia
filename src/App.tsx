@@ -170,6 +170,7 @@ const App = () => (
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
                     <Route path="/next" element={<NextLeadPage />} />
+                    <Route path="/quick-send" element={<QuickSendPage />} />
                     <Route path="/guide" element={<GuidePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />
