@@ -254,10 +254,24 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                   key={lead.id}
                   onClick={() => setSelectedLead(lead)}
                   className={cn(
-                    "cursor-pointer border-b border-border/50 transition-colors",
-                    selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                    "cursor-pointer border-b border-border/50 transition-colors relative",
+                    selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
+                    (lead as any).pinned && "bg-amber-500/5"
                   )}
                 >
+                  {/* Pin button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleTogglePin(lead); }}
+                    className={cn(
+                      "absolute top-2 right-2 p-1 rounded-md transition-colors z-10",
+                      (lead as any).pinned
+                        ? "text-amber-400 hover:text-amber-300"
+                        : "text-muted-foreground/30 hover:text-muted-foreground"
+                    )}
+                    title={(lead as any).pinned ? 'Unpin' : 'Pin to top'}
+                  >
+                    <Pin size={13} className={(lead as any).pinned ? 'fill-current' : ''} />
+                  </button>
                   <LeadRow
                     lead={lead}
                     onUpdate={handleUpdate}
