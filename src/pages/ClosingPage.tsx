@@ -94,14 +94,28 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
     .finally(() => setLoadingMessages(false));
   }, [selectedLead?.id]);
 
+  const handleTogglePin = useCallback(async (lead: Lead) => {
+    try {
+      const newPinned = !(lead as any).pinned;
+      const updated = await updateLead(lead.id, { pinned: newPinned } as any);
+      setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+      if (selectedLead?.id === updated.id) setSelectedLead(updated);
+      toast.success(newPinned ? 'Pinned to top' : 'Unpinned');
+    } catch { toast.error('Failed to pin'); }
+  }, [selectedLead]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
-    const q = search.toLowerCase();
-    return leads.filter(l =>
-      l.name.toLowerCase().includes(q) ||
-      (l.phone && l.phone.includes(q)) ||
-      (l.email && l.email.toLowerCase().includes(q))
-    );
+    let result = leads;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(l =>
+        l.name.toLowerCase().includes(q) ||
+        (l.phone && l.phone.includes(q)) ||
+        (l.email && l.email.toLowerCase().includes(q))
+      );
+    }
+    // Sort pinned leads to top
+    return [...result].sort((a, b) => ((b as any).pinned ? 1 : 0) - ((a as any).pinned ? 1 : 0));
   }, [leads, search]);
 
   const handleUpdate = useCallback((updated: Lead) => {
