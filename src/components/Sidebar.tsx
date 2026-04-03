@@ -63,7 +63,7 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
   );
 }
 
-const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
+const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks', '/quick-send'];
 const TOOLS_PATHS = ['/add', '/bulk', '/finder', '/finder/coverage', '/costs'];
 const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
@@ -228,10 +228,11 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
         {/* Outreach */}
         <NavGroup label="Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)" paths={OUTREACH_PATHS}>
-          <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)', glow: notifications.unreadInbox > 0 }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'A/B Compare', path: '/campaigns/compare', icon: <BarChart2 size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)', glow: notifications.unreadInbox > 0, badge: notifications.unreadInbox > 0 ? notifications.unreadInbox : undefined }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Quick Send', path: '/quick-send', icon: <MessageCircle size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)', badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 

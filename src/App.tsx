@@ -28,6 +28,7 @@ import NotFound from "./pages/NotFound";
 import GuidePage from "./pages/GuidePage";
 import CampaignStatsPage from "./pages/CampaignStatsPage";
 import DashboardPage from "./pages/DashboardPage";
+import QuickSendPage from "./pages/QuickSendPage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -169,6 +170,7 @@ const App = () => (
                     <Route path="/inbox" element={<InboxPage />} />
                     <Route path="/call-list" element={<CallListPage />} />
                     <Route path="/next" element={<NextLeadPage />} />
+                    <Route path="/quick-send" element={<QuickSendPage />} />
                     <Route path="/guide" element={<GuidePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />

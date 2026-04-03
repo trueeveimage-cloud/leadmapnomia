@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote, ChevronDown } from 'lucide-react';
+import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote, ChevronDown, Pin } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -94,14 +94,28 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
     .finally(() => setLoadingMessages(false));
   }, [selectedLead?.id]);
 
+  const handleTogglePin = useCallback(async (lead: Lead) => {
+    try {
+      const newPinned = !(lead as any).pinned;
+      const updated = await updateLead(lead.id, { pinned: newPinned } as any);
+      setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+      if (selectedLead?.id === updated.id) setSelectedLead(updated);
+      toast.success(newPinned ? 'Pinned to top' : 'Unpinned');
+    } catch { toast.error('Failed to pin'); }
+  }, [selectedLead]);
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
-    const q = search.toLowerCase();
-    return leads.filter(l =>
-      l.name.toLowerCase().includes(q) ||
-      (l.phone && l.phone.includes(q)) ||
-      (l.email && l.email.toLowerCase().includes(q))
-    );
+    let result = leads;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(l =>
+        l.name.toLowerCase().includes(q) ||
+        (l.phone && l.phone.includes(q)) ||
+        (l.email && l.email.toLowerCase().includes(q))
+      );
+    }
+    // Sort pinned leads to top
+    return [...result].sort((a, b) => ((b as any).pinned ? 1 : 0) - ((a as any).pinned ? 1 : 0));
   }, [leads, search]);
 
   const handleUpdate = useCallback((updated: Lead) => {
@@ -240,10 +254,24 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                   key={lead.id}
                   onClick={() => setSelectedLead(lead)}
                   className={cn(
-                    "cursor-pointer border-b border-border/50 transition-colors",
-                    selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                    "cursor-pointer border-b border-border/50 transition-colors relative",
+                    selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
+                    (lead as any).pinned && "bg-amber-500/5"
                   )}
                 >
+                  {/* Pin button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleTogglePin(lead); }}
+                    className={cn(
+                      "absolute top-2 right-2 p-1 rounded-md transition-colors z-10",
+                      (lead as any).pinned
+                        ? "text-amber-400 hover:text-amber-300"
+                        : "text-muted-foreground/30 hover:text-muted-foreground"
+                    )}
+                    title={(lead as any).pinned ? 'Unpin' : 'Pin to top'}
+                  >
+                    <Pin size={13} className={(lead as any).pinned ? 'fill-current' : ''} />
+                  </button>
                   <LeadRow
                     lead={lead}
                     onUpdate={handleUpdate}

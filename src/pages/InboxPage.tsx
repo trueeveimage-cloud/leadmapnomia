@@ -227,7 +227,11 @@ export default function InboxPage() {
       if (leadDetail && leadDetail.id === leadId) {
         setLeadDetail(prev => prev ? { ...prev, status: status as Lead['status'] } : prev);
       }
+      // Auto-mark as read when choosing a status action
+      await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', leadId);
+      setUnreadLeads(prev => prev.filter(u => u.lead_id !== leadId));
       refreshCounts();
+      refreshNotifications();
     } catch { toast.error('Failed to update'); }
   };
 
