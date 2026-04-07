@@ -42,14 +42,14 @@ export default function InboxPage() {
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts, refreshNotifications } = useCRM();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null }[]>([]);
+  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null; has_our_reply: boolean }[]>([]);
 
   const loadUnreadLeads = useCallback(async () => {
     try {
       // Query leads that have inbound messages newer than read_at (or read_at is null)
       const { data, error } = await supabase
         .from('leads')
-        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone')
+        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone, last_outbound_at')
         .not('last_inbound_at', 'is', null);
       if (error) throw error;
       const unread = (data || []).filter(l => {
@@ -67,6 +67,7 @@ export default function InboxPage() {
         last_body: l.last_message_preview,
         last_at: l.last_inbound_at!,
         from_number: l.phone,
+        has_our_reply: !!(l.last_outbound_at && l.last_inbound_at && new Date(l.last_outbound_at) > new Date(l.last_inbound_at)),
       })));
     } catch { /* silent */ }
   }, []);
@@ -425,6 +426,11 @@ export default function InboxPage() {
                               </button>
                               {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
                               {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
+                              {u.has_our_reply && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-500 text-[10px] font-medium border border-blue-500/30">
+                                  <Send size={8} /> Replied
+                                </span>
+                              )}
                               {answeredStatuses.includes(currentStatus) && (
                                 <span className={cn(
                                   'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
