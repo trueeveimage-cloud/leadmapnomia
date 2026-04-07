@@ -426,6 +426,11 @@ export default function InboxPage() {
                               </button>
                               {u.lead_category && <span className="text-[10px] text-muted-foreground">{u.lead_category}</span>}
                               {u.from_number && <span className="text-[10px] text-muted-foreground">{u.from_number}</span>}
+                              {u.has_our_reply && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-500 text-[10px] font-medium border border-blue-500/30">
+                                  <Send size={8} /> Replied
+                                </span>
+                              )}
                               {answeredStatuses.includes(currentStatus) && (
                                 <span className={cn(
                                   'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
