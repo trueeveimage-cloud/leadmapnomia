@@ -8,11 +8,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote, ChevronDown, Pin } from 'lucide-react';
+import { Search, X, Phone, Mail, MapPin, Star, ExternalLink, Send, Loader2, MessageCircle, Calendar, Clock, Plus, Check, StickyNote, ChevronDown, Pin, Zap } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
+
+const SMS_TEMPLATES = [
+  { label: '🔔 Nudge', text: 'Hej {name}! Såg att du var intresserad — har du hunnit fundera? /Simon' },
+  { label: '📞 Call', text: 'Hej {name}, vill du att jag ringer upp dig istället? Tar bara 2 min! /Simon' },
+  { label: '📅 Book', text: 'Hej {name}! Boka en tid som passar dig här: [LINK] /Simon' },
+  { label: '📋 Details', text: 'Toppen! Kan du skicka din logga + ev. önskemål så förbereder jag ett förslag? /Simon' },
+];
+
+function getTimeBadge(lastOutboundAt: string | null): { text: string; color: string } | null {
+  if (!lastOutboundAt) return null;
+  const diffMs = Date.now() - new Date(lastOutboundAt).getTime();
+  const hours = diffMs / (1000 * 60 * 60);
+  const text = formatDistanceToNowStrict(new Date(lastOutboundAt), { addSuffix: true });
+  if (hours < 12) return { text, color: 'text-green-400 bg-green-400/10' };
+  if (hours < 48) return { text, color: 'text-amber-400 bg-amber-400/10' };
+  return { text, color: 'text-red-400 bg-red-400/10' };
+}
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   not_contacted: 'Not Contacted', contacted: 'Contacted', answered: 'Answered',
@@ -114,8 +131,13 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
         (l.email && l.email.toLowerCase().includes(q))
       );
     }
-    // Sort pinned leads to top
-    return [...result].sort((a, b) => ((b as any).pinned ? 1 : 0) - ((a as any).pinned ? 1 : 0));
+    // Sort: pinned first, then by staleness (oldest last_outbound_at first = needs follow-up)
+    return [...result].sort((a, b) => {
+      if ((b as any).pinned !== (a as any).pinned) return (b as any).pinned ? 1 : -1;
+      const aTime = a.last_outbound_at ? new Date(a.last_outbound_at).getTime() : 0;
+      const bTime = b.last_outbound_at ? new Date(b.last_outbound_at).getTime() : 0;
+      return aTime - bTime; // oldest first
+    });
   }, [leads, search]);
 
   const handleUpdate = useCallback((updated: Lead) => {
@@ -249,36 +271,45 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                 <div className="text-sm">No leads here</div>
               </div>
             ) : (
-              filtered.map(lead => (
-                <div
-                  key={lead.id}
-                  onClick={() => setSelectedLead(lead)}
-                  className={cn(
-                    "cursor-pointer border-b border-border/50 transition-colors relative",
-                    selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
-                    (lead as any).pinned && "bg-amber-500/5"
-                  )}
-                >
-                  {/* Pin button */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleTogglePin(lead); }}
+              filtered.map(lead => {
+                const badge = getTimeBadge(lead.last_outbound_at);
+                return (
+                  <div
+                    key={lead.id}
+                    onClick={() => setSelectedLead(lead)}
                     className={cn(
-                      "absolute top-2 right-2 p-1 rounded-md transition-colors z-10",
-                      (lead as any).pinned
-                        ? "text-amber-400 hover:text-amber-300"
-                        : "text-muted-foreground/30 hover:text-muted-foreground"
+                      "cursor-pointer border-b border-border/50 transition-colors relative",
+                      selectedLead?.id === lead.id ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30",
+                      (lead as any).pinned && "bg-amber-500/5"
                     )}
-                    title={(lead as any).pinned ? 'Unpin' : 'Pin to top'}
                   >
-                    <Pin size={13} className={(lead as any).pinned ? 'fill-current' : ''} />
-                  </button>
-                  <LeadRow
-                    lead={lead}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                  />
-                </div>
-              ))
+                    {/* Time badge */}
+                    {badge && (
+                      <span className={cn("absolute top-2 right-8 text-[10px] px-1.5 py-0.5 rounded-full font-medium", badge.color)}>
+                        {badge.text}
+                      </span>
+                    )}
+                    {/* Pin button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleTogglePin(lead); }}
+                      className={cn(
+                        "absolute top-2 right-2 p-1 rounded-md transition-colors z-10",
+                        (lead as any).pinned
+                          ? "text-amber-400 hover:text-amber-300"
+                          : "text-muted-foreground/30 hover:text-muted-foreground"
+                      )}
+                      title={(lead as any).pinned ? 'Unpin' : 'Pin to top'}
+                    >
+                      <Pin size={13} className={(lead as any).pinned ? 'fill-current' : ''} />
+                    </button>
+                    <LeadRow
+                      lead={lead}
+                      onUpdate={handleUpdate}
+                      onDelete={handleDelete}
+                    />
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -396,7 +427,19 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                 </div>
 
                 {selectedLead.phone && (
-                  <div className="p-4 border-t border-border">
+                  <div className="p-4 border-t border-border space-y-2">
+                    {/* Template presets */}
+                    <div className="flex gap-1.5 flex-wrap">
+                      {SMS_TEMPLATES.map(t => (
+                        <button
+                          key={t.label}
+                          onClick={() => setReply(t.text.replace('{name}', selectedLead.name.split(' ')[0]))}
+                          className="text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors border border-border/50"
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="flex gap-2">
                       <Input
                         value={reply}
