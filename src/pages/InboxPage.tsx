@@ -42,7 +42,7 @@ export default function InboxPage() {
   const [conversation, setConversation] = useState<any[]>([]);
   const { refreshCounts, refreshNotifications } = useCRM();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null }[]>([]);
+  const [unreadLeads, setUnreadLeads] = useState<{ lead_id: string; lead_name: string; lead_category: string | null; lead_status: string; last_body: string | null; last_at: string; from_number: string | null; has_our_reply: boolean }[]>([]);
 
   const loadUnreadLeads = useCallback(async () => {
     try {
