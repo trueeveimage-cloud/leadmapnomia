@@ -67,6 +67,7 @@ export default function InboxPage() {
         last_body: l.last_message_preview,
         last_at: l.last_inbound_at!,
         from_number: l.phone,
+        has_our_reply: !!(l.last_outbound_at && l.last_inbound_at && new Date(l.last_outbound_at) > new Date(l.last_inbound_at)),
       })));
     } catch { /* silent */ }
   }, []);
