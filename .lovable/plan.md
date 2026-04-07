@@ -1,86 +1,69 @@
 
-# Complete the Outreach Flow: Message -> Track -> Call -> Status
 
-## What's Already Built
-- Lead database with all fields (phone, status, outreach_stage, needs_call, etc.)
-- Campaign wizard (audience filter, template, caps)
-- Send batch edge function (currently uses MOCK provider)
-- Inbound webhook (`twilio-inbound`) -- receives SMS replies, updates lead
-- Status webhook (`twilio-status`) -- tracks delivery status
-- Check-no-reply edge function -- moves non-repliers to call list
-- Inbox page (shows inbound replies with quick actions)
-- Call List page (shows leads needing calls, log outcomes)
-- All status pages (Interested, Not Interested, Callbacks, etc.)
+## Plan: Follow-Up System for Interested Leads
 
-## What's Missing (3 things to make it fully work)
-
-### 1. Connect Twilio (SMS Provider)
-You need a Twilio account to send real SMS and receive replies automatically.
-
-**Steps you do:**
-1. Go to twilio.com and create an account (or log in)
-2. Buy a phone number (costs about $1/month)
-3. Get your credentials from the Twilio Console dashboard:
-   - **Account SID** (starts with "AC...")
-   - **Auth Token** (click to reveal it)
-   - **Phone Number** (the number you bought, like +46701234567)
-
-Once you give me those 3 values, I'll:
-- Store them securely as backend secrets
-- Update the send-campaign-batch function to use real Twilio SMS instead of mock
-- Your campaigns will start sending real SMS
-
-### 2. Set Up Twilio Webhooks (so replies come back)
-After Twilio is connected, you need to tell Twilio WHERE to send incoming replies:
-
-1. In Twilio Console, go to your phone number's settings
-2. Set these two webhook URLs:
-
-```text
-Incoming Message URL:
-https://olfucdwmegdnczwpgaeg.supabase.co/functions/v1/twilio-inbound
-
-Status Callback URL:
-https://olfucdwmegdnczwpgaeg.supabase.co/functions/v1/twilio-status
-```
-
-Both should be set to HTTP POST. These are already built and deployed -- they just need Twilio pointed at them.
-
-### 3. Schedule the Auto-Check (moves non-repliers to Call List)
-The `check-no-reply` function exists but isn't running on a schedule. I'll set up a cron job that runs every 30 minutes to automatically check for leads who haven't replied within your configured window (default: 48 hours) and move them to the Call List.
+Three features: time-since-last-message indicators, SMS template presets, and auto-follow-up nudges.
 
 ---
 
-## The Complete Flow Once Set Up
+### 1. "Last messaged" time indicator on lead list (ClosingPage)
 
-```text
-Finder finds leads --> Leads saved in Unsorted
-        |
-        v
-Campaign sends SMS to leads with phone numbers
-        |
-        v
-Lead replies? ----YES----> Appears in /inbox
-   |                        You pick: Interested / Not Interested / Callback / etc.
-   |                        Lead moves to that status page
-   NO (after 48h)
-   |
-   v
-Auto-moved to /call-list
-   |
-   v
-You call them, pick outcome:
-   Answered --> Pick status (Interested / Not Interested / Demo / etc.)
-   No Answer --> Stays in call list, try again
-   Busy --> Stays in call list
-   Wrong Number --> Removed
-   Callback --> Moves to /callbacks with scheduled date
-```
+In the lead list on the left panel of `ClosingPage.tsx`, show a relative time badge (e.g. "2h ago", "3d ago") next to each lead based on `last_outbound_at`. Color-code it:
+- Green: < 12 hours
+- Amber: 12-48 hours  
+- Red: > 48 hours (needs follow-up)
 
-## Technical Changes I'll Make
+Sort leads by staleness (oldest last-message first) by default, so leads needing follow-up appear at top (after pinned).
 
-1. **Update `send-campaign-batch`** to call Twilio's REST API instead of inserting mock records
-2. **Create a cron job** (database scheduled task) that calls `check-no-reply` every 30 minutes
-3. **Add the 3 Twilio secrets** (will prompt you to enter them)
+**File:** `src/pages/ClosingPage.tsx`
 
-No new pages or UI changes needed -- everything is already wired up. It's purely a backend connection task.
+---
+
+### 2. SMS template presets on the Closing page
+
+Add a row of quick-send template buttons above the reply input in the Messages tab. Clicking one fills the reply input with the template text (user can edit before sending).
+
+Preset templates:
+- **Nudge**: "Hej {name}! Såg att du var intresserad — har du hunnit fundera? /Simon"
+- **Call offer**: "Hej {name}, vill du att jag ringer upp dig istället? Tar bara 2 min! /Simon"
+- **Booking link**: "Hej {name}! Boka en tid som passar dig här: [LINK] /Simon"
+- **Details ask**: "Toppen! Kan du skicka din logga + ev. önskemål så förbereder jag ett förslag? /Simon"
+
+Templates stored as a constant array. Each template's `{name}` is replaced with the lead's first name before filling.
+
+**File:** `src/pages/ClosingPage.tsx`
+
+---
+
+### 3. Auto-follow-up Edge Function
+
+Create a new Edge Function `auto-followup-interested` that:
+1. Queries leads with `status = 'interested'`, `has_replied = false`, `last_outbound_at` older than a configurable threshold (default 24h from settings key `followup_after_hours`)
+2. Checks they haven't already received a follow-up (no outbound message in the last 24h)
+3. Sends a nudge SMS via the existing `send-sms` pattern (direct Twilio API call)
+4. Logs the message and updates `last_outbound_at`
+5. Caps at 20 per run to avoid spam
+
+Add a settings key `followup_template` for the nudge text, with a sensible default.
+
+Add a toggle + config in `SettingsPage.tsx` to enable/disable auto-follow-up, set the delay hours, and customize the template.
+
+**Files:**
+- `supabase/functions/auto-followup-interested/index.ts` (new)
+- `src/pages/SettingsPage.tsx` (add settings UI)
+
+Schedule via pg_cron to run every 30 minutes.
+
+---
+
+### Technical Details
+
+| Step | What | Where |
+|------|------|-------|
+| Time badges | `formatDistanceToNow(lead.last_outbound_at)` with color thresholds | ClosingPage lead list items |
+| Sorting | Pinned first, then ascending `last_outbound_at` (nulls last) | `filtered` useMemo |
+| Templates | Const array, `{name}` → `lead.name.split(' ')[0]` replacement | Above reply input |
+| Edge function | Twilio direct API, service role key, loops max 20 leads | New function |
+| Cron | `cron.schedule('auto-followup', '*/30 * * * *', ...)` | Via SQL insert |
+| Settings | `followup_enabled`, `followup_after_hours`, `followup_template` | Settings table |
+
