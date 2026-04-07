@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { getSetting, setSetting, updateLead, determineSection } from '@/lib/supabase';
-import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail } from 'lucide-react';
+import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail, Zap } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/lib/supabase';
@@ -105,6 +106,11 @@ export default function SettingsPage() {
   const [finderDefaultLeadsTarget, setFinderDefaultLeadsTarget] = useState('50');
   const [finderDefaultKeywords, setFinderDefaultKeywords] = useState('');
 
+  // Auto follow-up settings
+  const [followupEnabled, setFollowupEnabled] = useState(false);
+  const [followupAfterHours, setFollowupAfterHours] = useState('24');
+  const [followupTemplate, setFollowupTemplate] = useState('Hej {name}! Såg att du var intresserad — har du hunnit fundera? /Simon');
+
   React.useEffect(() => {
     getSetting('gmail_triage_rule').then(v => { if (v) setGmailRule(v); });
     getSetting('default_daily_cap').then(v => { if (v) setDefaultDailyCap(v); });
@@ -115,6 +121,9 @@ export default function SettingsPage() {
     getSetting('finder_default_city').then(v => { if (v) setFinderDefaultCity(v); });
     getSetting('finder_default_leads_target').then(v => { if (v) setFinderDefaultLeadsTarget(v); });
     getSetting('finder_default_keywords').then(v => { if (v) setFinderDefaultKeywords(v); });
+    getSetting('followup_enabled').then(v => { setFollowupEnabled(v === 'true'); });
+    getSetting('followup_after_hours').then(v => { if (v) setFollowupAfterHours(v); });
+    getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
   }, []);
 
   const handleSave = async () => {
@@ -128,6 +137,9 @@ export default function SettingsPage() {
       setSetting('finder_default_city', finderDefaultCity),
       setSetting('finder_default_leads_target', finderDefaultLeadsTarget),
       setSetting('finder_default_keywords', finderDefaultKeywords),
+      setSetting('followup_enabled', followupEnabled ? 'true' : 'false'),
+      setSetting('followup_after_hours', followupAfterHours),
+      setSetting('followup_template', followupTemplate),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -255,6 +267,30 @@ export default function SettingsPage() {
               <label className="text-xs text-muted-foreground mb-1 block">Opt-out Keywords <InfoTip text="Comma-separated words that trigger automatic opt-out when received" /></label>
               <Input value={optOutKeywords} onChange={e => setOptOutKeywords(e.target.value)} className="h-8 text-sm" placeholder="STOP, AVSLUTA, SLUTA" />
             </div>
+          </div>
+
+          {/* Auto Follow-Up */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Zap size={15} /> Auto Follow-Up (Interested Leads)
+              <InfoTip text="Automatically sends a nudge SMS to interested leads who haven't replied within the configured time. Runs every 30 minutes, max 20 per run." />
+            </h2>
+            <div className="flex items-center gap-3 mt-3">
+              <Switch checked={followupEnabled} onCheckedChange={setFollowupEnabled} />
+              <span className="text-sm text-muted-foreground">{followupEnabled ? 'Enabled' : 'Disabled'}</span>
+            </div>
+            {followupEnabled && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Send nudge after (hours)</label>
+                  <Input value={followupAfterHours} onChange={e => setFollowupAfterHours(e.target.value)} className="h-8 text-sm w-32" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Nudge template <span className="text-muted-foreground/60">({'{name}'} = first name)</span></label>
+                  <Textarea value={followupTemplate} onChange={e => setFollowupTemplate(e.target.value)} className="h-20 text-sm resize-none" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Triage info */}
