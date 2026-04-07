@@ -49,7 +49,7 @@ export default function InboxPage() {
       // Query leads that have inbound messages newer than read_at (or read_at is null)
       const { data, error } = await supabase
         .from('leads')
-        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone')
+        .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone, last_outbound_at')
         .not('last_inbound_at', 'is', null);
       if (error) throw error;
       const unread = (data || []).filter(l => {
