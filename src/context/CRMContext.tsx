@@ -19,6 +19,7 @@ interface Counts {
   not_interested: number;
   unsure: number;
   demo: number;
+  making_demo: number;
   closed_won: number;
   closed_lost: number;
 }
