@@ -18,6 +18,7 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
   not_interested: 'bg-red-500/10 text-red-400 border-red-500/20',
   unsure: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   demo: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  making_demo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
   closed_won: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   closed_lost: 'bg-red-900/20 text-red-400/70 border-red-900/30',
 };
@@ -31,6 +32,7 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   not_interested: 'Not Interested',
   unsure: 'Unsure',
   demo: 'Demo',
+  making_demo: 'Making Demo',
   closed_won: 'Closed Won',
   closed_lost: 'Closed Lost',
 };

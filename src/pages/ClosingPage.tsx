@@ -34,7 +34,7 @@ function getTimeBadge(lastOutboundAt: string | null): { text: string; color: str
 const STATUS_LABELS: Record<LeadStatus, string> = {
   not_contacted: 'Not Contacted', contacted: 'Contacted', answered: 'Answered',
   callback: 'Call Back', interested: 'Interested', not_interested: 'Not Interested',
-  unsure: 'Unsure', demo: 'Demo', closed_won: 'Closed Won', closed_lost: 'Closed Lost',
+  unsure: 'Unsure', demo: 'Demo', making_demo: 'Making Demo', closed_won: 'Closed Won', closed_lost: 'Closed Lost',
 };
 
 interface Appointment {
@@ -362,7 +362,7 @@ export default function ClosingPage({ status, title }: ClosingPageProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(['interested', 'unsure', 'demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
+                    {(['interested', 'unsure', 'demo', 'making_demo', 'closed_won', 'closed_lost', 'not_interested', 'callback', 'not_contacted'] as LeadStatus[]).map(s => (
                       <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
                     ))}
                   </SelectContent>

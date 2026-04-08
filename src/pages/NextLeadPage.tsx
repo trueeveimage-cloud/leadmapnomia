@@ -35,6 +35,7 @@ const STATUSES = [
   { key: 'not_interested', label: 'Not Interested', color: 'hsl(0 72% 55%)' },
   { key: 'unsure', label: 'Unsure', color: 'hsl(38 95% 55%)' },
   { key: 'demo', label: '🎨 Demo', color: 'hsl(262 83% 65%)' },
+  { key: 'making_demo', label: '⚡ Making Demo', color: 'hsl(230 80% 60%)' },
 ] as const;
 
 const FOLLOWUP_PRESETS = [

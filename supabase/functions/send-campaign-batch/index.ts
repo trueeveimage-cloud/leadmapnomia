@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
     effectiveLimit = Math.min(effectiveLimit, HARD_MAX_PER_RUN);
 
     // Build base query filters
-    const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'closed_won', 'closed_lost', 'contacted'];
+    const excludedStatuses = ['interested', 'not_interested', 'unsure', 'callback', 'making_demo', 'closed_won', 'closed_lost', 'contacted'];
 
     // Create campaign run
     const { data: run, error: runErr } = await dbClient

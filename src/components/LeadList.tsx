@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 const STATUSES: LeadStatus[] = [
   'not_contacted', 'contacted', 'answered', 'callback', 'interested',
-  'not_interested', 'unsure', 'demo', 'closed_won', 'closed_lost',
+  'not_interested', 'unsure', 'demo', 'making_demo', 'closed_won', 'closed_lost',
 ];
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -22,6 +22,7 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   not_interested: 'Not Interested',
   unsure: 'Unsure',
   demo: 'Demo',
+  making_demo: 'Making Demo',
   closed_won: 'Closed Won',
   closed_lost: 'Closed Lost',
 };

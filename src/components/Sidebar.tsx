@@ -65,7 +65,7 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
 
 const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks', '/quick-send'];
 const TOOLS_PATHS = ['/add', '/bulk', '/finder', '/finder/coverage', '/costs'];
-const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/closed-won', '/status/closed-lost'];
+const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/making-demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
 
 function NavGroup({ label, children, icon, color, paths }: { label: string; children: React.ReactNode; icon: React.ReactNode; color?: string; paths: string[] }) {
@@ -251,6 +251,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <SidebarNavLink item={{ label: 'Not Interested', path: '/status/not-interested', icon: <ThumbsDown size={14} />, badge: counts.not_interested, color: 'hsl(0 72% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Unsure', path: '/status/unsure', icon: <HelpCircle size={14} />, badge: counts.unsure, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Demo', path: '/status/demo', icon: <Target size={14} />, badge: counts.demo, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Making Demo', path: '/status/making-demo', icon: <Zap size={14} />, badge: counts.making_demo, color: 'hsl(230 80% 60%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Closed Won', path: '/status/closed-won', icon: <Trophy size={14} />, badge: counts.closed_won, color: 'hsl(142 69% 55%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Closed Lost', path: '/status/closed-lost', icon: <Skull size={14} />, badge: counts.closed_lost, color: 'hsl(0 50% 40%)' }} onNav={onClose} />
         </NavGroup>

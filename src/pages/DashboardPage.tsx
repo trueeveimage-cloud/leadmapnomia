@@ -231,10 +231,11 @@ export default function DashboardPage() {
   // Funnel data
   const funnelData = [
     { name: "Reachable", value: counts.total - counts.hasWebsite - counts.missing, fill: COLORS.primary },
-    { name: "Contacted", value: counts.contacted + counts.answered + counts.interested + counts.demo + counts.closed_won, fill: COLORS.cyan },
-    { name: "Answered", value: counts.answered + counts.interested + counts.demo + counts.closed_won, fill: COLORS.green },
-    { name: "Interested", value: counts.interested + counts.demo + counts.closed_won, fill: COLORS.amber },
-    { name: "Demo", value: counts.demo + counts.closed_won, fill: COLORS.purple },
+    { name: "Contacted", value: counts.contacted + counts.answered + counts.interested + counts.demo + counts.making_demo + counts.closed_won, fill: COLORS.cyan },
+    { name: "Answered", value: counts.answered + counts.interested + counts.demo + counts.making_demo + counts.closed_won, fill: COLORS.green },
+    { name: "Interested", value: counts.interested + counts.demo + counts.making_demo + counts.closed_won, fill: COLORS.amber },
+    { name: "Demo", value: counts.demo + counts.making_demo + counts.closed_won, fill: COLORS.purple },
+    { name: "Making Demo", value: counts.making_demo + counts.closed_won, fill: COLORS.primary },
     { name: "Won", value: counts.closed_won, fill: COLORS.green },
   ];
 
@@ -262,7 +263,7 @@ export default function DashboardPage() {
     : "0";
 
   const conversionRate = counts.total > 0
-    ? ((counts.interested + counts.demo + counts.closed_won) / counts.total * 100).toFixed(1)
+    ? ((counts.interested + counts.demo + counts.making_demo + counts.closed_won) / counts.total * 100).toFixed(1)
     : "0";
 
   const replyRate = msgStats.sent > 0
@@ -291,7 +292,7 @@ export default function DashboardPage() {
           <StatCard label="Reachable Leads" value={counts.total - counts.hasWebsite - counts.missing} icon={<Users size={18} />} color={COLORS.primary} sub={`${counts.total.toLocaleString()} total`} />
           <StatCard label="SMS Sent" value={msgStats.sent} icon={<MessageSquare size={18} />} color={COLORS.cyan} sub={`${deliveryRate}% delivered`} />
           <StatCard label="Replies" value={msgStats.inbound} icon={<MessageSquare size={18} />} color={COLORS.green} sub={`${replyRate}% reply rate`} />
-          <StatCard label="Conversion" value={`${conversionRate}%`} icon={<Target size={18} />} color={COLORS.green} sub={`${counts.interested + counts.demo + counts.closed_won} interested+`} />
+          <StatCard label="Conversion" value={`${conversionRate}%`} icon={<Target size={18} />} color={COLORS.green} sub={`${counts.interested + counts.demo + counts.making_demo + counts.closed_won} interested+`} />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="Delivered" value={msgStats.delivered} icon={<CheckCircle size={18} />} color={COLORS.green} sub={`${msgStats.undelivered} undelivered`} />

@@ -156,6 +156,7 @@ const App = () => (
                     <Route path="/status/not-interested" element={<ClosingPage status="not_interested" title="Not Interested" />} />
                     <Route path="/status/unsure" element={<ClosingPage status="unsure" title="Unsure" />} />
                     <Route path="/status/demo" element={<ClosingPage status="demo" title="Demo" />} />
+                    <Route path="/status/making-demo" element={<ClosingPage status="making_demo" title="Making Demo" />} />
                     <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
                     <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
                     <Route path="/finder" element={<FinderPage />} />
