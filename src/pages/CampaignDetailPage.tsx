@@ -165,6 +165,8 @@ export default function CampaignDetailPage() {
     if (error) throw error;
   }, [id]);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const handleSendBatch = async () => {
     if (!campaign || !id || sending) return;
     if (selectedCountries.length === 0) {
@@ -186,6 +188,8 @@ export default function CampaignDetailPage() {
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
     try {
       const body: any = { campaignId: id, countries: selectedCountries };
@@ -193,6 +197,10 @@ export default function CampaignDetailPage() {
         body.batchSize = Number(customBatchSize);
       }
       const res = await supabase.functions.invoke('send-campaign-batch', { body });
+      if (controller.signal.aborted) {
+        toast.info('Send cancelled');
+        return;
+      }
       if (res.error) throw res.error;
       const data = res.data as any;
       if (data.error) {
@@ -202,8 +210,20 @@ export default function CampaignDetailPage() {
       }
       setCustomBatchSize('');
       await load();
-    } catch (err: any) { toast.error(err.message || 'Send failed'); }
-    finally { setSending(false); }
+    } catch (err: any) {
+      if (controller.signal.aborted) { toast.info('Send cancelled'); return; }
+      toast.error(err.message || 'Send failed');
+    }
+    finally { setSending(false); abortRef.current = null; }
+  };
+
+  const handleCancelSend = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      setSending(false);
+      abortRef.current = null;
+      toast.info('Send cancelled');
+    }
   };
 
   const handleScheduleBatch = async () => {
