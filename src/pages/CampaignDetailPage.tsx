@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -165,6 +165,8 @@ export default function CampaignDetailPage() {
     if (error) throw error;
   }, [id]);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const handleSendBatch = async () => {
     if (!campaign || !id || sending) return;
     if (selectedCountries.length === 0) {
@@ -186,6 +188,8 @@ export default function CampaignDetailPage() {
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSending(true);
     try {
       const body: any = { campaignId: id, countries: selectedCountries };
@@ -193,6 +197,10 @@ export default function CampaignDetailPage() {
         body.batchSize = Number(customBatchSize);
       }
       const res = await supabase.functions.invoke('send-campaign-batch', { body });
+      if (controller.signal.aborted) {
+        toast.info('Send cancelled');
+        return;
+      }
       if (res.error) throw res.error;
       const data = res.data as any;
       if (data.error) {
@@ -202,8 +210,20 @@ export default function CampaignDetailPage() {
       }
       setCustomBatchSize('');
       await load();
-    } catch (err: any) { toast.error(err.message || 'Send failed'); }
-    finally { setSending(false); }
+    } catch (err: any) {
+      if (controller.signal.aborted) { toast.info('Send cancelled'); return; }
+      toast.error(err.message || 'Send failed');
+    }
+    finally { setSending(false); abortRef.current = null; }
+  };
+
+  const handleCancelSend = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      setSending(false);
+      abortRef.current = null;
+      toast.info('Send cancelled');
+    }
   };
 
   const handleScheduleBatch = async () => {
@@ -436,9 +456,15 @@ export default function CampaignDetailPage() {
                 </p>
               )}
             </div>
-            <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0 || requestExceedsAvailability || sendableNow === 0} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`}
-            </Button>
+            {sending ? (
+              <Button size="sm" variant="destructive" onClick={handleCancelSend} className="gap-1.5">
+                <RotateCcw size={13} className="animate-spin" /> Cancel
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleSendBatch} disabled={selectedCountries.length === 0 || requestExceedsAvailability || sendableNow === 0} className="gap-1.5">
+                <Send size={13} /> Send to {selectedCountries.map(c => countryLabel(c)).join(', ')}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
               <Calendar size={13} /> Schedule
             </Button>
