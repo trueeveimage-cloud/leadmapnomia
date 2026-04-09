@@ -456,9 +456,15 @@ export default function CampaignDetailPage() {
                 </p>
               )}
             </div>
-            <Button size="sm" onClick={handleSendBatch} disabled={sending || selectedCountries.length === 0 || requestExceedsAvailability || sendableNow === 0} className="gap-1.5">
-              <Send size={13} /> {sending ? 'Sending...' : `Send to ${selectedCountries.map(c => countryLabel(c)).join(', ')}`}
-            </Button>
+            {sending ? (
+              <Button size="sm" variant="destructive" onClick={handleCancelSend} className="gap-1.5">
+                <RotateCcw size={13} className="animate-spin" /> Cancel
+              </Button>
+            ) : (
+              <Button size="sm" onClick={handleSendBatch} disabled={selectedCountries.length === 0 || requestExceedsAvailability || sendableNow === 0} className="gap-1.5">
+                <Send size={13} /> Send to {selectedCountries.map(c => countryLabel(c)).join(', ')}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowSchedule(!showSchedule)} className="gap-1.5">
               <Calendar size={13} /> Schedule
             </Button>
