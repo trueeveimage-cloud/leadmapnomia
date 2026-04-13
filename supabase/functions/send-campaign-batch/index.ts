@@ -162,6 +162,10 @@ Deno.serve(async (req) => {
       if (filter.minReviews) query = query.gte('reviews_count', filter.minReviews);
 
       const { data: leads, error: leadErr } = await query;
+
+      // Post-query category filter (categories are compound strings, need ILIKE matching)
+      const categoryFilter: string[] = filter.categories || [];
+
       if (leadErr) throw leadErr;
 
       if (!leads || leads.length < PAGE_SIZE) exhausted = true;
