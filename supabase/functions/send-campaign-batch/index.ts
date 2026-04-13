@@ -174,10 +174,15 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // Filter by target countries
+      // Filter by target countries and categories
       const filteredLeads = leads.filter((lead: any) => {
         const country = detectCountry(lead.address, lead.phone);
-        return targetCountries.includes(country);
+        if (!targetCountries.includes(country)) return false;
+        if (categoryFilter.length > 0) {
+          const cat = (lead.category || '').toLowerCase();
+          if (!categoryFilter.some((c: string) => cat.includes(c.toLowerCase()))) return false;
+        }
+        return true;
       });
 
       stats.matched_country += filteredLeads.length;
