@@ -158,6 +158,7 @@ Deno.serve(async (req) => {
 
       if (filter.sections?.length) query = query.in('section', filter.sections);
       if (filter.hasWebsite === false) query = query.is('website', null);
+      if (filter.hasWebsite === true) query = query.not('website', 'is', null);
       if (filter.minRating) query = query.gte('rating', filter.minRating);
       if (filter.minReviews) query = query.gte('reviews_count', filter.minReviews);
 
