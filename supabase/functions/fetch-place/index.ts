@@ -6,6 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/** Allow only Google Maps / known short-link domains over HTTPS to prevent SSRF. */
+function isAllowedMapsUrl(raw: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(raw); } catch { return false; }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  const allowed = ['google.com', 'goo.gl', 'maps.app.goo.gl', 'g.co'];
+  return allowed.some(h => host === h || host.endsWith('.' + h));
+}
+
 /** Try multiple strategies to resolve a short/redirect URL to a full Google Maps URL */
 async function resolveUrl(url: string): Promise<string> {
   const isShortLink = url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps');
