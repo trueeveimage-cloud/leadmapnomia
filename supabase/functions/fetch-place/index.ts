@@ -308,6 +308,11 @@ serve(async (req) => {
 
     // Strip any extra text after the URL (spaces, notes, etc.)
     const url = rawUrl.trim().split(/\s+/)[0];
+    if (!isAllowedMapsUrl(url)) {
+      return new Response(JSON.stringify({ error: 'Invalid URL. Only Google Maps URLs are allowed.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     console.log('Input URL:', url.substring(0, 150));
 
     const resolvedUrl = await resolveUrl(url);
