@@ -186,7 +186,7 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
             {attachments.map(att => (
               <div key={att.id} className="flex items-center gap-2 text-xs bg-muted rounded px-2 py-1.5 group">
                 <Paperclip size={10} className="text-muted-foreground shrink-0" />
-                <a href={att.file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1">{att.file_name}</a>
+                <button onClick={() => openAttachment(att)} className="text-primary hover:underline truncate flex-1 text-left">{att.file_name}</button>
                 {att.file_size && <span className="text-muted-foreground shrink-0">{(att.file_size / 1024).toFixed(0)}KB</span>}
                 <button onClick={() => deleteAttachment(att)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
                   <Trash2 size={10} />
