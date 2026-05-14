@@ -81,11 +81,11 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
       const path = `${lead.id}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage.from('lead-attachments').upload(path, file);
       if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
-      const { data: urlData } = supabase.storage.from('lead-attachments').getPublicUrl(path);
+      // Store the storage path (not a public URL); we generate signed URLs on demand.
       await supabase.from('lead_attachments').insert({
         lead_id: lead.id,
         file_name: file.name,
-        file_url: urlData.publicUrl,
+        file_url: path,
         file_type: file.type,
         file_size: file.size,
       });
