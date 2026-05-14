@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateTwilioSignature, paramsFromBody } from "../_shared/twilio-signature.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-twilio-signature',
 };
 
 Deno.serve(async (req) => {
@@ -16,24 +17,23 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    let from = '', to = '', body = '', messageSid = '';
-
     const contentType = req.headers.get('content-type') || '';
     const rawBody = await req.text();
+    const params = paramsFromBody(rawBody, contentType);
 
-    if (contentType.includes('json') && rawBody.startsWith('{')) {
-      const json = JSON.parse(rawBody);
-      from = json.From || json.from || '';
-      to = json.To || json.to || '';
-      body = json.Body || json.body || '';
-      messageSid = json.MessageSid || json.messageSid || '';
-    } else {
-      const params = new URLSearchParams(rawBody);
-      from = params.get('From') || '';
-      to = params.get('To') || '';
-      body = params.get('Body') || '';
-      messageSid = params.get('MessageSid') || '';
+    // Verify Twilio signature to prevent forged webhooks
+    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN') || '';
+    const signature = req.headers.get('x-twilio-signature');
+    const valid = await validateTwilioSignature(signature, req.url, params, authToken);
+    if (!valid) {
+      console.warn('Invalid Twilio signature on inbound webhook');
+      return new Response('Forbidden', { status: 403, headers: corsHeaders });
     }
+
+    const from = params.From || params.from || '';
+    const to = params.To || params.to || '';
+    const body = params.Body || params.body || '';
+    const messageSid = params.MessageSid || params.messageSid || '';
 
     if (!from || !body) {
       return new Response(JSON.stringify({ error: 'Missing From or Body' }), { status: 400, headers: corsHeaders });

@@ -81,11 +81,11 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
       const path = `${lead.id}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage.from('lead-attachments').upload(path, file);
       if (error) { toast.error(`Upload failed: ${file.name}`); continue; }
-      const { data: urlData } = supabase.storage.from('lead-attachments').getPublicUrl(path);
+      // Store the storage path (not a public URL); we generate signed URLs on demand.
       await supabase.from('lead_attachments').insert({
         lead_id: lead.id,
         file_name: file.name,
-        file_url: urlData.publicUrl,
+        file_url: path,
         file_type: file.type,
         file_size: file.size,
       });
@@ -102,13 +102,31 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
   };
 
   const deleteAttachment = async (att: Attachment) => {
-    // Extract path from URL
-    const urlParts = att.file_url.split('/lead-attachments/');
-    if (urlParts[1]) {
-      await supabase.storage.from('lead-attachments').remove([decodeURIComponent(urlParts[1])]);
+    // file_url may be a storage path (new) or a legacy public URL — handle both
+    let path = att.file_url;
+    if (path.includes('/lead-attachments/')) {
+      path = decodeURIComponent(path.split('/lead-attachments/')[1] || '');
+    }
+    if (path) {
+      await supabase.storage.from('lead-attachments').remove([path]);
     }
     await supabase.from('lead_attachments').delete().eq('id', att.id);
     loadAttachments();
+  };
+
+  const openAttachment = async (att: Attachment) => {
+    let path = att.file_url;
+    if (path.includes('/lead-attachments/')) {
+      path = decodeURIComponent(path.split('/lead-attachments/')[1] || '');
+    }
+    const { data, error } = await supabase.storage
+      .from('lead-attachments')
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error('Could not open file');
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const addLink = async () => {
@@ -168,7 +186,7 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
             {attachments.map(att => (
               <div key={att.id} className="flex items-center gap-2 text-xs bg-muted rounded px-2 py-1.5 group">
                 <Paperclip size={10} className="text-muted-foreground shrink-0" />
-                <a href={att.file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1">{att.file_name}</a>
+                <button onClick={() => openAttachment(att)} className="text-primary hover:underline truncate flex-1 text-left">{att.file_name}</button>
                 {att.file_size && <span className="text-muted-foreground shrink-0">{(att.file_size / 1024).toFixed(0)}KB</span>}
                 <button onClick={() => deleteAttachment(att)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity">
                   <Trash2 size={10} />

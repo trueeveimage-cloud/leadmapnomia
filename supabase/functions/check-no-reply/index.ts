@@ -13,6 +13,17 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Require the service-role key (pg_cron uses it) or a CRON_SECRET to invoke.
+    const authHeader = req.headers.get('authorization') || '';
+    const provided = authHeader.replace(/^Bearer\s+/i, '');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const cronSecret = Deno.env.get('CRON_SECRET') || '';
+    if (!provided || (provided !== serviceKey && (!cronSecret || provided !== cronSecret))) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
