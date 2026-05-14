@@ -102,13 +102,31 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
   };
 
   const deleteAttachment = async (att: Attachment) => {
-    // Extract path from URL
-    const urlParts = att.file_url.split('/lead-attachments/');
-    if (urlParts[1]) {
-      await supabase.storage.from('lead-attachments').remove([decodeURIComponent(urlParts[1])]);
+    // file_url may be a storage path (new) or a legacy public URL — handle both
+    let path = att.file_url;
+    if (path.includes('/lead-attachments/')) {
+      path = decodeURIComponent(path.split('/lead-attachments/')[1] || '');
+    }
+    if (path) {
+      await supabase.storage.from('lead-attachments').remove([path]);
     }
     await supabase.from('lead_attachments').delete().eq('id', att.id);
     loadAttachments();
+  };
+
+  const openAttachment = async (att: Attachment) => {
+    let path = att.file_url;
+    if (path.includes('/lead-attachments/')) {
+      path = decodeURIComponent(path.split('/lead-attachments/')[1] || '');
+    }
+    const { data, error } = await supabase.storage
+      .from('lead-attachments')
+      .createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error('Could not open file');
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const addLink = async () => {
