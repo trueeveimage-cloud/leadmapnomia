@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateTwilioSignature, paramsFromBody } from "../_shared/twilio-signature.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-twilio-signature',
 };
 
 Deno.serve(async (req) => {
@@ -16,23 +17,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    let messageSid = '', messageStatus = '', numSegments: number | null = null;
-
     const contentType = req.headers.get('content-type') || '';
     const rawBody = await req.text();
+    const params = paramsFromBody(rawBody, contentType);
 
-    if (contentType.includes('json') && rawBody.startsWith('{')) {
-      const json = JSON.parse(rawBody);
-      messageSid = json.MessageSid || json.messageSid || '';
-      messageStatus = json.MessageStatus || json.messageStatus || '';
-      if (json.NumSegments) numSegments = parseInt(json.NumSegments, 10);
-    } else {
-      const params = new URLSearchParams(rawBody);
-      messageSid = params.get('MessageSid') || '';
-      messageStatus = params.get('MessageStatus') || '';
-      const seg = params.get('NumSegments');
-      if (seg) numSegments = parseInt(seg, 10);
+    // Verify Twilio signature to prevent forged status callbacks
+    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN') || '';
+    const signature = req.headers.get('x-twilio-signature');
+    const valid = await validateTwilioSignature(signature, req.url, params, authToken);
+    if (!valid) {
+      console.warn('Invalid Twilio signature on status webhook');
+      return new Response('Forbidden', { status: 403, headers: corsHeaders });
     }
+
+    const messageSid = params.MessageSid || params.messageSid || '';
+    const messageStatus = params.MessageStatus || params.messageStatus || '';
+    const numSegments: number | null = params.NumSegments ? parseInt(params.NumSegments, 10) : null;
 
     if (!messageSid || !messageStatus) {
       return new Response(JSON.stringify({ error: 'Missing MessageSid or MessageStatus' }), {
