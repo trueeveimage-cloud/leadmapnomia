@@ -56,6 +56,30 @@ interface LeadRowProps {
 export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSelect }: LeadRowProps) {
   const { refreshCounts } = useCRM();
   const [demoOpen, setDemoOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const handleSaveEmail = async () => {
+    const value = emailInput.trim();
+    if (!value) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      toast.error('Invalid email address');
+      return;
+    }
+    setSavingEmail(true);
+    try {
+      const newSection = determineSection({ ...lead, email: value });
+      const updated = await updateLead(lead.id, { email: value, section: newSection });
+      onUpdate(updated);
+      refreshCounts();
+      setEmailInput('');
+      toast.success('Email saved');
+    } catch {
+      toast.error('Failed to save email');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const handleTriage = async (section: LeadSection) => {
     try {
