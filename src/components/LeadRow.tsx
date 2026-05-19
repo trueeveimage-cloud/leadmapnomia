@@ -199,6 +199,32 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
           </div>
         )}
 
+        {showTriage && !lead.email && (
+          <form
+            onSubmit={e => { e.preventDefault(); handleSaveEmail(); }}
+            className="flex items-center gap-1.5 mt-2"
+          >
+            <Mail size={11} className="text-blue-400/70 shrink-0" />
+            <input
+              type="email"
+              value={emailInput}
+              onChange={e => setEmailInput(e.target.value)}
+              placeholder="Add email manually..."
+              maxLength={255}
+              className="h-6 text-xs px-2 rounded border border-border/50 bg-background focus:outline-none focus:border-primary/50 w-56"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              disabled={savingEmail || !emailInput.trim()}
+            >
+              {savingEmail ? 'Saving...' : 'Save'}
+            </Button>
+          </form>
+        )}
+
         {lead.status === 'demo' && <DemoBriefSummary notes={lead.notes} />}
 
         {lead.notes && lead.status !== 'demo' && (
