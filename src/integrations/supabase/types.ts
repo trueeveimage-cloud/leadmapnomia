@@ -448,6 +448,7 @@ export type Database = {
       leads: {
         Row: {
           address: string | null
+          best_contact_method: string | null
           call_after_at: string | null
           call_attempts: number
           call_outcome_last: string | null
@@ -455,9 +456,19 @@ export type Database = {
           caller_name: string | null
           category: string | null
           created_at: string
+          detected_niche: string | null
           email: string | null
+          email_source: string | null
+          estimated_value: string | null
+          facebook_url: string | null
+          follow_up_at: string | null
+          has_booking: boolean | null
+          has_contact_form: boolean | null
+          has_emergency: boolean | null
+          has_receptionist: boolean | null
           has_replied: boolean
           id: string
+          instagram_url: string | null
           last_contact_method: string | null
           last_contacted_at: string | null
           last_inbound_at: string | null
@@ -465,18 +476,21 @@ export type Database = {
           last_message_preview: string | null
           last_message_status: string | null
           last_outbound_at: string | null
+          lead_tier: string | null
           maps_url: string | null
           name: string
           needs_call: boolean
           next_action_at: string | null
           niche_label: string | null
           notes: string | null
+          opening_hours: string | null
           outreach_opt_out: boolean
           outreach_stage: string
           phone: string | null
           phone_e164: string | null
           pinned: boolean
           place_id: string | null
+          potential_score: number | null
           rating: number | null
           read_at: string | null
           reviews_count: number | null
@@ -485,9 +499,12 @@ export type Database = {
           tags: string[] | null
           updated_at: string
           website: string | null
+          website_quality: string | null
+          why_good_lead: string | null
         }
         Insert: {
           address?: string | null
+          best_contact_method?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
@@ -495,9 +512,19 @@ export type Database = {
           caller_name?: string | null
           category?: string | null
           created_at?: string
+          detected_niche?: string | null
           email?: string | null
+          email_source?: string | null
+          estimated_value?: string | null
+          facebook_url?: string | null
+          follow_up_at?: string | null
+          has_booking?: boolean | null
+          has_contact_form?: boolean | null
+          has_emergency?: boolean | null
+          has_receptionist?: boolean | null
           has_replied?: boolean
           id?: string
+          instagram_url?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
           last_inbound_at?: string | null
@@ -505,18 +532,21 @@ export type Database = {
           last_message_preview?: string | null
           last_message_status?: string | null
           last_outbound_at?: string | null
+          lead_tier?: string | null
           maps_url?: string | null
           name: string
           needs_call?: boolean
           next_action_at?: string | null
           niche_label?: string | null
           notes?: string | null
+          opening_hours?: string | null
           outreach_opt_out?: boolean
           outreach_stage?: string
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
           place_id?: string | null
+          potential_score?: number | null
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
@@ -525,9 +555,12 @@ export type Database = {
           tags?: string[] | null
           updated_at?: string
           website?: string | null
+          website_quality?: string | null
+          why_good_lead?: string | null
         }
         Update: {
           address?: string | null
+          best_contact_method?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
@@ -535,9 +568,19 @@ export type Database = {
           caller_name?: string | null
           category?: string | null
           created_at?: string
+          detected_niche?: string | null
           email?: string | null
+          email_source?: string | null
+          estimated_value?: string | null
+          facebook_url?: string | null
+          follow_up_at?: string | null
+          has_booking?: boolean | null
+          has_contact_form?: boolean | null
+          has_emergency?: boolean | null
+          has_receptionist?: boolean | null
           has_replied?: boolean
           id?: string
+          instagram_url?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
           last_inbound_at?: string | null
@@ -545,18 +588,21 @@ export type Database = {
           last_message_preview?: string | null
           last_message_status?: string | null
           last_outbound_at?: string | null
+          lead_tier?: string | null
           maps_url?: string | null
           name?: string
           needs_call?: boolean
           next_action_at?: string | null
           niche_label?: string | null
           notes?: string | null
+          opening_hours?: string | null
           outreach_opt_out?: boolean
           outreach_stage?: string
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
           place_id?: string | null
+          potential_score?: number | null
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
@@ -565,6 +611,8 @@ export type Database = {
           tags?: string[] | null
           updated_at?: string
           website?: string | null
+          website_quality?: string | null
+          why_good_lead?: string | null
         }
         Relationships: [
           {

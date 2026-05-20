@@ -1,0 +1,98 @@
+import React, { useState } from 'react';
+import { toast } from 'sonner';
+import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { updateLead, logActivity, type Lead } from '@/lib/supabase';
+import { generateOutreachMessage } from '@/lib/leadScoring';
+
+interface Props {
+  lead: Lead;
+  onUpdated?: () => void;
+}
+
+function copy(value: string, label: string) {
+  navigator.clipboard.writeText(value).then(() => toast.success(`${label} copied`));
+}
+
+export default function LeadQuickActions({ lead, onUpdated }: Props) {
+  const [busy, setBusy] = useState(false);
+
+  const markContacted = async () => {
+    setBusy(true);
+    try {
+      await updateLead(lead.id, { status: 'contacted', last_contacted_at: new Date().toISOString() });
+      await logActivity(lead.id, 'status_change', { to: 'contacted', from: lead.status });
+      toast.success('Marked as contacted');
+      onUpdated?.();
+    } finally { setBusy(false); }
+  };
+
+  const setFollowUp = async () => {
+    const days = window.prompt('Follow up in how many days?', '3');
+    if (!days) return;
+    const d = parseInt(days, 10);
+    if (Number.isNaN(d)) return;
+    const when = new Date(Date.now() + d * 86_400_000).toISOString();
+    await updateLead(lead.id, { follow_up_at: when, status: 'follow_up' });
+    await logActivity(lead.id, 'follow_up_set', { when });
+    toast.success(`Follow-up set for ${new Date(when).toLocaleDateString()}`);
+    onUpdated?.();
+  };
+
+  const addNote = async () => {
+    const note = window.prompt('Add a note', lead.notes || '');
+    if (note === null) return;
+    await updateLead(lead.id, { notes: note });
+    await logActivity(lead.id, 'note_added', { note });
+    toast.success('Note saved');
+    onUpdated?.();
+  };
+
+  const outreach = generateOutreachMessage(lead);
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {lead.website && (
+        <Button size="sm" variant="outline" asChild>
+          <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noreferrer">
+            <Globe className="h-3.5 w-3.5 mr-1" /> Website
+          </a>
+        </Button>
+      )}
+      {lead.maps_url && (
+        <Button size="sm" variant="outline" asChild>
+          <a href={lead.maps_url} target="_blank" rel="noreferrer">
+            <MapPin className="h-3.5 w-3.5 mr-1" /> Maps
+          </a>
+        </Button>
+      )}
+      {lead.phone && (
+        <>
+          <Button size="sm" variant="outline" asChild>
+            <a href={`tel:${lead.phone_e164 || lead.phone}`}><Phone className="h-3.5 w-3.5 mr-1" /> Call</a>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => copy(lead.phone!, 'Phone')}>
+            <Copy className="h-3.5 w-3.5 mr-1" /> Phone
+          </Button>
+        </>
+      )}
+      {lead.email && (
+        <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
+          <Mail className="h-3.5 w-3.5 mr-1" /> Email
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" onClick={() => copy(outreach, 'Outreach message')}>
+        <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
+      </Button>
+      <Button size="sm" variant="secondary" onClick={markContacted} disabled={busy}>
+        <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Contacted
+      </Button>
+      <Button size="sm" variant="ghost" onClick={setFollowUp}>
+        <Bell className="h-3.5 w-3.5 mr-1" /> Follow-up
+      </Button>
+      <Button size="sm" variant="ghost" onClick={addNote}>
+        <StickyNote className="h-3.5 w-3.5 mr-1" /> Note
+      </Button>
+    </div>
+  );
+}

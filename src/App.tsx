@@ -29,6 +29,7 @@ import GuidePage from "./pages/GuidePage";
 import CampaignStatsPage from "./pages/CampaignStatsPage";
 import DashboardPage from "./pages/DashboardPage";
 import QuickSendPage from "./pages/QuickSendPage";
+import HotLeadsPage from "./pages/HotLeadsPage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -138,6 +139,7 @@ const App = () => (
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/hot-leads" element={<HotLeadsPage />} />
                     <Route path="/add" element={<AddPage />} />
                     <Route path="/bulk" element={<BulkPage />} />
                     <Route path="/unsorted" element={<SectionPage allSections title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />

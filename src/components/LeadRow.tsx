@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
-const STATUS_COLORS: Record<LeadStatus, string> = {
+const STATUS_COLORS: Partial<Record<LeadStatus, string>> = {
   not_contacted: 'bg-muted/50 text-muted-foreground border-muted',
   contacted: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   answered: 'bg-green-500/10 text-green-400 border-green-500/20',
@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
   closed_lost: 'bg-red-900/20 text-red-400/70 border-red-900/30',
 };
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+const STATUS_LABELS: Partial<Record<LeadStatus, string>> = {
   not_contacted: 'Not Contacted',
   contacted: 'Contacted',
   answered: 'Answered',

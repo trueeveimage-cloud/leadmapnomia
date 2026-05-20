@@ -13,7 +13,7 @@ const STATUSES: LeadStatus[] = [
   'not_interested', 'unsure', 'demo', 'making_demo', 'closed_won', 'closed_lost',
 ];
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+const STATUS_LABELS: Partial<Record<LeadStatus, string>> = {
   not_contacted: 'Not Contacted',
   contacted: 'Contacted',
   answered: 'Answered',

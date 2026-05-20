@@ -7,7 +7,7 @@ import {
   Settings, BarChart2, Users, ChevronDown, Search, Calculator,
   Megaphone, MessageCircle, PhoneCall, LogOut, MapPin,
   ArrowRight, BookOpen, AlertCircle, X, Globe,
-  ThumbsUp, ThumbsDown, HelpCircle, Target, Trophy, Skull, Bell
+  ThumbsUp, ThumbsDown, HelpCircle, Target, Trophy, Skull, Bell, Flame
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -197,6 +197,22 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           </div>
           <span>Next Lead</span>
           <span className="ml-auto text-[10px] text-primary/50 font-mono">N</span>
+        </Link>
+
+        <Link
+          to="/hot-leads"
+          onClick={onClose}
+          className={cn(
+            "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 border group",
+            pathname === '/hot-leads'
+              ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+              : "bg-gradient-to-r from-rose-500/10 to-orange-500/5 text-rose-400 border-rose-500/20 hover:from-rose-500/20 hover:to-orange-500/10 hover:border-rose-500/40 hover:shadow-lg hover:shadow-rose-500/10"
+          )}
+        >
+          <div className="w-6 h-6 rounded-md bg-rose-500/20 flex items-center justify-center transition-transform duration-200 group-hover:scale-110">
+            <Flame size={13} />
+          </div>
+          <span>Hot Leads</span>
         </Link>
 
         <Link
