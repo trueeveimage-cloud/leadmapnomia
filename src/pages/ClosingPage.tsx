@@ -31,7 +31,7 @@ function getTimeBadge(lastOutboundAt: string | null): { text: string; color: str
   return { text, color: 'text-red-400 bg-red-400/10' };
 }
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+const STATUS_LABELS: Partial<Record<LeadStatus, string>> = {
   not_contacted: 'Not Contacted', contacted: 'Contacted', answered: 'Answered',
   callback: 'Call Back', interested: 'Interested', not_interested: 'Not Interested',
   unsure: 'Unsure', demo: 'Demo', making_demo: 'Making Demo', closed_won: 'Closed Won', closed_lost: 'Closed Lost',
