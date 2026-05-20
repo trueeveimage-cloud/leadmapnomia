@@ -66,6 +66,23 @@ export interface Lead {
   call_attempts: number;
   last_contacted_at: string | null;
   last_contact_method: string | null;
+  // AI receptionist scoring
+  potential_score?: number | null;
+  lead_tier?: LeadTier | null;
+  estimated_value?: string | null;
+  website_quality?: string | null;
+  has_booking?: boolean | null;
+  has_emergency?: boolean | null;
+  has_receptionist?: boolean | null;
+  has_contact_form?: boolean | null;
+  best_contact_method?: string | null;
+  why_good_lead?: string | null;
+  email_source?: string | null;
+  instagram_url?: string | null;
+  facebook_url?: string | null;
+  opening_hours?: string | null;
+  follow_up_at?: string | null;
+  detected_niche?: string | null;
 }
 
 export interface Activity {
