@@ -17,6 +17,30 @@ function copy(value: string, label: string) {
 
 export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const [busy, setBusy] = useState(false);
+  const [findingEmail, setFindingEmail] = useState(false);
+
+  const findEmail = async () => {
+    if (!lead.website) { toast.error('No website to scrape'); return; }
+    setFindingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-emails', {
+        body: { urls: [{ leadId: lead.id, website: lead.website }] },
+      });
+      if (error) throw error;
+      const r = data?.results?.[0];
+      const email = r?.email || r?.emails?.[0];
+      if (email) {
+        await updateLead(lead.id, { email, email_source: r.source || 'homepage' });
+        await logActivity(lead.id, 'email_found', { email, source: r.source });
+        toast.success(`Found ${email}`);
+        onUpdated?.();
+      } else {
+        toast.info('No email found on website');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Scrape failed');
+    } finally { setFindingEmail(false); }
+  };
 
   const markContacted = async () => {
     setBusy(true);
