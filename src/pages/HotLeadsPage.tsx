@@ -150,6 +150,38 @@ export default function HotLeadsPage() {
       toast.error(e?.message || 'Rescore failed');
     } finally { setRescoring(false); }
   };
+  const scrapeFilteredEmails = async () => {
+    const targets = filtered
+      .map((s) => s.lead)
+      .filter((l) => l.website && !l.email);
+    if (targets.length === 0) {
+      toast.info('No filtered leads need email scraping');
+      return;
+    }
+    setScraping(true);
+    setScrapeProgress({ done: 0, total: targets.length, found: 0 });
+    let found = 0;
+    try {
+      for (let i = 0; i < targets.length; i += 5) {
+        const batch = targets.slice(i, i + 5).map((l) => ({ leadId: l.id, website: l.website! }));
+        try {
+          const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
+          if (data?.success && data.results) {
+            for (const r of data.results) {
+              const email = r.email || r.emails?.[0];
+              if (email) {
+                await supabase.from('leads').update({ email, email_source: r.source || 'homepage' } as any).eq('id', r.leadId);
+                found++;
+              }
+            }
+          }
+        } catch (e) { console.error('scrape batch', e); }
+        setScrapeProgress({ done: Math.min(i + 5, targets.length), total: targets.length, found });
+      }
+      toast.success(`Found emails for ${found} / ${targets.length} leads`);
+      await load();
+    } finally { setScraping(false); }
+  };
 
   const tiers: { key: 'all' | LeadTier; label: string }[] = [
     { key: 'all', label: 'All tiers' },
