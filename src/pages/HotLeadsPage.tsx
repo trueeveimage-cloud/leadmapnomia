@@ -202,10 +202,16 @@ export default function HotLeadsPage() {
               </h1>
               <p className="text-sm text-muted-foreground">Highest-potential AI receptionist prospects, sorted by score.</p>
             </div>
-            <Button onClick={rescoreAll} disabled={rescoring || loading} variant="outline">
-              {rescoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-1.5" />}
-              Recompute scores
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={scrapeFilteredEmails} disabled={scraping || loading} variant="outline">
+                {scraping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Search className="h-4 w-4 mr-1.5" />}
+                {scraping ? `Finding emails… ${scrapeProgress.found}/${scrapeProgress.done} of ${scrapeProgress.total}` : 'Find emails (filtered)'}
+              </Button>
+              <Button onClick={rescoreAll} disabled={rescoring || loading} variant="outline">
+                {rescoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-1.5" />}
+                Recompute scores
+              </Button>
+            </div>
           </div>
 
           <Card className="p-3 space-y-3">
