@@ -101,11 +101,16 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
           </Button>
         </>
       )}
-      {lead.email && (
+      {lead.email ? (
         <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
           <Mail className="h-3.5 w-3.5 mr-1" /> Email
         </Button>
-      )}
+      ) : lead.website ? (
+        <Button size="sm" variant="outline" onClick={findEmail} disabled={findingEmail}>
+          {findingEmail ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Search className="h-3.5 w-3.5 mr-1" />}
+          Find email
+        </Button>
+      ) : null}
       <Button size="sm" variant="ghost" onClick={() => copy(outreach, 'Outreach message')}>
         <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
       </Button>
