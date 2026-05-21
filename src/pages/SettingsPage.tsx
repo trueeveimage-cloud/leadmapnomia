@@ -66,12 +66,12 @@ export default function SettingsPage() {
           const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
           if (data?.success && data.results) {
             for (const r of data.results) {
-              if (r.emails && r.emails.length > 0) {
-                const email = r.emails[0];
+              if (r.email || (r.emails && r.emails.length > 0)) {
+                const email = r.email || r.emails[0];
                 const lead = allLeads.find((l: any) => l.id === r.leadId);
                 if (lead) {
                   const newSection = determineSection({ phone: lead.phone, email });
-                  await updateLead(r.leadId, { email, section: newSection });
+                  await updateLead(r.leadId, { email, email_source: r.source || 'homepage', section: newSection });
                   totalFound++;
                 }
               }

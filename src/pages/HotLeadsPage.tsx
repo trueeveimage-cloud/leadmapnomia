@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchLeads, updateLead, type Lead, type LeadTier } from '@/lib/supabase';
 import { calculateScore, detectNiche, generateWhyGoodLead, NICHE_PROFILES, type NicheKey } from '@/lib/leadScoring';
@@ -41,6 +41,8 @@ export default function HotLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [rescoring, setRescoring] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState({ done: 0, total: 0, found: 0 });
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<'all' | LeadTier>('all');
   const [niche, setNiche] = useState<'all' | NicheKey>('all');
@@ -148,6 +150,38 @@ export default function HotLeadsPage() {
       toast.error(e?.message || 'Rescore failed');
     } finally { setRescoring(false); }
   };
+  const scrapeFilteredEmails = async () => {
+    const targets = filtered
+      .map((s) => s.lead)
+      .filter((l) => l.website && !l.email);
+    if (targets.length === 0) {
+      toast.info('No filtered leads need email scraping');
+      return;
+    }
+    setScraping(true);
+    setScrapeProgress({ done: 0, total: targets.length, found: 0 });
+    let found = 0;
+    try {
+      for (let i = 0; i < targets.length; i += 5) {
+        const batch = targets.slice(i, i + 5).map((l) => ({ leadId: l.id, website: l.website! }));
+        try {
+          const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
+          if (data?.success && data.results) {
+            for (const r of data.results) {
+              const email = r.email || r.emails?.[0];
+              if (email) {
+                await supabase.from('leads').update({ email, email_source: r.source || 'homepage' } as any).eq('id', r.leadId);
+                found++;
+              }
+            }
+          }
+        } catch (e) { console.error('scrape batch', e); }
+        setScrapeProgress({ done: Math.min(i + 5, targets.length), total: targets.length, found });
+      }
+      toast.success(`Found emails for ${found} / ${targets.length} leads`);
+      await load();
+    } finally { setScraping(false); }
+  };
 
   const tiers: { key: 'all' | LeadTier; label: string }[] = [
     { key: 'all', label: 'All tiers' },
@@ -168,10 +202,16 @@ export default function HotLeadsPage() {
               </h1>
               <p className="text-sm text-muted-foreground">Highest-potential AI receptionist prospects, sorted by score.</p>
             </div>
-            <Button onClick={rescoreAll} disabled={rescoring || loading} variant="outline">
-              {rescoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-1.5" />}
-              Recompute scores
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={scrapeFilteredEmails} disabled={scraping || loading} variant="outline">
+                {scraping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Search className="h-4 w-4 mr-1.5" />}
+                {scraping ? `Finding emails… ${scrapeProgress.found}/${scrapeProgress.done} of ${scrapeProgress.total}` : 'Find emails (filtered)'}
+              </Button>
+              <Button onClick={rescoreAll} disabled={rescoring || loading} variant="outline">
+                {rescoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCcw className="h-4 w-4 mr-1.5" />}
+                Recompute scores
+              </Button>
+            </div>
           </div>
 
           <Card className="p-3 space-y-3">

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote } from 'lucide-react';
+import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 import { updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
 
@@ -16,6 +17,30 @@ function copy(value: string, label: string) {
 
 export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const [busy, setBusy] = useState(false);
+  const [findingEmail, setFindingEmail] = useState(false);
+
+  const findEmail = async () => {
+    if (!lead.website) { toast.error('No website to scrape'); return; }
+    setFindingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-emails', {
+        body: { urls: [{ leadId: lead.id, website: lead.website }] },
+      });
+      if (error) throw error;
+      const r = data?.results?.[0];
+      const email = r?.email || r?.emails?.[0];
+      if (email) {
+        await updateLead(lead.id, { email, email_source: r.source || 'homepage' });
+        await logActivity(lead.id, 'email_found', { email, source: r.source });
+        toast.success(`Found ${email}`);
+        onUpdated?.();
+      } else {
+        toast.info('No email found on website');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Scrape failed');
+    } finally { setFindingEmail(false); }
+  };
 
   const markContacted = async () => {
     setBusy(true);
@@ -76,11 +101,16 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
           </Button>
         </>
       )}
-      {lead.email && (
+      {lead.email ? (
         <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
           <Mail className="h-3.5 w-3.5 mr-1" /> Email
         </Button>
-      )}
+      ) : lead.website ? (
+        <Button size="sm" variant="outline" onClick={findEmail} disabled={findingEmail}>
+          {findingEmail ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Search className="h-3.5 w-3.5 mr-1" />}
+          Find email
+        </Button>
+      ) : null}
       <Button size="sm" variant="ghost" onClick={() => copy(outreach, 'Outreach message')}>
         <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
       </Button>
