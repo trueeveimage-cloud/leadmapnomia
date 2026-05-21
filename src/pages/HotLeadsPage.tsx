@@ -41,6 +41,8 @@ export default function HotLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [rescoring, setRescoring] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState({ done: 0, total: 0, found: 0 });
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<'all' | LeadTier>('all');
   const [niche, setNiche] = useState<'all' | NicheKey>('all');
