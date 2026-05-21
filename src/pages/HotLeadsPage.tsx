@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchLeads, updateLead, type Lead, type LeadTier } from '@/lib/supabase';
 import { calculateScore, detectNiche, generateWhyGoodLead, NICHE_PROFILES, type NicheKey } from '@/lib/leadScoring';
