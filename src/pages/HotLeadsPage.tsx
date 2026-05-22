@@ -135,7 +135,7 @@ export default function HotLeadsPage() {
       case 'not_contacted': arr.sort((a, b) => Number(a.lead.status !== 'not_contacted') - Number(b.lead.status !== 'not_contacted') || b.score - a.score); break;
     }
     return arr;
-  }, [scored, search, city, tier, niche, minScore, minReviews, requirePhone, requireEmail, excludeOptOut, excludeContacted, sort]);
+  }, [scored, search, city, tier, niche, minScore, minReviews, requirePhone, requireEmail, excludeOptOut, excludeContacted, sort, viewMode]);
 
   const rescoreAll = async () => {
     setRescoring(true);
