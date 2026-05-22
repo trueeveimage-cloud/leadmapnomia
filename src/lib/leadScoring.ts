@@ -7,7 +7,9 @@ export type NicheKey =
   | 'car_dealer' | 'car_detailer'
   | 'low_value' | 'unknown';
 
-export type LeadTier = 'A+' | 'A' | 'B' | 'C';
+export type LeadTier = 'S' | 'A+' | 'A' | 'B' | 'C';
+
+const HIGH_VALUE_NICHES: NicheKey[] = ['cosmetic','dental','healthcare','law','plumber','electrician','locksmith','roofer','water_damage','real_estate','construction','car_dealer','car_detailer'];
 
 interface NicheProfile {
   label: string;
@@ -117,19 +119,29 @@ export function calculateScore(lead: Lead): ScoreResult {
 
   score = Math.max(0, Math.min(100, score));
 
-  const tier: LeadTier =
-    score >= 85 ? 'A+' :
-    score >= 70 ? 'A'  :
-    score >= 50 ? 'B'  : 'C';
+  const isHighValueNiche = HIGH_VALUE_NICHES.includes(niche);
+  let tier: LeadTier;
+  if (isHighValueNiche && score >= 88 && hasPhone && hasEmail && reviews >= 30 && rating >= 4.2 && profile.estValue === 'High') {
+    tier = 'S';
+  } else if (isHighValueNiche && score >= 80) {
+    tier = 'A+';
+  } else if (score >= 65) {
+    tier = 'A';
+  } else if (score >= 45) {
+    tier = 'B';
+  } else {
+    tier = 'C';
+  }
 
   const badges: string[] = [];
+  if (tier === 'S') badges.push('S Tier');
   if (tier === 'A+') badges.push('A+ Hot Lead');
   if (profile.estValue === 'High' && profile.highValue) badges.push('High Ticket');
   if (hasEmergency) badges.push('Urgent Call');
   if (hasBooking === false) badges.push('No Booking');
   if (websiteQuality === 'weak' || websiteQuality === 'none') badges.push('Weak Website');
-  if (hasEmail) badges.push('Email Found');
-  if (tier === 'A+' || tier === 'A') badges.push('Call First');
+  if (hasEmail) badges.push('Email Found'); else badges.push('No Email Found');
+  if (tier === 'S' || tier === 'A+' || tier === 'A') badges.push('Call First');
 
   return {
     score, tier, niche, nicheLabel: profile.label,
@@ -156,7 +168,7 @@ export function generateWhyGoodLead(lead: Lead, result: ScoreResult): string {
       ? 'Missade samtal blir snabbt tappade kunder.'
       : 'Begränsad potential men kan vara värt en demo.';
 
-  return `Den här ${profile.label.toLowerCase()}n är ${result.tier === 'A+' ? 'mycket hög' : result.tier === 'A' ? 'hög' : result.tier === 'B' ? 'okej' : 'låg'} potential — ${bits.join(', ')}. ${stake}`;
+  return `Den här ${profile.label.toLowerCase()}n är ${result.tier === 'S' ? 'extrem' : result.tier === 'A+' ? 'mycket hög' : result.tier === 'A' ? 'hög' : result.tier === 'B' ? 'okej' : 'låg'} potential — ${bits.join(', ')}. ${stake}`;
 }
 
 export function generateOutreachMessage(lead: Lead, niche: NicheKey = detectNiche(lead)): string {

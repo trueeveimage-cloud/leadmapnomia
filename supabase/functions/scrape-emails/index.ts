@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const PRIORITY_PREFIXES = ['info','kontakt','hello','hej','boka','booking','reception','admin','sales','support','contact','office','mail'];
-const CANDIDATE_PATHS = ['/kontakt','/contact','/contact-us','/om-oss','/about','/about-us','/boka','/booking'];
+const CANDIDATE_PATHS = ['/kontakt','/contact','/contact-us','/om-oss','/about','/about-us','/boka','/booking','/integritetspolicy','/privacy','/privacy-policy','/villkor','/impressum'];
 
 function extractEmails(text: string): string[] {
   const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
@@ -52,7 +52,7 @@ async function fetchPage(url: string, timeoutMs = 4000): Promise<string | null> 
     const decoder = new TextDecoder();
     let html = '';
     let bytes = 0;
-    const MAX = 100_000;
+    const MAX = 200_000;
     while (bytes < MAX) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
         }
 
         // Try up to 2 candidate paths concurrently
-        const paths = CANDIDATE_PATHS.slice(0, 4);
+        const paths = CANDIDATE_PATHS;
         const pageResults = await Promise.all(paths.map((p) => fetchPage(u.origin + p, 3000).then((html) => ({ p, html }))));
         for (const { p, html } of pageResults) {
           if (!html) continue;

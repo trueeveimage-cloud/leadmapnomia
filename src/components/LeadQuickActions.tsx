@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2 } from 'lucide-react';
+import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
+import EmailOutreachModal from '@/components/EmailOutreachModal';
 
 interface Props {
   lead: Lead;
@@ -18,6 +19,7 @@ function copy(value: string, label: string) {
 export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const [busy, setBusy] = useState(false);
   const [findingEmail, setFindingEmail] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   const findEmail = async () => {
     if (!lead.website) { toast.error('No website to scrape'); return; }
@@ -102,9 +104,14 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
         </>
       )}
       {lead.email ? (
-        <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
-          <Mail className="h-3.5 w-3.5 mr-1" /> Email
-        </Button>
+        <>
+          <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
+            <Mail className="h-3.5 w-3.5 mr-1" /> Email
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEmailModalOpen(true)}>
+            <Send className="h-3.5 w-3.5 mr-1" /> Send email
+          </Button>
+        </>
       ) : lead.website ? (
         <Button size="sm" variant="outline" onClick={findEmail} disabled={findingEmail}>
           {findingEmail ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Search className="h-3.5 w-3.5 mr-1" />}
@@ -123,6 +130,7 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       <Button size="sm" variant="ghost" onClick={addNote}>
         <StickyNote className="h-3.5 w-3.5 mr-1" /> Note
       </Button>
+      <EmailOutreachModal open={emailModalOpen} onOpenChange={setEmailModalOpen} leads={[lead]} onSent={onUpdated} />
     </div>
   );
 }

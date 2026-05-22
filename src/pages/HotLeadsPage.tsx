@@ -4,12 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp, Search, Mail, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchLeads, updateLead, type Lead, type LeadTier } from '@/lib/supabase';
 import { calculateScore, detectNiche, generateWhyGoodLead, NICHE_PROFILES, type NicheKey } from '@/lib/leadScoring';
 import { TierBadge, ScoreRing, MetaBadge } from '@/components/LeadScoreBadge';
 import LeadQuickActions from '@/components/LeadQuickActions';
+import EmailOutreachModal from '@/components/EmailOutreachModal';
 import { toast } from 'sonner';
 
 type SortKey = 'score' | 'reviews' | 'rating' | 'worst_site' | 'no_booking' | 'emergency' | 'recent' | 'not_contacted';
@@ -55,6 +56,9 @@ export default function HotLeadsPage() {
   const [excludeContacted, setExcludeContacted] = useState(false);
   const [sort, setSort] = useState<SortKey>('score');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'all' | 's' | 'aplus' | 'no_email' | 'follow_up'>('all');
 
   const load = async () => {
     setLoading(true);
@@ -92,6 +96,7 @@ export default function HotLeadsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const cityQ = city.trim().toLowerCase();
+    const TWO_DAYS = 48 * 3600 * 1000;
     let arr = scored.filter((s) => {
       if (excludeOptOut && s.lead.outreach_opt_out) return false;
       if (excludeContacted && s.lead.status !== 'not_contacted') return false;
@@ -105,6 +110,13 @@ export default function HotLeadsPage() {
       if (q) {
         const hay = `${s.lead.name} ${s.lead.address ?? ''} ${s.lead.category ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
+      }
+      if (viewMode === 's' && s.tier !== 'S') return false;
+      if (viewMode === 'aplus' && s.tier !== 'A+') return false;
+      if (viewMode === 'no_email' && (s.lead.email || (s.tier !== 'S' && s.tier !== 'A+'))) return false;
+      if (viewMode === 'follow_up') {
+        const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
+        if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
       }
       return true;
     });
@@ -123,7 +135,7 @@ export default function HotLeadsPage() {
       case 'not_contacted': arr.sort((a, b) => Number(a.lead.status !== 'not_contacted') - Number(b.lead.status !== 'not_contacted') || b.score - a.score); break;
     }
     return arr;
-  }, [scored, search, city, tier, niche, minScore, minReviews, requirePhone, requireEmail, excludeOptOut, excludeContacted, sort]);
+  }, [scored, search, city, tier, niche, minScore, minReviews, requirePhone, requireEmail, excludeOptOut, excludeContacted, sort, viewMode]);
 
   const rescoreAll = async () => {
     setRescoring(true);
@@ -185,10 +197,32 @@ export default function HotLeadsPage() {
 
   const tiers: { key: 'all' | LeadTier; label: string }[] = [
     { key: 'all', label: 'All tiers' },
+    { key: 'S', label: 'S Tier' },
     { key: 'A+', label: 'A+ Hot' },
     { key: 'A', label: 'A' },
     { key: 'B', label: 'B' },
     { key: 'C', label: 'C' },
+  ];
+
+  const selectedLeads = filtered.map((s) => s.lead).filter((l) => selected[l.id]);
+  const selectedWithEmail = selectedLeads.filter((l) => l.email);
+
+  const counts = useMemo(() => ({
+    s: scored.filter((s) => s.tier === 'S').length,
+    aplus: scored.filter((s) => s.tier === 'A+').length,
+    noEmail: scored.filter((s) => (s.tier === 'S' || s.tier === 'A+') && !s.lead.email).length,
+    followUp: scored.filter((s) => {
+      const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
+      return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
+    }).length,
+  }), [scored]);
+
+  const VIEW_TABS: { key: typeof viewMode; label: string; count: number; icon?: React.ReactNode }[] = [
+    { key: 'all', label: 'All', count: scored.length },
+    { key: 's', label: 'S Tier', count: counts.s, icon: <Crown className="h-3.5 w-3.5" /> },
+    { key: 'aplus', label: 'A+ Hot', count: counts.aplus, icon: <Flame className="h-3.5 w-3.5" /> },
+    { key: 'no_email', label: 'No Email', count: counts.noEmail },
+    { key: 'follow_up', label: 'Follow-up', count: counts.followUp },
   ];
 
   return (
@@ -203,6 +237,14 @@ export default function HotLeadsPage() {
               <p className="text-sm text-muted-foreground">Highest-potential AI receptionist prospects, sorted by score.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => setEmailModalOpen(true)}
+                disabled={selectedWithEmail.length === 0}
+                variant={selectedWithEmail.length > 0 ? 'default' : 'outline'}
+              >
+                <Mail className="h-4 w-4 mr-1.5" />
+                Email selected ({selectedWithEmail.length})
+              </Button>
               <Button onClick={scrapeFilteredEmails} disabled={scraping || loading} variant="outline">
                 {scraping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Search className="h-4 w-4 mr-1.5" />}
                 {scraping ? `Finding emails… ${scrapeProgress.found}/${scrapeProgress.done} of ${scrapeProgress.total}` : 'Find emails (filtered)'}
@@ -212,6 +254,24 @@ export default function HotLeadsPage() {
                 Recompute scores
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {VIEW_TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setViewMode(t.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold border inline-flex items-center gap-1.5 transition-colors ${
+                  viewMode === t.key
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card hover:bg-accent border-border text-foreground'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+                <span className={`ml-1 tabular-nums ${viewMode === t.key ? 'opacity-90' : 'text-muted-foreground'}`}>{t.count}</span>
+              </button>
+            ))}
           </div>
 
           <Card className="p-3 space-y-3">
@@ -257,7 +317,30 @@ export default function HotLeadsPage() {
                 </Select>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">{filtered.length.toLocaleString()} of {scored.length.toLocaleString()} leads</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{filtered.length.toLocaleString()} of {scored.length.toLocaleString()} leads</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const visibleTop = filtered.slice(0, 200).map((s) => s.lead.id);
+                    const allSelected = visibleTop.every((id) => selected[id]);
+                    setSelected((prev) => {
+                      const next = { ...prev };
+                      visibleTop.forEach((id) => { if (allSelected) delete next[id]; else next[id] = true; });
+                      return next;
+                    });
+                  }}
+                  className="hover:text-foreground transition-colors"
+                >
+                  Select visible
+                </button>
+                {Object.keys(selected).length > 0 && (
+                  <button onClick={() => setSelected({})} className="hover:text-foreground transition-colors">
+                    Clear ({Object.values(selected).filter(Boolean).length})
+                  </button>
+                )}
+              </div>
+            </div>
           </Card>
 
           {loading ? (
@@ -267,8 +350,15 @@ export default function HotLeadsPage() {
               {filtered.slice(0, 200).map((s) => {
                 const isOpen = openId === s.lead.id;
                 return (
-                  <Card key={s.lead.id} className="p-3 hover:border-primary/40 transition-colors">
-                    <div className="flex items-start gap-4">
+                  <Card key={s.lead.id} className={`p-3 hover:border-primary/40 transition-colors ${selected[s.lead.id] ? 'border-primary/60 bg-primary/5' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={!!selected[s.lead.id]}
+                        onChange={(e) => setSelected((p) => ({ ...p, [s.lead.id]: e.target.checked }))}
+                        className="mt-1 shrink-0"
+                        aria-label="Select lead"
+                      />
                       <ScoreRing score={s.score} />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -276,6 +366,9 @@ export default function HotLeadsPage() {
                           <TierBadge tier={s.tier} />
                           <span className="text-xs text-muted-foreground">{s.nicheLabel}</span>
                           {s.lead.rating && <span className="text-xs text-amber-500">★ {s.lead.rating} ({s.lead.reviews_count ?? 0})</span>}
+                          {s.lead.last_outbound_at && (
+                            <span className="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded px-1.5 py-0.5">Emailed</span>
+                          )}
                         </div>
                         {s.lead.address && <div className="text-xs text-muted-foreground truncate mb-1.5">{s.lead.address}</div>}
                         <div className="flex flex-wrap gap-1 mb-2">
@@ -307,6 +400,13 @@ export default function HotLeadsPage() {
           )}
         </div>
       </div>
+
+      <EmailOutreachModal
+        open={emailModalOpen}
+        onOpenChange={setEmailModalOpen}
+        leads={selectedLeads}
+        onSent={() => { setSelected({}); load(); }}
+      />
     </AppLayout>
   );
 }
