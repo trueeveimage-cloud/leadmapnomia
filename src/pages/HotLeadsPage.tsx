@@ -197,10 +197,32 @@ export default function HotLeadsPage() {
 
   const tiers: { key: 'all' | LeadTier; label: string }[] = [
     { key: 'all', label: 'All tiers' },
+    { key: 'S', label: 'S Tier' },
     { key: 'A+', label: 'A+ Hot' },
     { key: 'A', label: 'A' },
     { key: 'B', label: 'B' },
     { key: 'C', label: 'C' },
+  ];
+
+  const selectedLeads = filtered.map((s) => s.lead).filter((l) => selected[l.id]);
+  const selectedWithEmail = selectedLeads.filter((l) => l.email);
+
+  const counts = useMemo(() => ({
+    s: scored.filter((s) => s.tier === 'S').length,
+    aplus: scored.filter((s) => s.tier === 'A+').length,
+    noEmail: scored.filter((s) => (s.tier === 'S' || s.tier === 'A+') && !s.lead.email).length,
+    followUp: scored.filter((s) => {
+      const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
+      return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
+    }).length,
+  }), [scored]);
+
+  const VIEW_TABS: { key: typeof viewMode; label: string; count: number; icon?: React.ReactNode }[] = [
+    { key: 'all', label: 'All', count: scored.length },
+    { key: 's', label: 'S Tier', count: counts.s, icon: <Crown className="h-3.5 w-3.5" /> },
+    { key: 'aplus', label: 'A+ Hot', count: counts.aplus, icon: <Flame className="h-3.5 w-3.5" /> },
+    { key: 'no_email', label: 'No Email', count: counts.noEmail },
+    { key: 'follow_up', label: 'Follow-up', count: counts.followUp },
   ];
 
   return (
