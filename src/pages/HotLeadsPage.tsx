@@ -96,6 +96,7 @@ export default function HotLeadsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const cityQ = city.trim().toLowerCase();
+    const TWO_DAYS = 48 * 3600 * 1000;
     let arr = scored.filter((s) => {
       if (excludeOptOut && s.lead.outreach_opt_out) return false;
       if (excludeContacted && s.lead.status !== 'not_contacted') return false;
@@ -109,6 +110,13 @@ export default function HotLeadsPage() {
       if (q) {
         const hay = `${s.lead.name} ${s.lead.address ?? ''} ${s.lead.category ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
+      }
+      if (viewMode === 's' && s.tier !== 'S') return false;
+      if (viewMode === 'aplus' && s.tier !== 'A+') return false;
+      if (viewMode === 'no_email' && (s.lead.email || (s.tier !== 'S' && s.tier !== 'A+'))) return false;
+      if (viewMode === 'follow_up') {
+        const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
+        if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
       }
       return true;
     });
