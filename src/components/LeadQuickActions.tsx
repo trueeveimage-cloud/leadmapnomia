@@ -130,6 +130,7 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       <Button size="sm" variant="ghost" onClick={addNote}>
         <StickyNote className="h-3.5 w-3.5 mr-1" /> Note
       </Button>
+      <EmailOutreachModal open={emailModalOpen} onOpenChange={setEmailModalOpen} leads={[lead]} onSent={onUpdated} />
     </div>
   );
 }
