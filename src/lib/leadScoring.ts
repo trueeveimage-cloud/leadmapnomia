@@ -168,7 +168,7 @@ export function generateWhyGoodLead(lead: Lead, result: ScoreResult): string {
       ? 'Missade samtal blir snabbt tappade kunder.'
       : 'Begränsad potential men kan vara värt en demo.';
 
-  return `Den här ${profile.label.toLowerCase()}n är ${result.tier === 'A+' ? 'mycket hög' : result.tier === 'A' ? 'hög' : result.tier === 'B' ? 'okej' : 'låg'} potential — ${bits.join(', ')}. ${stake}`;
+  return `Den här ${profile.label.toLowerCase()}n är ${result.tier === 'S' ? 'extrem' : result.tier === 'A+' ? 'mycket hög' : result.tier === 'A' ? 'hög' : result.tier === 'B' ? 'okej' : 'låg'} potential — ${bits.join(', ')}. ${stake}`;
 }
 
 export function generateOutreachMessage(lead: Lead, niche: NicheKey = detectNiche(lead)): string {
