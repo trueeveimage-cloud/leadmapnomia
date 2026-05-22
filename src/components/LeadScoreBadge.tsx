@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import type { LeadTier } from '@/lib/supabase';
 
 const TIER_STYLES: Record<LeadTier, string> = {
+  'S':  'bg-gradient-to-br from-fuchsia-500 via-purple-600 to-indigo-600 text-white border-fuchsia-400/50 shadow-[0_0_18px_hsl(290_84%_60%/0.45)]',
   'A+': 'bg-gradient-to-br from-rose-500 to-orange-500 text-white border-rose-400/40 shadow-[0_0_14px_hsl(0_84%_60%/0.35)]',
   'A':  'bg-amber-500/15 text-amber-400 border-amber-500/30',
   'B':  'bg-sky-500/15 text-sky-400 border-sky-500/30',
