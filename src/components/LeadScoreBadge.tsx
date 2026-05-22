@@ -44,13 +44,16 @@ export function ScoreRing({ score, size = 56 }: { score: number; size?: number }
 }
 
 const BADGE_COLORS: Record<string, string> = {
-  'A+ Hot Lead':   'bg-rose-500/15 text-rose-400 border-rose-500/30',
-  'High Ticket':   'bg-amber-500/15 text-amber-400 border-amber-500/30',
-  'Urgent Call':   'bg-orange-500/15 text-orange-400 border-orange-500/30',
-  'No Booking':    'bg-violet-500/15 text-violet-400 border-violet-500/30',
-  'Weak Website':  'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  'Email Found':   'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  'Call First':    'bg-sky-500/15 text-sky-400 border-sky-500/30',
+  'S Tier':         'bg-gradient-to-r from-fuchsia-500/20 to-indigo-500/20 text-fuchsia-300 border-fuchsia-500/40',
+  'A+ Hot Lead':    'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  'High Ticket':    'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'Urgent Call':    'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  'Urgent Calls':   'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  'No Booking':     'bg-violet-500/15 text-violet-400 border-violet-500/30',
+  'Weak Website':   'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  'Email Found':    'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'No Email Found': 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
+  'Call First':     'bg-sky-500/15 text-sky-400 border-sky-500/30',
 };
 
 export function MetaBadge({ label }: { label: string }) {
