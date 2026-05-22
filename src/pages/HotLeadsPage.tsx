@@ -400,6 +400,13 @@ export default function HotLeadsPage() {
           )}
         </div>
       </div>
+
+      <EmailOutreachModal
+        open={emailModalOpen}
+        onOpenChange={setEmailModalOpen}
+        leads={selectedLeads}
+        onSent={() => { setSelected({}); load(); }}
+      />
     </AppLayout>
   );
 }
