@@ -237,6 +237,14 @@ export default function HotLeadsPage() {
               <p className="text-sm text-muted-foreground">Highest-potential AI receptionist prospects, sorted by score.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => setEmailModalOpen(true)}
+                disabled={selectedWithEmail.length === 0}
+                variant={selectedWithEmail.length > 0 ? 'default' : 'outline'}
+              >
+                <Mail className="h-4 w-4 mr-1.5" />
+                Email selected ({selectedWithEmail.length})
+              </Button>
               <Button onClick={scrapeFilteredEmails} disabled={scraping || loading} variant="outline">
                 {scraping ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Search className="h-4 w-4 mr-1.5" />}
                 {scraping ? `Finding emails… ${scrapeProgress.found}/${scrapeProgress.done} of ${scrapeProgress.total}` : 'Find emails (filtered)'}
@@ -246,6 +254,24 @@ export default function HotLeadsPage() {
                 Recompute scores
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {VIEW_TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setViewMode(t.key)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold border inline-flex items-center gap-1.5 transition-colors ${
+                  viewMode === t.key
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card hover:bg-accent border-border text-foreground'
+                }`}
+              >
+                {t.icon}
+                {t.label}
+                <span className={`ml-1 tabular-nums ${viewMode === t.key ? 'opacity-90' : 'text-muted-foreground'}`}>{t.count}</span>
+              </button>
+            ))}
           </div>
 
           <Card className="p-3 space-y-3">
