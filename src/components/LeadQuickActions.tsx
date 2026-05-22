@@ -19,6 +19,7 @@ function copy(value: string, label: string) {
 export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const [busy, setBusy] = useState(false);
   const [findingEmail, setFindingEmail] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   const findEmail = async () => {
     if (!lead.website) { toast.error('No website to scrape'); return; }
