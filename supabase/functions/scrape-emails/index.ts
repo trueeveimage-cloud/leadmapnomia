@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
         }
 
         // Try up to 2 candidate paths concurrently
-        const paths = CANDIDATE_PATHS.slice(0, 4);
+        const paths = CANDIDATE_PATHS;
         const pageResults = await Promise.all(paths.map((p) => fetchPage(u.origin + p, 3000).then((html) => ({ p, html }))));
         for (const { p, html } of pageResults) {
           if (!html) continue;
