@@ -350,8 +350,15 @@ export default function HotLeadsPage() {
               {filtered.slice(0, 200).map((s) => {
                 const isOpen = openId === s.lead.id;
                 return (
-                  <Card key={s.lead.id} className="p-3 hover:border-primary/40 transition-colors">
-                    <div className="flex items-start gap-4">
+                  <Card key={s.lead.id} className={`p-3 hover:border-primary/40 transition-colors ${selected[s.lead.id] ? 'border-primary/60 bg-primary/5' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={!!selected[s.lead.id]}
+                        onChange={(e) => setSelected((p) => ({ ...p, [s.lead.id]: e.target.checked }))}
+                        className="mt-1 shrink-0"
+                        aria-label="Select lead"
+                      />
                       <ScoreRing score={s.score} />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -359,6 +366,9 @@ export default function HotLeadsPage() {
                           <TierBadge tier={s.tier} />
                           <span className="text-xs text-muted-foreground">{s.nicheLabel}</span>
                           {s.lead.rating && <span className="text-xs text-amber-500">★ {s.lead.rating} ({s.lead.reviews_count ?? 0})</span>}
+                          {s.lead.last_outbound_at && (
+                            <span className="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded px-1.5 py-0.5">Emailed</span>
+                          )}
                         </div>
                         {s.lead.address && <div className="text-xs text-muted-foreground truncate mb-1.5">{s.lead.address}</div>}
                         <div className="flex flex-wrap gap-1 mb-2">
