@@ -56,6 +56,9 @@ export default function HotLeadsPage() {
   const [excludeContacted, setExcludeContacted] = useState(false);
   const [sort, setSort] = useState<SortKey>('score');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'all' | 's' | 'aplus' | 'no_email' | 'follow_up'>('all');
 
   const load = async () => {
     setLoading(true);
