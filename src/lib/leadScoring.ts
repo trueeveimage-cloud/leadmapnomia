@@ -7,7 +7,9 @@ export type NicheKey =
   | 'car_dealer' | 'car_detailer'
   | 'low_value' | 'unknown';
 
-export type LeadTier = 'A+' | 'A' | 'B' | 'C';
+export type LeadTier = 'S' | 'A+' | 'A' | 'B' | 'C';
+
+const HIGH_VALUE_NICHES: NicheKey[] = ['cosmetic','dental','healthcare','law','plumber','electrician','locksmith','roofer','water_damage','real_estate','construction','car_dealer','car_detailer'];
 
 interface NicheProfile {
   label: string;
