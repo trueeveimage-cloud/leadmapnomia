@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2 } from 'lucide-react';
+import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
+import EmailOutreachModal from '@/components/EmailOutreachModal';
 
 interface Props {
   lead: Lead;
