@@ -317,7 +317,30 @@ export default function HotLeadsPage() {
                 </Select>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">{filtered.length.toLocaleString()} of {scored.length.toLocaleString()} leads</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{filtered.length.toLocaleString()} of {scored.length.toLocaleString()} leads</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const visibleTop = filtered.slice(0, 200).map((s) => s.lead.id);
+                    const allSelected = visibleTop.every((id) => selected[id]);
+                    setSelected((prev) => {
+                      const next = { ...prev };
+                      visibleTop.forEach((id) => { if (allSelected) delete next[id]; else next[id] = true; });
+                      return next;
+                    });
+                  }}
+                  className="hover:text-foreground transition-colors"
+                >
+                  Select visible
+                </button>
+                {Object.keys(selected).length > 0 && (
+                  <button onClick={() => setSelected({})} className="hover:text-foreground transition-colors">
+                    Clear ({Object.values(selected).filter(Boolean).length})
+                  </button>
+                )}
+              </div>
+            </div>
           </Card>
 
           {loading ? (
