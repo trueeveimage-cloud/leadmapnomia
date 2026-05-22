@@ -104,9 +104,14 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
         </>
       )}
       {lead.email ? (
-        <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
-          <Mail className="h-3.5 w-3.5 mr-1" /> Email
-        </Button>
+        <>
+          <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
+            <Mail className="h-3.5 w-3.5 mr-1" /> Email
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEmailModalOpen(true)}>
+            <Send className="h-3.5 w-3.5 mr-1" /> Send email
+          </Button>
+        </>
       ) : lead.website ? (
         <Button size="sm" variant="outline" onClick={findEmail} disabled={findingEmail}>
           {findingEmail ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Search className="h-3.5 w-3.5 mr-1" />}
