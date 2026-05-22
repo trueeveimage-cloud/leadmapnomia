@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const PRIORITY_PREFIXES = ['info','kontakt','hello','hej','boka','booking','reception','admin','sales','support','contact','office','mail'];
-const CANDIDATE_PATHS = ['/kontakt','/contact','/contact-us','/om-oss','/about','/about-us','/boka','/booking'];
+const CANDIDATE_PATHS = ['/kontakt','/contact','/contact-us','/om-oss','/about','/about-us','/boka','/booking','/integritetspolicy','/privacy','/privacy-policy','/villkor','/impressum'];
 
 function extractEmails(text: string): string[] {
   const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
