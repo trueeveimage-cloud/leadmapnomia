@@ -221,6 +221,36 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
         </div>
       </div>
 
+      {/* Email outreach history */}
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Email history</div>
+        <LeadEmailHistory leadId={lead.id} />
+      </div>
+
+      {/* Opt-out control */}
+      <div className="bg-muted rounded p-2 flex items-center justify-between gap-2">
+        <div className="text-xs">
+          <div className="font-medium">Outreach status</div>
+          <div className="text-muted-foreground text-[10px]">
+            {(lead as any).outreach_opt_out ? 'Unsubscribed — no further emails or SMS will be sent.' : 'Subscribed'}
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant={(lead as any).outreach_opt_out ? 'outline' : 'destructive'}
+          className="h-7 text-xs gap-1"
+          onClick={async () => {
+            const next = !(lead as any).outreach_opt_out;
+            const updated = await updateLead(lead.id, { outreach_opt_out: next } as any);
+            await logActivity(lead.id, next ? 'unsubscribed' : 'resubscribed', {});
+            onUpdate(updated);
+            toast.success(next ? 'Lead unsubscribed' : 'Lead re-subscribed');
+          }}
+        >
+          {(lead as any).outreach_opt_out ? <><RotateCcw size={11} /> Re-subscribe</> : <><Ban size={11} /> Unsubscribe</>}
+        </Button>
+      </div>
+
       {/* Contact tracking info */}
       {((lead as any).call_attempts > 0 || (lead as any).last_contacted_at) && (
         <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-0.5">
