@@ -5,10 +5,11 @@ import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Paperclip, Link2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Paperclip, Link2, Plus, Trash2, Upload, X, Ban, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import LeadEmailHistory from '@/components/LeadEmailHistory';
 
 interface Attachment {
   id: string;
