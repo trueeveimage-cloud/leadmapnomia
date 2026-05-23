@@ -126,6 +126,14 @@ export default function SettingsPage() {
     getSetting('followup_enabled').then(v => { setFollowupEnabled(v === 'true'); });
     getSetting('followup_after_hours').then(v => { if (v) setFollowupAfterHours(v); });
     getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
+    getSetting('gmail_daily_cap').then(v => { if (v) setGmailDailyCap(v); });
+    // Count today's sent emails (UTC day)
+    const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
+    supabase.from('message_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('channel', 'email').eq('direction', 'outbound').eq('status', 'sent')
+      .gte('created_at', startOfDay.toISOString())
+      .then(({ count }) => setGmailSentToday(count ?? 0));
   }, []);
 
   const handleSave = async () => {
