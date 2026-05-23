@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
+const DEFAULT_DAILY_CAP = 200;
 
 const BodySchema = z.object({
   leadId: z.string().uuid().optional(),
@@ -17,7 +18,6 @@ const BodySchema = z.object({
 });
 
 function b64url(s: string): string {
-  // UTF-8 safe base64url
   const bytes = new TextEncoder().encode(s);
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
@@ -25,7 +25,6 @@ function b64url(s: string): string {
 }
 
 function buildRaw(to: string, subject: string, body: string): string {
-  // RFC 2822, plain text. Encode subject as UTF-8 (RFC 2047) for safety.
   const encSubject = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
   const msg = [
     `To: ${to}`,
@@ -39,43 +38,63 @@ function buildRaw(to: string, subject: string, body: string): string {
   return b64url(msg);
 }
 
+function jsonResp(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
-  if (!LOVABLE_API_KEY) return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY missing' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  if (!GMAIL_KEY) return new Response(JSON.stringify({ error: 'Gmail is not connected' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (!LOVABLE_API_KEY) return jsonResp({ error: 'LOVABLE_API_KEY missing' }, 500);
+  if (!GMAIL_KEY) return jsonResp({ error: 'Gmail is not connected' }, 500);
 
   let parsed;
-  try {
-    parsed = BodySchema.safeParse(await req.json());
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-  if (!parsed.success) {
-    return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
+  try { parsed = BodySchema.safeParse(await req.json()); }
+  catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
+  if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
   const { leadId, to, subject, body } = parsed.data;
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-  // Dedupe: if a successful outbound email exists for this lead, skip.
+  // 1) Opt-out check
+  if (leadId) {
+    const { data: lead } = await supabase.from('leads').select('outreach_opt_out, email').eq('id', leadId).maybeSingle();
+    if (lead?.outreach_opt_out) {
+      return jsonResp({ skipped: true, reason: 'opt_out' });
+    }
+  }
+
+  // 2) Dedupe: already emailed this lead successfully
   if (leadId) {
     const { data: existing } = await supabase
       .from('message_logs')
       .select('id')
-      .eq('lead_id', leadId)
-      .eq('channel', 'email')
-      .eq('direction', 'outbound')
-      .in('status', ['sent', 'queued'])
-      .limit(1);
+      .eq('lead_id', leadId).eq('channel', 'email').eq('direction', 'outbound')
+      .in('status', ['sent', 'queued']).limit(1);
     if (existing && existing.length > 0) {
-      return new Response(JSON.stringify({ skipped: true, reason: 'already_emailed' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResp({ skipped: true, reason: 'already_emailed' });
     }
+  }
+
+  // 3) Daily cap check (UTC day)
+  const { data: capSetting } = await supabase.from('settings').select('value').eq('key', 'gmail_daily_cap').maybeSingle();
+  const dailyCap = Math.max(0, parseInt(capSetting?.value || '') || DEFAULT_DAILY_CAP);
+  const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
+  const { count: sentToday } = await supabase
+    .from('message_logs').select('id', { count: 'exact', head: true })
+    .eq('channel', 'email').eq('direction', 'outbound').eq('status', 'sent')
+    .gte('created_at', startOfDay.toISOString());
+  if ((sentToday ?? 0) >= dailyCap) {
+    if (leadId) {
+      await supabase.from('message_logs').insert({
+        lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+        to_number: to, body: `${subject}\n\n${body}`, status: 'skipped',
+        error_message: `daily_cap reached (${sentToday}/${dailyCap})`,
+      } as any);
+    }
+    return jsonResp({ skipped: true, reason: 'daily_cap', sentToday, dailyCap });
   }
 
   try {
@@ -98,7 +117,7 @@ Deno.serve(async (req) => {
           error_message: JSON.stringify(data).slice(0, 500),
         } as any);
       }
-      return new Response(JSON.stringify({ error: 'gmail_send_failed', status: resp.status, details: data }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResp({ error: 'gmail_send_failed', status: resp.status, details: data }, 502);
     }
 
     if (leadId) {
@@ -119,8 +138,8 @@ Deno.serve(async (req) => {
       } as any);
     }
 
-    return new Response(JSON.stringify({ success: true, id: data.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return jsonResp({ success: true, id: data.id, sentToday: (sentToday ?? 0) + 1, dailyCap });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || 'unknown' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return jsonResp({ error: e?.message || 'unknown' }, 500);
   }
 });

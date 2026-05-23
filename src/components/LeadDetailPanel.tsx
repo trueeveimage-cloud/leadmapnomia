@@ -5,10 +5,11 @@ import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Paperclip, Link2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { Paperclip, Link2, Plus, Trash2, Upload, X, Ban, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import LeadEmailHistory from '@/components/LeadEmailHistory';
 
 interface Attachment {
   id: string;
@@ -218,6 +219,36 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
           <Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label" className="h-7 text-xs bg-muted w-24" onKeyDown={e => e.key === 'Enter' && addLink()} />
           <Button size="sm" variant="outline" className="h-7 px-2" onClick={addLink}><Plus size={12} /></Button>
         </div>
+      </div>
+
+      {/* Email outreach history */}
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Email history</div>
+        <LeadEmailHistory leadId={lead.id} />
+      </div>
+
+      {/* Opt-out control */}
+      <div className="bg-muted rounded p-2 flex items-center justify-between gap-2">
+        <div className="text-xs">
+          <div className="font-medium">Outreach status</div>
+          <div className="text-muted-foreground text-[10px]">
+            {(lead as any).outreach_opt_out ? 'Unsubscribed — no further emails or SMS will be sent.' : 'Subscribed'}
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant={(lead as any).outreach_opt_out ? 'outline' : 'destructive'}
+          className="h-7 text-xs gap-1"
+          onClick={async () => {
+            const next = !(lead as any).outreach_opt_out;
+            const updated = await updateLead(lead.id, { outreach_opt_out: next } as any);
+            await logActivity(lead.id, next ? 'unsubscribed' : 'resubscribed', {});
+            onUpdate(updated);
+            toast.success(next ? 'Lead unsubscribed' : 'Lead re-subscribed');
+          }}
+        >
+          {(lead as any).outreach_opt_out ? <><RotateCcw size={11} /> Re-subscribe</> : <><Ban size={11} /> Unsubscribe</>}
+        </Button>
       </div>
 
       {/* Contact tracking info */}
