@@ -150,6 +150,7 @@ export default function SettingsPage() {
       setSetting('followup_enabled', followupEnabled ? 'true' : 'false'),
       setSetting('followup_after_hours', followupAfterHours),
       setSetting('followup_template', followupTemplate),
+      setSetting('gmail_daily_cap', gmailDailyCap),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
