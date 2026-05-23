@@ -250,6 +250,25 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Gmail Sending Limit */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Mail size={15} /> Gmail Daily Limit
+              <InfoTip text="Hard cap on outbound emails sent per UTC day from the connected Gmail account. Once reached, further sends are skipped until midnight UTC." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Sent today: <span className="font-medium text-foreground">{gmailSentToday ?? '…'}</span>
+              {gmailSentToday !== null && ` / ${gmailDailyCap}`}
+            </p>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 max-w-[160px]">
+                <label className="text-xs text-muted-foreground mb-1 block">Max emails per day</label>
+                <Input type="number" min="0" value={gmailDailyCap} onChange={e => setGmailDailyCap(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+          </div>
+
+
           {/* Outreach Defaults */}
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
