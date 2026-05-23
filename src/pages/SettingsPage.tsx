@@ -100,6 +100,8 @@ export default function SettingsPage() {
   const [defaultCooldownDays, setDefaultCooldownDays] = useState('14');
   const [defaultCallAfterHours, setDefaultCallAfterHours] = useState('48');
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
+  const [gmailDailyCap, setGmailDailyCap] = useState('200');
+  const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
 
   // Finder defaults
   const [finderDefaultCity, setFinderDefaultCity] = useState('');
