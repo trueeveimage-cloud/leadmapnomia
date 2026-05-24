@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,20 @@ export default function HotLeadsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'all' | 's' | 'aplus' | 'no_email' | 'follow_up'>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const v = searchParams.get('view');
+    if (v && ['all','s','aplus','no_email','follow_up'].includes(v)) setViewMode(v as any);
+  }, [searchParams]);
+  useEffect(() => {
+    const current = searchParams.get('view') || 'all';
+    if (current !== viewMode) {
+      const next = new URLSearchParams(searchParams);
+      if (viewMode === 'all') next.delete('view'); else next.set('view', viewMode);
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   const load = async () => {
     setLoading(true);
