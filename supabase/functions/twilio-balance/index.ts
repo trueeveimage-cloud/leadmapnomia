@@ -50,7 +50,14 @@ Deno.serve(async (req) => {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error('Twilio balance error:', resp.status, errText);
-      return new Response(JSON.stringify({ error: 'Failed to fetch balance', details: resp.status }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const isAuth = resp.status === 401 || resp.status === 403;
+      return new Response(JSON.stringify({
+        balance: null,
+        currency: null,
+        unavailable: true,
+        reason: isAuth ? 'twilio_auth_failed' : 'twilio_unavailable',
+        status: resp.status,
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const balanceData = await resp.json();
