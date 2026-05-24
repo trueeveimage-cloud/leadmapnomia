@@ -226,7 +226,7 @@ export default function HotLeadsPage() {
   const counts = useMemo(() => ({
     s: scored.filter((s) => s.tier === 'S').length,
     aplus: scored.filter((s) => s.tier === 'A+').length,
-    noEmail: scored.filter((s) => (s.tier === 'S' || s.tier === 'A+') && !s.lead.email).length,
+    noEmail: scored.filter((s) => !s.lead.email).length,
     followUp: scored.filter((s) => {
       const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
       return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
