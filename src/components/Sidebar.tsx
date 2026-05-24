@@ -7,7 +7,8 @@ import {
   Settings, BarChart2, Users, ChevronDown, Search, Calculator,
   Megaphone, MessageCircle, PhoneCall, LogOut, MapPin,
   ArrowRight, BookOpen, AlertCircle, X, Globe,
-  ThumbsUp, ThumbsDown, HelpCircle, Target, Trophy, Skull, Bell, Flame
+  ThumbsUp, ThumbsDown, HelpCircle, Target, Trophy, Skull, Bell, Flame,
+  Send, Inbox as InboxIcon, Crown, Clock, Ban, Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,10 +64,12 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
   );
 }
 
-const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks', '/quick-send'];
-const TOOLS_PATHS = ['/add', '/bulk', '/finder', '/finder/coverage', '/costs'];
+const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
+const EMAIL_PATHS = ['/hot-leads'];
+const TOOLS_PATHS = ['/add', '/finder'];
 const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/making-demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
+const NOMIA_PATHS = ['/bulk', '/quick-send', '/finder/coverage', '/costs', '/campaigns/compare', '/guide', '/dashboard'];
 
 function NavGroup({ label, children, icon, color, paths }: { label: string; children: React.ReactNode; icon: React.ReactNode; color?: string; paths: string[] }) {
   const { pathname } = useLocation();
