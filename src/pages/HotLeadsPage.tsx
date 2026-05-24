@@ -217,6 +217,7 @@ export default function HotLeadsPage() {
     { key: 'A', label: 'A' },
     { key: 'B', label: 'B' },
     { key: 'C', label: 'C' },
+    { key: 'D', label: 'D' },
   ];
 
   const selectedLeads = filtered.map((s) => s.lead).filter((l) => selected[l.id]);
