@@ -8,7 +8,7 @@ export function isMobileNumber(phone: string): boolean {
 }
 
 export type LeadSection = 'unsorted' | 'phone' | 'email' | 'missing' | 'both';
-export type LeadTier = 'S' | 'A+' | 'A' | 'B' | 'C';
+export type LeadTier = 'S' | 'A+' | 'A' | 'B' | 'C' | 'D';
 export type LeadStatus =
   | 'not_contacted'
   | 'contacted'
