@@ -128,7 +128,7 @@ export default function HotLeadsPage() {
       }
       if (viewMode === 's' && s.tier !== 'S') return false;
       if (viewMode === 'aplus' && s.tier !== 'A+') return false;
-      if (viewMode === 'no_email' && (s.lead.email || (s.tier !== 'S' && s.tier !== 'A+'))) return false;
+      if (viewMode === 'no_email' && s.lead.email) return false;
       if (viewMode === 'follow_up') {
         const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
         if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
