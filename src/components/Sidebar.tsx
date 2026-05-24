@@ -22,8 +22,11 @@ interface NavItem {
 }
 
 function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) {
-  const { pathname } = useLocation();
-  const active = pathname === item.path;
+  const { pathname, search } = useLocation();
+  const [linkPath, linkQuery] = item.path.split('?');
+  const active = linkQuery
+    ? pathname === linkPath && search.includes(linkQuery)
+    : pathname === linkPath && (linkPath !== '/hot-leads' || !search.includes('view='));
   return (
     <Link
       to={item.path}
@@ -245,23 +248,26 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* Nav */}
       <div className="flex-1 px-3 py-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        {/* Outreach */}
-        <NavGroup label="Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)" paths={OUTREACH_PATHS}>
+        {/* SMS Outreach */}
+        <NavGroup label="SMS Outreach" icon={<Megaphone size={14} />} color="hsl(213, 94%, 58%)" paths={OUTREACH_PATHS}>
           <SidebarNavLink item={{ label: 'Campaigns', path: '/campaigns', icon: <Megaphone size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'A/B Compare', path: '/campaigns/compare', icon: <BarChart2 size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Inbox', path: '/inbox', icon: <MessageCircle size={15} />, color: 'hsl(142 69% 45%)', glow: notifications.unreadInbox > 0, badge: notifications.unreadInbox > 0 ? notifications.unreadInbox : undefined }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Call List', path: '/call-list', icon: <PhoneCall size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Quick Send', path: '/quick-send', icon: <MessageCircle size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Callbacks', path: '/callbacks', icon: <Bell size={15} />, color: 'hsl(38 95% 55%)', badge: counts.callbacksDue > 0 ? counts.callbacksDue : counts.callbacks }} onNav={onClose} />
         </NavGroup>
 
-        {/* Leads & Tools */}
-        <NavGroup label="Leads & Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)" paths={TOOLS_PATHS}>
+        {/* Email Outreach (new) */}
+        <NavGroup label="Email Outreach" icon={<Send size={14} />} color="hsl(280, 80%, 65%)" paths={EMAIL_PATHS}>
+          <SidebarNavLink item={{ label: 'S-Tier Queue', path: '/hot-leads?view=s', icon: <Crown size={15} />, color: 'hsl(300 85% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'A+ Hot Queue', path: '/hot-leads?view=aplus', icon: <Flame size={15} />, color: 'hsl(0 85% 60%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Gmail Outreach', path: '/hot-leads?view=no_email', icon: <Mail size={15} />, color: 'hsl(280 80% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Follow-ups', path: '/hot-leads?view=follow_up', icon: <Clock size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
+        </NavGroup>
+
+        {/* Tools */}
+        <NavGroup label="Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)" paths={TOOLS_PATHS}>
           <SidebarNavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} />, color: 'hsl(192 91% 52%)' }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
         </NavGroup>
 
         {/* Closing */}
@@ -277,11 +283,21 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
         {/* Leads (below Closing) */}
         <LeadsGroup counts={counts} onNav={onClose} />
+
+        {/* Nomia — legacy/extras */}
+        <NavGroup label="Nomia" icon={<Archive size={14} />} color="hsl(215, 15%, 55%)" paths={NOMIA_PATHS}>
+          <SidebarNavLink item={{ label: 'Statistics', path: '/dashboard', icon: <BarChart2 size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'A/B Compare', path: '/campaigns/compare', icon: <BarChart2 size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Quick Send', path: '/quick-send', icon: <MessageCircle size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Bulk Import', path: '/bulk', icon: <Layers size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Cost Calculator', path: '/costs', icon: <Calculator size={15} /> }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Guide', path: '/guide', icon: <BookOpen size={15} /> }} onNav={onClose} />
+        </NavGroup>
       </div>
 
       {/* Bottom */}
       <div className="px-3 py-2.5 border-t border-sidebar-border space-y-0.5 bg-sidebar">
-        <SidebarNavLink item={{ label: 'Guide', path: '/guide', icon: <BookOpen size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
         <SidebarNavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
         <button
           onClick={signOut}
