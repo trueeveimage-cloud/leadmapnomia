@@ -128,7 +128,7 @@ export default function HotLeadsPage() {
       }
       if (viewMode === 's' && s.tier !== 'S') return false;
       if (viewMode === 'aplus' && s.tier !== 'A+') return false;
-      if (viewMode === 'no_email' && (s.lead.email || (s.tier !== 'S' && s.tier !== 'A+'))) return false;
+      if (viewMode === 'no_email' && s.lead.email) return false;
       if (viewMode === 'follow_up') {
         const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
         if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
@@ -217,6 +217,7 @@ export default function HotLeadsPage() {
     { key: 'A', label: 'A' },
     { key: 'B', label: 'B' },
     { key: 'C', label: 'C' },
+    { key: 'D', label: 'D' },
   ];
 
   const selectedLeads = filtered.map((s) => s.lead).filter((l) => selected[l.id]);
@@ -225,7 +226,7 @@ export default function HotLeadsPage() {
   const counts = useMemo(() => ({
     s: scored.filter((s) => s.tier === 'S').length,
     aplus: scored.filter((s) => s.tier === 'A+').length,
-    noEmail: scored.filter((s) => (s.tier === 'S' || s.tier === 'A+') && !s.lead.email).length,
+    noEmail: scored.filter((s) => !s.lead.email).length,
     followUp: scored.filter((s) => {
       const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
       return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
