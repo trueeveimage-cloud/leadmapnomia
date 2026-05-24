@@ -221,21 +221,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <span>Hot Leads</span>
         </Link>
 
-        <Link
-          to="/dashboard"
-          onClick={onClose}
-          className={cn(
-            "flex items-center gap-2 w-full px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 rounded-lg border",
-            pathname === '/dashboard'
-              ? "bg-primary/10 text-primary border-primary/20"
-              : "hover:bg-opacity-20 border-opacity-30 hover:border-opacity-50"
-          )}
-          style={pathname !== '/dashboard' ? { color: 'hsl(192, 91%, 52%)', borderColor: 'hsl(192, 91%, 52%, 0.3)', background: 'hsl(192, 91%, 52%, 0.08)' } : undefined}
-        >
-          <BarChart2 size={14} style={pathname !== '/dashboard' ? { color: 'hsl(192, 91%, 52%)' } : undefined} className={pathname === '/dashboard' ? 'text-primary' : ''} />
-          <span>Statistics</span>
-        </Link>
       </div>
+
 
       {/* Lead count pill */}
       <div className="px-4 pb-2">
