@@ -8,6 +8,7 @@ const TIER_STYLES: Record<LeadTier, string> = {
   'A':  'bg-amber-500/15 text-amber-400 border-amber-500/30',
   'B':  'bg-sky-500/15 text-sky-400 border-sky-500/30',
   'C':  'bg-muted text-muted-foreground border-border',
+  'D':  'bg-zinc-900/40 text-zinc-500 border-zinc-700/40',
 };
 
 export function TierBadge({ tier, className }: { tier: LeadTier | null | undefined; className?: string }) {
