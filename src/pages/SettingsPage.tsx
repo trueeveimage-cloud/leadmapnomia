@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { getSetting, setSetting, updateLead, determineSection } from '@/lib/supabase';
-import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail, Zap } from 'lucide-react';
+import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail, Zap, Sliders, Trash2 } from 'lucide-react';
+import { setScoringWeights, calculateScore, generateWhyGoodLead } from '@/lib/leadScoring';
+import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -102,6 +104,16 @@ export default function SettingsPage() {
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
   const [gmailDailyCap, setGmailDailyCap] = useState('200');
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
+  const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
+
+  // Scoring weights (multipliers, default 1.0)
+  const [weights, setWeights] = useState({
+    niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
+  });
+  const [rescoringWeights, setRescoringWeights] = useState(false);
+
+  // Reset outreach stats
+  const [resetting, setResetting] = useState(false);
 
   // Finder defaults
   const [finderDefaultCity, setFinderDefaultCity] = useState('');
@@ -127,6 +139,11 @@ export default function SettingsPage() {
     getSetting('followup_after_hours').then(v => { if (v) setFollowupAfterHours(v); });
     getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
     getSetting('gmail_daily_cap').then(v => { if (v) setGmailDailyCap(v); });
+    getSetting('gmail_from_address').then(v => { if (v) setGmailFromAddress(v); });
+    getSetting('scoring_weights').then(v => {
+      if (!v) return;
+      try { const p = JSON.parse(v); setWeights((w) => ({ ...w, ...p })); } catch {}
+    });
     // Count today's sent emails (UTC day)
     const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
     supabase.from('message_logs')
@@ -151,10 +168,80 @@ export default function SettingsPage() {
       setSetting('followup_after_hours', followupAfterHours),
       setSetting('followup_template', followupTemplate),
       setSetting('gmail_daily_cap', gmailDailyCap),
+      setSetting('gmail_from_address', gmailFromAddress),
+      setSetting('scoring_weights', JSON.stringify(weights)),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     toast.success('Settings saved');
+  };
+
+  const saveWeightsAndRescore = async () => {
+    setRescoringWeights(true);
+    try {
+      await setSetting('scoring_weights', JSON.stringify(weights));
+      setScoringWeights(weights);
+      // Re-rank all leads with new weights
+      const all: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase.from('leads').select('*').range(from, from + 999);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+      const BATCH = 200;
+      for (let i = 0; i < all.length; i += BATCH) {
+        const slice = all.slice(i, i + BATCH);
+        await Promise.all(slice.map(async (l) => {
+          const r = calculateScore(l);
+          const why = generateWhyGoodLead(l, r);
+          await supabase.from('leads').update({
+            potential_score: r.score, lead_tier: r.tier, detected_niche: r.niche,
+            estimated_value: r.estimatedValue, website_quality: r.websiteQuality, why_good_lead: why,
+          } as any).eq('id', l.id);
+        }));
+      }
+      toast.success(`Re-ranked ${all.length} leads with new weights`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Re-rank failed');
+    } finally { setRescoringWeights(false); }
+  };
+
+  const resetOutreachStats = async (mode: 'logs_only' | 'logs_and_leads') => {
+    if (!confirm(mode === 'logs_only'
+      ? 'Clear ALL outreach message logs? Leads themselves are kept.'
+      : 'Clear ALL outreach logs AND reset every lead\'s outreach stage / "emailed" / "needs call" flags? This is irreversible.')) return;
+    setResetting(true);
+    try {
+      // Delete all message logs
+      const { error: delErr } = await supabase.from('message_logs').delete().not('id', 'is', null);
+      if (delErr) throw delErr;
+      // Also clear activities of email/sms type so history feels reset
+      await supabase.from('activities').delete().in('type', ['email_sent', 'sms_sent', 'sms_inbound', 'email_received']);
+
+      if (mode === 'logs_and_leads') {
+        const { error: updErr } = await supabase.from('leads').update({
+          outreach_stage: 'none',
+          last_outbound_at: null,
+          last_inbound_at: null,
+          last_message_status: 'unknown',
+          last_message_direction: null,
+          last_message_preview: null,
+          has_replied: false,
+          needs_call: false,
+          last_contacted_at: null,
+          last_contact_method: null,
+        } as any).not('id', 'is', null);
+        if (updErr) throw updErr;
+      }
+      toast.success('Outreach stats reset');
+      refreshCounts();
+    } catch (e: any) {
+      toast.error(e?.message || 'Reset failed');
+    } finally { setResetting(false); }
   };
 
   const handleExport = async () => {
@@ -265,6 +352,81 @@ export default function SettingsPage() {
                 <label className="text-xs text-muted-foreground mb-1 block">Max emails per day</label>
                 <Input type="number" min="0" value={gmailDailyCap} onChange={e => setGmailDailyCap(e.target.value)} className="h-8 text-sm" />
               </div>
+            </div>
+          </div>
+
+          {/* Gmail Sender Address */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Mail size={15} /> Gmail Sender Address
+              <InfoTip text="The 'From:' header on outbound emails. Note: Gmail will only allow sending from this address if it is configured as a 'Send As' alias on the connected Gmail account. Otherwise Gmail silently uses the connected account's primary address." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              The address that appears as the sender. Must be configured as a 'Send As' alias on the connected Gmail account.
+            </p>
+            <Input value={gmailFromAddress} onChange={(e) => setGmailFromAddress(e.target.value)} placeholder="leadmapai.se@gmail.com" className="h-8 text-sm max-w-sm" />
+          </div>
+
+          {/* Scoring Weights */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Sliders size={15} /> Scoring Weights
+              <InfoTip text="Multipliers applied to each scoring category. 1.0 = default. Increase a slider to make that signal matter more for the final score and tier." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Adjust how much each signal matters. Click "Save & re-rank" to recompute every lead immediately.
+            </p>
+            <div className="space-y-3">
+              {([
+                ['niche', 'Niche value'],
+                ['reviews', 'Review count'],
+                ['rating', 'Rating'],
+                ['phone', 'Phone presence'],
+                ['email', 'Email presence'],
+                ['afterHours', 'After-hours / emergency'],
+                ['bookingGap', 'Booking / receptionist gap'],
+                ['website', 'Website quality'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-mono font-medium text-foreground">{weights[key].toFixed(1)}x</span>
+                  </div>
+                  <Slider
+                    value={[weights[key]]}
+                    onValueChange={([v]) => setWeights((w) => ({ ...w, [key]: v }))}
+                    min={0} max={3} step={0.1}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button onClick={saveWeightsAndRescore} disabled={rescoringWeights} className="h-8 text-sm gap-2">
+                {rescoringWeights ? <AlertTriangle size={13} className="animate-pulse" /> : <Save size={13} />}
+                {rescoringWeights ? 'Re-ranking…' : 'Save & re-rank all leads'}
+              </Button>
+              <Button variant="ghost" onClick={() => setWeights({ niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1 })} className="h-8 text-sm">
+                Reset to defaults
+              </Button>
+            </div>
+          </div>
+
+          {/* Reset Outreach Stats */}
+          <div className="bg-card border border-destructive/30 rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Trash2 size={15} className="text-destructive" /> Reset Outreach Stats
+              <InfoTip text="Use this when transitioning from one business (e.g. Nomia) to another (e.g. Leadline AI) to start outreach tracking from zero. Leads themselves are always kept." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Clears outreach history so dashboard counts and "Emailed" / follow-up flags start fresh. Leads themselves stay in your CRM.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={resetting} onClick={() => resetOutreachStats('logs_only')} className="h-8 text-sm gap-2">
+                <Trash2 size={13} /> Clear message logs only
+              </Button>
+              <Button variant="destructive" size="sm" disabled={resetting} onClick={() => resetOutreachStats('logs_and_leads')} className="h-8 text-sm gap-2">
+                <Trash2 size={13} /> Full reset (logs + lead flags)
+              </Button>
             </div>
           </div>
 

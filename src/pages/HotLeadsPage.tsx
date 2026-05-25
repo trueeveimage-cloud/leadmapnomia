@@ -130,6 +130,8 @@ export default function HotLeadsPage() {
       if (viewMode === 'aplus' && s.tier !== 'A+') return false;
       if (viewMode === 'no_email' && s.lead.email) return false;
       if (viewMode === 'follow_up') {
+        // Only consider leads we actually emailed (not SMS-contacted from old Nomia days)
+        if (s.lead.outreach_stage !== 'email_sent') return false;
         const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
         if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
       }
@@ -228,6 +230,7 @@ export default function HotLeadsPage() {
     aplus: scored.filter((s) => s.tier === 'A+').length,
     noEmail: scored.filter((s) => !s.lead.email).length,
     followUp: scored.filter((s) => {
+      if (s.lead.outreach_stage !== 'email_sent') return false;
       const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
       return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
     }).length,
@@ -253,6 +256,18 @@ export default function HotLeadsPage() {
               <p className="text-sm text-muted-foreground">Highest-potential AI receptionist prospects, sorted by score.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const withEmail = filtered.filter((s) => s.lead.email && s.lead.outreach_stage !== 'email_sent' && !s.lead.outreach_opt_out);
+                  const allSelected = withEmail.length > 0 && withEmail.every((s) => selected[s.lead.id]);
+                  const next: Record<string, boolean> = { ...selected };
+                  withEmail.forEach((s) => { next[s.lead.id] = !allSelected; });
+                  setSelected(next);
+                }}
+              >
+                Select all w/ email ({filtered.filter((s) => s.lead.email && s.lead.outreach_stage !== 'email_sent' && !s.lead.outreach_opt_out).length})
+              </Button>
               <Button
                 onClick={() => setEmailModalOpen(true)}
                 disabled={selectedWithEmail.length === 0}
@@ -382,15 +397,20 @@ export default function HotLeadsPage() {
                           <TierBadge tier={s.tier} />
                           <span className="text-xs text-muted-foreground">{s.nicheLabel}</span>
                           {s.lead.rating && <span className="text-xs text-amber-500">★ {s.lead.rating} ({s.lead.reviews_count ?? 0})</span>}
-                          {s.lead.last_outbound_at && (
+                          {s.lead.outreach_stage === 'email_sent' && (
                             <span className="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded px-1.5 py-0.5">Emailed</span>
+                          )}
+                          {s.lead.outreach_stage !== 'email_sent' && s.lead.last_outbound_at && (
+                            <span className="text-[10px] uppercase tracking-wider text-sky-400 border border-sky-500/30 bg-sky-500/10 rounded px-1.5 py-0.5">SMS sent</span>
                           )}
                         </div>
                         {s.lead.address && <div className="text-xs text-muted-foreground truncate mb-1.5">{s.lead.address}</div>}
                         <div className="flex flex-wrap gap-1 mb-2">
                           {s.badges.map((b) => <MetaBadge key={b} label={b} />)}
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{s.why}</p>
+                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/40 border border-border/50 rounded px-2 py-1.5 italic">
+                          <span className="not-italic font-semibold text-muted-foreground mr-1">Why:</span>{s.why}
+                        </p>
                       </div>
                       <button onClick={() => setOpenId(isOpen ? null : s.lead.id)} className="shrink-0 p-1.5 rounded-md hover:bg-accent text-muted-foreground">
                         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

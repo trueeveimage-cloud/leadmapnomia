@@ -24,17 +24,17 @@ function b64url(s: string): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function buildRaw(to: string, subject: string, body: string): string {
+function buildRaw(to: string, subject: string, body: string, from?: string): string {
   const encSubject = `=?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
-  const msg = [
+  const headers = [
+    ...(from ? [`From: ${from}`] : []),
     `To: ${to}`,
     `Subject: ${encSubject}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',
-    '',
-    body,
-  ].join('\r\n');
+  ];
+  const msg = [...headers, '', body].join('\r\n');
   return b64url(msg);
 }
 
@@ -98,7 +98,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const raw = buildRaw(to, subject, body);
+    const { data: fromSetting } = await supabase.from('settings').select('value').eq('key', 'gmail_from_address').maybeSingle();
+    const fromAddress = (fromSetting?.value || '').trim() || undefined;
+    const raw = buildRaw(to, subject, body, fromAddress);
     const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
       method: 'POST',
       headers: {

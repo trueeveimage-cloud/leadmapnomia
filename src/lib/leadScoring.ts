@@ -90,6 +90,27 @@ export interface ScoreResult {
   badges: string[];
 }
 
+export interface ScoringWeights {
+  niche: number;
+  reviews: number;
+  rating: number;
+  phone: number;
+  email: number;
+  afterHours: number;
+  bookingGap: number;
+  website: number;
+}
+
+export const DEFAULT_WEIGHTS: ScoringWeights = {
+  niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
+};
+
+let CURRENT_WEIGHTS: ScoringWeights = { ...DEFAULT_WEIGHTS };
+export function setScoringWeights(w: Partial<ScoringWeights>) {
+  CURRENT_WEIGHTS = { ...DEFAULT_WEIGHTS, ...w };
+}
+export function getScoringWeights(): ScoringWeights { return { ...CURRENT_WEIGHTS }; }
+
 export function calculateScore(lead: Lead): ScoreResult {
   const niche = detectNiche(lead);
   const profile = NICHE_PROFILES[niche];
@@ -103,44 +124,48 @@ export function calculateScore(lead: Lead): ScoreResult {
   const hasReceptionist = lead.has_receptionist;
   const phoneFirst = profile.phoneFirst || PHONE_FIRST_NICHES.includes(niche);
 
+  const W = CURRENT_WEIGHTS;
   let score = 25;
   const reasons: { label: string; delta: number }[] = [];
-  const add = (label: string, delta: number) => { score += delta; reasons.push({ label, delta }); };
+  const add = (label: string, delta: number, w = 1) => {
+    const d = Math.round(delta * w);
+    score += d; reasons.push({ label, delta: d });
+  };
 
   // 1. Niche value
-  if (profile.highValue && profile.estValue === 'High') add('High-value niche', +22);
-  else if (profile.highValue) add('Mid-value niche', +14);
-  if (profile.lowValue) add('Low-value niche', -25);
-  if (niche === 'unknown') add('Unknown niche', -10);
+  if (profile.highValue && profile.estValue === 'High') add('High-value niche', +22, W.niche);
+  else if (profile.highValue) add('Mid-value niche', +14, W.niche);
+  if (profile.lowValue) add('Low-value niche', -25, W.niche);
+  if (niche === 'unknown') add('Unknown niche', -10, W.niche);
 
   // 2-3. Reviews + rating (volume = call volume signal)
-  if (reviews >= 200) add('200+ reviews (high call volume)', +14);
-  else if (reviews >= 100) add('100+ reviews', +10);
-  else if (reviews >= 50) add('50+ reviews', +6);
-  else if (reviews >= 15) add('15+ reviews', +3);
-  else if (reviews < 5) add('Very few reviews', -8);
+  if (reviews >= 200) add('200+ reviews (high call volume)', +14, W.reviews);
+  else if (reviews >= 100) add('100+ reviews', +10, W.reviews);
+  else if (reviews >= 50) add('50+ reviews', +6, W.reviews);
+  else if (reviews >= 15) add('15+ reviews', +3, W.reviews);
+  else if (reviews < 5) add('Very few reviews', -8, W.reviews);
 
-  if (rating >= 4.5) add('Rating ≥ 4.5', +8);
-  else if (rating >= 4.0) add('Rating ≥ 4.0', +4);
-  else if (rating > 0 && rating < 3.5) add('Bad rating (<3.5)', -15);
+  if (rating >= 4.5) add('Rating ≥ 4.5', +8, W.rating);
+  else if (rating >= 4.0) add('Rating ≥ 4.0', +4, W.rating);
+  else if (rating > 0 && rating < 3.5) add('Bad rating (<3.5)', -15, W.rating);
 
   // 4-7. Contact info
-  if (hasPhone) add('Phone visible', +8); else add('No phone number', -25);
-  if (hasEmail) add('Email available', +4);
-  if (websiteQuality === 'none') add('No website', +6);
-  else if (websiteQuality === 'weak') add('Weak website', +8);
+  if (hasPhone) add('Phone visible', +8, W.phone); else add('No phone number', -25, W.phone);
+  if (hasEmail) add('Email available', +4, W.email);
+  if (websiteQuality === 'none') add('No website', +6, W.website);
+  else if (websiteQuality === 'weak') add('Weak website', +8, W.website);
 
   // 8. After-hours / emergency
-  if (hasEmergency) add('Emergency / after-hours service', +10);
+  if (hasEmergency) add('Emergency / after-hours service', +10, W.afterHours);
 
   // 9. Booking / receptionist gap (missed-call problem signals)
-  if (hasBooking === false) add('No online booking', +10);
-  if (hasReceptionist === false) add('No receptionist', +12);
-  if (hasBooking === true) add('Has online booking', -8);
-  if (hasReceptionist === true) add('Has receptionist / call center', -18);
+  if (hasBooking === false) add('No online booking', +10, W.bookingGap);
+  if (hasReceptionist === false) add('No receptionist', +12, W.bookingGap);
+  if (hasBooking === true) add('Has online booking', -8, W.bookingGap);
+  if (hasReceptionist === true) add('Has receptionist / call center', -18, W.bookingGap);
 
   // 10. Phone-first niche = missed call = lost revenue
-  if (phoneFirst && hasPhone && reviews >= 30) add('Phone-first service with traction', +10);
+  if (phoneFirst && hasPhone && reviews >= 30) add('Phone-first service with traction', +10, W.phone);
 
   // Negative: big chain
   if (/\b(group|gruppen|chain|kedja|elgiganten|ikea|volvo|mercedes|bmw|circle k|7[- ]?eleven|mcdonalds|max)\b/i.test(lead.name || '')) {
