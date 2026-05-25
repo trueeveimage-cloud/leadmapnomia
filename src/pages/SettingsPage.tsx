@@ -166,6 +166,8 @@ export default function SettingsPage() {
       setSetting('followup_after_hours', followupAfterHours),
       setSetting('followup_template', followupTemplate),
       setSetting('gmail_daily_cap', gmailDailyCap),
+      setSetting('gmail_from_address', gmailFromAddress),
+      setSetting('scoring_weights', JSON.stringify(weights)),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
