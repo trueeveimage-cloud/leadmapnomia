@@ -382,8 +382,11 @@ export default function HotLeadsPage() {
                           <TierBadge tier={s.tier} />
                           <span className="text-xs text-muted-foreground">{s.nicheLabel}</span>
                           {s.lead.rating && <span className="text-xs text-amber-500">★ {s.lead.rating} ({s.lead.reviews_count ?? 0})</span>}
-                          {s.lead.last_outbound_at && (
+                          {s.lead.outreach_stage === 'email_sent' && (
                             <span className="text-[10px] uppercase tracking-wider text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded px-1.5 py-0.5">Emailed</span>
+                          )}
+                          {s.lead.outreach_stage !== 'email_sent' && s.lead.last_outbound_at && (
+                            <span className="text-[10px] uppercase tracking-wider text-sky-400 border border-sky-500/30 bg-sky-500/10 rounded px-1.5 py-0.5">SMS sent</span>
                           )}
                         </div>
                         {s.lead.address && <div className="text-xs text-muted-foreground truncate mb-1.5">{s.lead.address}</div>}
