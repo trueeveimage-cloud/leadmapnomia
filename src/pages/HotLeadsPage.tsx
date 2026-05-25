@@ -396,7 +396,9 @@ export default function HotLeadsPage() {
                         <div className="flex flex-wrap gap-1 mb-2">
                           {s.badges.map((b) => <MetaBadge key={b} label={b} />)}
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{s.why}</p>
+                        <p className="text-xs text-foreground/80 leading-relaxed bg-muted/40 border border-border/50 rounded px-2 py-1.5 italic">
+                          <span className="not-italic font-semibold text-muted-foreground mr-1">Why:</span>{s.why}
+                        </p>
                       </div>
                       <button onClick={() => setOpenId(isOpen ? null : s.lead.id)} className="shrink-0 p-1.5 rounded-md hover:bg-accent text-muted-foreground">
                         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
