@@ -257,6 +257,18 @@ export default function HotLeadsPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
+                variant="outline"
+                onClick={() => {
+                  const withEmail = filtered.filter((s) => s.lead.email && s.lead.outreach_stage !== 'email_sent' && !s.lead.outreach_opt_out);
+                  const allSelected = withEmail.length > 0 && withEmail.every((s) => selected[s.lead.id]);
+                  const next: Record<string, boolean> = { ...selected };
+                  withEmail.forEach((s) => { next[s.lead.id] = !allSelected; });
+                  setSelected(next);
+                }}
+              >
+                Select all w/ email ({filtered.filter((s) => s.lead.email && s.lead.outreach_stage !== 'email_sent' && !s.lead.outreach_opt_out).length})
+              </Button>
+              <Button
                 onClick={() => setEmailModalOpen(true)}
                 disabled={selectedWithEmail.length === 0}
                 variant={selectedWithEmail.length > 0 ? 'default' : 'outline'}
