@@ -102,6 +102,16 @@ export default function SettingsPage() {
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
   const [gmailDailyCap, setGmailDailyCap] = useState('200');
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
+  const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
+
+  // Scoring weights (multipliers, default 1.0)
+  const [weights, setWeights] = useState({
+    niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
+  });
+  const [rescoringWeights, setRescoringWeights] = useState(false);
+
+  // Reset outreach stats
+  const [resetting, setResetting] = useState(false);
 
   // Finder defaults
   const [finderDefaultCity, setFinderDefaultCity] = useState('');
