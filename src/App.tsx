@@ -35,6 +35,22 @@ import { useNavigate } from "react-router-dom";
 
 const queryClient = new QueryClient();
 
+// Load global scoring weights from settings on mount
+function ScoringWeightsBootstrap() {
+  useEffect(() => {
+    import('@/lib/supabase').then(({ getSetting }) => {
+      getSetting('scoring_weights').then((v) => {
+        if (!v) return;
+        try {
+          const parsed = JSON.parse(v);
+          import('@/lib/leadScoring').then(({ setScoringWeights }) => setScoringWeights(parsed));
+        } catch {}
+      });
+    });
+  }, []);
+  return null;
+}
+
 // Global hotkeys + Easter egg
 function GlobalHotkeys() {
   const navigate = useNavigate();
