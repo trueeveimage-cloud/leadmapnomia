@@ -130,6 +130,8 @@ export default function HotLeadsPage() {
       if (viewMode === 'aplus' && s.tier !== 'A+') return false;
       if (viewMode === 'no_email' && s.lead.email) return false;
       if (viewMode === 'follow_up') {
+        // Only consider leads we actually emailed (not SMS-contacted from old Nomia days)
+        if (s.lead.outreach_stage !== 'email_sent') return false;
         const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
         if (!out || (Date.now() - out) < TWO_DAYS || s.lead.has_replied) return false;
       }
