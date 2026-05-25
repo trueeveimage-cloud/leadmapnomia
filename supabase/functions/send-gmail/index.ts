@@ -98,7 +98,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const raw = buildRaw(to, subject, body);
+    const { data: fromSetting } = await supabase.from('settings').select('value').eq('key', 'gmail_from_address').maybeSingle();
+    const fromAddress = (fromSetting?.value || '').trim() || undefined;
+    const raw = buildRaw(to, subject, body, fromAddress);
     const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
       method: 'POST',
       headers: {
