@@ -90,6 +90,27 @@ export interface ScoreResult {
   badges: string[];
 }
 
+export interface ScoringWeights {
+  niche: number;
+  reviews: number;
+  rating: number;
+  phone: number;
+  email: number;
+  afterHours: number;
+  bookingGap: number;
+  website: number;
+}
+
+export const DEFAULT_WEIGHTS: ScoringWeights = {
+  niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
+};
+
+let CURRENT_WEIGHTS: ScoringWeights = { ...DEFAULT_WEIGHTS };
+export function setScoringWeights(w: Partial<ScoringWeights>) {
+  CURRENT_WEIGHTS = { ...DEFAULT_WEIGHTS, ...w };
+}
+export function getScoringWeights(): ScoringWeights { return { ...CURRENT_WEIGHTS }; }
+
 export function calculateScore(lead: Lead): ScoreResult {
   const niche = detectNiche(lead);
   const profile = NICHE_PROFILES[niche];
