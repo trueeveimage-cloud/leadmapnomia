@@ -137,6 +137,11 @@ export default function SettingsPage() {
     getSetting('followup_after_hours').then(v => { if (v) setFollowupAfterHours(v); });
     getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
     getSetting('gmail_daily_cap').then(v => { if (v) setGmailDailyCap(v); });
+    getSetting('gmail_from_address').then(v => { if (v) setGmailFromAddress(v); });
+    getSetting('scoring_weights').then(v => {
+      if (!v) return;
+      try { const p = JSON.parse(v); setWeights((w) => ({ ...w, ...p })); } catch {}
+    });
     // Count today's sent emails (UTC day)
     const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
     supabase.from('message_logs')
