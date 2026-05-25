@@ -176,6 +176,74 @@ export default function SettingsPage() {
     toast.success('Settings saved');
   };
 
+  const saveWeightsAndRescore = async () => {
+    setRescoringWeights(true);
+    try {
+      await setSetting('scoring_weights', JSON.stringify(weights));
+      setScoringWeights(weights);
+      // Re-rank all leads with new weights
+      const all: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase.from('leads').select('*').range(from, from + 999);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+      const BATCH = 200;
+      for (let i = 0; i < all.length; i += BATCH) {
+        const slice = all.slice(i, i + BATCH);
+        await Promise.all(slice.map(async (l) => {
+          const r = calculateScore(l);
+          const why = generateWhyGoodLead(l, r);
+          await supabase.from('leads').update({
+            potential_score: r.score, lead_tier: r.tier, detected_niche: r.niche,
+            estimated_value: r.estimatedValue, website_quality: r.websiteQuality, why_good_lead: why,
+          } as any).eq('id', l.id);
+        }));
+      }
+      toast.success(`Re-ranked ${all.length} leads with new weights`);
+    } catch (e: any) {
+      toast.error(e?.message || 'Re-rank failed');
+    } finally { setRescoringWeights(false); }
+  };
+
+  const resetOutreachStats = async (mode: 'logs_only' | 'logs_and_leads') => {
+    if (!confirm(mode === 'logs_only'
+      ? 'Clear ALL outreach message logs? Leads themselves are kept.'
+      : 'Clear ALL outreach logs AND reset every lead\'s outreach stage / "emailed" / "needs call" flags? This is irreversible.')) return;
+    setResetting(true);
+    try {
+      // Delete all message logs
+      const { error: delErr } = await supabase.from('message_logs').delete().not('id', 'is', null);
+      if (delErr) throw delErr;
+      // Also clear activities of email/sms type so history feels reset
+      await supabase.from('activities').delete().in('type', ['email_sent', 'sms_sent', 'sms_inbound', 'email_received']);
+
+      if (mode === 'logs_and_leads') {
+        const { error: updErr } = await supabase.from('leads').update({
+          outreach_stage: 'none',
+          last_outbound_at: null,
+          last_inbound_at: null,
+          last_message_status: 'unknown',
+          last_message_direction: null,
+          last_message_preview: null,
+          has_replied: false,
+          needs_call: false,
+          last_contacted_at: null,
+          last_contact_method: null,
+        } as any).not('id', 'is', null);
+        if (updErr) throw updErr;
+      }
+      toast.success('Outreach stats reset');
+      refreshCounts();
+    } catch (e: any) {
+      toast.error(e?.message || 'Reset failed');
+    } finally { setResetting(false); }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
