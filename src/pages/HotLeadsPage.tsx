@@ -230,6 +230,7 @@ export default function HotLeadsPage() {
     aplus: scored.filter((s) => s.tier === 'A+').length,
     noEmail: scored.filter((s) => !s.lead.email).length,
     followUp: scored.filter((s) => {
+      if (s.lead.outreach_stage !== 'email_sent') return false;
       const out = s.lead.last_outbound_at ? new Date(s.lead.last_outbound_at).getTime() : 0;
       return out && (Date.now() - out) >= 48 * 3600 * 1000 && !s.lead.has_replied;
     }).length,
