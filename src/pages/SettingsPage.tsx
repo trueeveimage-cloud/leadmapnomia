@@ -355,6 +355,81 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Gmail Sender Address */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Mail size={15} /> Gmail Sender Address
+              <InfoTip text="The 'From:' header on outbound emails. Note: Gmail will only allow sending from this address if it is configured as a 'Send As' alias on the connected Gmail account. Otherwise Gmail silently uses the connected account's primary address." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              The address that appears as the sender. Must be configured as a 'Send As' alias on the connected Gmail account.
+            </p>
+            <Input value={gmailFromAddress} onChange={(e) => setGmailFromAddress(e.target.value)} placeholder="leadmapai.se@gmail.com" className="h-8 text-sm max-w-sm" />
+          </div>
+
+          {/* Scoring Weights */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Sliders size={15} /> Scoring Weights
+              <InfoTip text="Multipliers applied to each scoring category. 1.0 = default. Increase a slider to make that signal matter more for the final score and tier." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Adjust how much each signal matters. Click "Save & re-rank" to recompute every lead immediately.
+            </p>
+            <div className="space-y-3">
+              {([
+                ['niche', 'Niche value'],
+                ['reviews', 'Review count'],
+                ['rating', 'Rating'],
+                ['phone', 'Phone presence'],
+                ['email', 'Email presence'],
+                ['afterHours', 'After-hours / emergency'],
+                ['bookingGap', 'Booking / receptionist gap'],
+                ['website', 'Website quality'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-mono font-medium text-foreground">{weights[key].toFixed(1)}x</span>
+                  </div>
+                  <Slider
+                    value={[weights[key]]}
+                    onValueChange={([v]) => setWeights((w) => ({ ...w, [key]: v }))}
+                    min={0} max={3} step={0.1}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button onClick={saveWeightsAndRescore} disabled={rescoringWeights} className="h-8 text-sm gap-2">
+                {rescoringWeights ? <AlertTriangle size={13} className="animate-pulse" /> : <Save size={13} />}
+                {rescoringWeights ? 'Re-ranking…' : 'Save & re-rank all leads'}
+              </Button>
+              <Button variant="ghost" onClick={() => setWeights({ niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1 })} className="h-8 text-sm">
+                Reset to defaults
+              </Button>
+            </div>
+          </div>
+
+          {/* Reset Outreach Stats */}
+          <div className="bg-card border border-destructive/30 rounded-lg p-5">
+            <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Trash2 size={15} className="text-destructive" /> Reset Outreach Stats
+              <InfoTip text="Use this when transitioning from one business (e.g. Nomia) to another (e.g. Leadline AI) to start outreach tracking from zero. Leads themselves are always kept." />
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              Clears outreach history so dashboard counts and "Emailed" / follow-up flags start fresh. Leads themselves stay in your CRM.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={resetting} onClick={() => resetOutreachStats('logs_only')} className="h-8 text-sm gap-2">
+                <Trash2 size={13} /> Clear message logs only
+              </Button>
+              <Button variant="destructive" size="sm" disabled={resetting} onClick={() => resetOutreachStats('logs_and_leads')} className="h-8 text-sm gap-2">
+                <Trash2 size={13} /> Full reset (logs + lead flags)
+              </Button>
+            </div>
+          </div>
+
 
           {/* Outreach Defaults */}
           <div className="bg-card border border-border rounded-lg p-5">
