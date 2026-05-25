@@ -136,6 +136,7 @@ const App = () => (
               <AuthGate>
                 <CRMProvider>
                   <GlobalHotkeys />
+                  <ScoringWeightsBootstrap />
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
