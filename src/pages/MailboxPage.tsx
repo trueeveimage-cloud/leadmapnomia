@@ -24,6 +24,7 @@ interface GmailMsg {
 }
 
 export default function MailboxPage() {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [lead, setLead] = useState<Lead | null>(null);
   const [leadResults, setLeadResults] = useState<Lead[]>([]);
