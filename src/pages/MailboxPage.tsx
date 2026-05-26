@@ -38,6 +38,16 @@ export default function MailboxPage() {
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Deep-link via ?email=
+  useEffect(() => {
+    const q = searchParams.get('email');
+    if (q && q !== email) {
+      setEmail(q);
+      loadThread(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Lead search
   useEffect(() => {
     if (!search.trim()) { setLeadResults([]); return; }
