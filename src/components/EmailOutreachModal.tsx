@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, X, Mail } from 'lucide-react';
+import { Loader2, Send, X, Mail, History, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateOutreachMessage, detectNiche } from '@/lib/leadScoring';
+import LeadEmailHistory from '@/components/LeadEmailHistory';
 import type { Lead } from '@/lib/supabase';
 
 interface Props {
@@ -36,6 +38,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [subject, setSubject] = useState<string>(() => recipients[0] ? defaultSubject(recipients[0]) : 'En snabb fråga');
   const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI' : '');
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const abortRef = React.useRef(false);
@@ -102,14 +105,41 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
                 <label className="text-xs font-medium text-muted-foreground">Body (use {'{name}'}, {'{city}'} for personalization)</label>
                 <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={10} className="mt-1 font-mono text-sm" />
               </div>
-              <div className="border rounded-md max-h-48 overflow-y-auto">
-                {recipients.map((l) => (
-                  <label key={l.id} className="flex items-center gap-2 px-2 py-1.5 border-b last:border-0 text-xs hover:bg-accent cursor-pointer">
-                    <input type="checkbox" checked={!!enabled[l.id]} onChange={(e) => setEnabled((p) => ({ ...p, [l.id]: e.target.checked }))} />
-                    <span className="font-medium truncate flex-1">{l.name}</span>
-                    <span className="text-muted-foreground truncate">{l.email}</span>
-                  </label>
-                ))}
+              <div className="border rounded-md max-h-72 overflow-y-auto">
+                {recipients.map((l) => {
+                  const open = !!historyOpen[l.id];
+                  return (
+                    <div key={l.id} className="border-b last:border-0">
+                      <div className="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent">
+                        <input type="checkbox" checked={!!enabled[l.id]} onChange={(e) => setEnabled((p) => ({ ...p, [l.id]: e.target.checked }))} />
+                        <span className="font-medium truncate flex-1">{l.name}</span>
+                        <span className="text-muted-foreground truncate max-w-[180px]">{l.email}</span>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryOpen((p) => ({ ...p, [l.id]: !p[l.id] }))}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                          title="Show previous emails"
+                        >
+                          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          <History size={11} />
+                        </button>
+                        <Link
+                          to={`/mailbox?email=${encodeURIComponent(l.email || '')}`}
+                          target="_blank"
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                          title="Open in Mailbox (Gmail chat)"
+                        >
+                          <ExternalLink size={11} />
+                        </Link>
+                      </div>
+                      {open && (
+                        <div className="px-2 pb-2 bg-muted/30">
+                          <LeadEmailHistory leadId={l.id} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}

@@ -68,7 +68,7 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
 }
 
 const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
-const EMAIL_PATHS = ['/hot-leads'];
+const EMAIL_PATHS = ['/hot-leads', '/mailbox'];
 const TOOLS_PATHS = ['/add', '/finder'];
 const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/making-demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
@@ -248,6 +248,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <SidebarNavLink item={{ label: 'S-Tier Queue', path: '/hot-leads?view=s', icon: <Crown size={15} />, color: 'hsl(300 85% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'A+ Hot Queue', path: '/hot-leads?view=aplus', icon: <Flame size={15} />, color: 'hsl(0 85% 60%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Gmail Outreach', path: '/hot-leads?view=no_email', icon: <Mail size={15} />, color: 'hsl(280 80% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Mailbox', path: '/mailbox', icon: <InboxIcon size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Follow-ups', path: '/hot-leads?view=follow_up', icon: <Clock size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
