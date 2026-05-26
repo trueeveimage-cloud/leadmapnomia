@@ -68,7 +68,7 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
 }
 
 const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
-const EMAIL_PATHS = ['/hot-leads'];
+const EMAIL_PATHS = ['/hot-leads', '/mailbox'];
 const TOOLS_PATHS = ['/add', '/finder'];
 const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/making-demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
