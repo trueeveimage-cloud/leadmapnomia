@@ -248,6 +248,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           <SidebarNavLink item={{ label: 'S-Tier Queue', path: '/hot-leads?view=s', icon: <Crown size={15} />, color: 'hsl(300 85% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'A+ Hot Queue', path: '/hot-leads?view=aplus', icon: <Flame size={15} />, color: 'hsl(0 85% 60%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Gmail Outreach', path: '/hot-leads?view=no_email', icon: <Mail size={15} />, color: 'hsl(280 80% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Mailbox', path: '/mailbox', icon: <InboxIcon size={15} />, color: 'hsl(213 94% 58%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Follow-ups', path: '/hot-leads?view=follow_up', icon: <Clock size={15} />, color: 'hsl(38 95% 55%)' }} onNav={onClose} />
         </NavGroup>
 
