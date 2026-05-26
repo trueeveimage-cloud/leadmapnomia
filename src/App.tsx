@@ -30,6 +30,7 @@ import CampaignStatsPage from "./pages/CampaignStatsPage";
 import DashboardPage from "./pages/DashboardPage";
 import QuickSendPage from "./pages/QuickSendPage";
 import HotLeadsPage from "./pages/HotLeadsPage";
+import MailboxPage from "./pages/MailboxPage";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
