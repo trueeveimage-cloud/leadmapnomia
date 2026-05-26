@@ -38,6 +38,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [subject, setSubject] = useState<string>(() => recipients[0] ? defaultSubject(recipients[0]) : 'En snabb fråga');
   const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI' : '');
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const abortRef = React.useRef(false);
