@@ -12,6 +12,7 @@ const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1'
 const BodySchema = z.object({
   email: z.string().email(),
   max: z.number().int().min(1).max(50).optional(),
+  pageToken: z.string().optional(),
 });
 
 function jsonResp(payload: unknown, status = 200) {
@@ -60,7 +61,7 @@ Deno.serve(async (req) => {
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
-  const { email, max = 20 } = parsed.data;
+  const { email, max = 10, pageToken } = parsed.data;
 
   const q = encodeURIComponent(`(to:${email} OR from:${email})`);
   const headers = {
@@ -69,7 +70,8 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const listResp = await fetch(`${GATEWAY_URL}/users/me/messages?maxResults=${max}&q=${q}`, { headers });
+    const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+    const listResp = await fetch(`${GATEWAY_URL}/users/me/messages?maxResults=${max}&q=${q}${pageParam}`, { headers });
     const listData = await listResp.json();
     if (!listResp.ok) return jsonResp({ error: 'gmail_list_failed', details: listData }, 502);
 
@@ -97,7 +99,7 @@ Deno.serve(async (req) => {
     );
 
     const filtered = messages.filter(Boolean).sort((a: any, b: any) => b.internalDate - a.internalDate);
-    return jsonResp({ messages: filtered, total: filtered.length });
+    return jsonResp({ messages: filtered, total: filtered.length, nextPageToken: listData.nextPageToken || null });
   } catch (e: any) {
     return jsonResp({ error: e?.message || 'unknown' }, 500);
   }

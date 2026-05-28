@@ -39,6 +39,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI' : '');
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+  const [lastSent, setLastSent] = useState<Record<string, { snippet: string; created_at: string } | null>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const abortRef = React.useRef(false);
@@ -52,6 +53,34 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
       abortRef.current = false;
     }
   }, [open, recipients.length]);
+
+  // Fetch most-recent sent email per recipient (one query, all leads)
+  React.useEffect(() => {
+    if (!open || recipients.length === 0) return;
+    const ids = recipients.map((r) => r.id);
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from('message_logs')
+        .select('lead_id, body, created_at')
+        .in('lead_id', ids)
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .in('status', ['sent', 'queued'])
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (!active) return;
+      const map: Record<string, { snippet: string; created_at: string }> = {};
+      for (const row of (data || []) as any[]) {
+        if (!map[row.lead_id]) {
+          const firstLine = (row.body || '').split('\n').find((l: string) => l.trim());
+          map[row.lead_id] = { snippet: (firstLine || row.body || '').slice(0, 120), created_at: row.created_at };
+        }
+      }
+      setLastSent(map);
+    })();
+    return () => { active = false; };
+  }, [open, recipients]);
 
   const send = async () => {
     const targets = recipients.filter((l) => enabled[l.id]);
@@ -108,6 +137,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
               <div className="border rounded-md max-h-72 overflow-y-auto">
                 {recipients.map((l) => {
                   const open = !!historyOpen[l.id];
+                  const last = lastSent[l.id];
                   return (
                     <div key={l.id} className="border-b last:border-0">
                       <div className="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent">
@@ -126,12 +156,19 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
                         <Link
                           to={`/mailbox?email=${encodeURIComponent(l.email || '')}`}
                           target="_blank"
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                          title="Open in Mailbox (Gmail chat)"
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-medium"
+                          title="Open full Gmail conversation in Mailbox"
                         >
                           <ExternalLink size={11} />
+                          <span>Open thread</span>
                         </Link>
                       </div>
+                      {last && !open && (
+                        <div className="px-2 pb-1.5 -mt-0.5 text-[11px] text-muted-foreground flex items-start gap-1.5">
+                          <span className="shrink-0 text-green">↳ Last sent</span>
+                          <span className="truncate flex-1 italic">{last.snippet || '(no preview)'}</span>
+                        </div>
+                      )}
                       {open && (
                         <div className="px-2 pb-2 bg-muted/30">
                           <LeadEmailHistory leadId={l.id} />

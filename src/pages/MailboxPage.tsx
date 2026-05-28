@@ -31,7 +31,11 @@ export default function MailboxPage() {
   const [search, setSearch] = useState('');
   const [messages, setMessages] = useState<GmailMsg[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
   // Compose state
   const [subject, setSubject] = useState('');
@@ -64,23 +68,47 @@ export default function MailboxPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const loadThread = async (targetEmail: string) => {
+  const loadThread = async (targetEmail: string, pageToken?: string) => {
     if (!targetEmail) return;
-    setLoading(true);
-    setMessages([]);
+    const isFirstPage = !pageToken;
+    if (isFirstPage) { setLoading(true); setMessages([]); setNextPageToken(null); }
+    else setLoadingMore(true);
     try {
       const { data, error } = await supabase.functions.invoke('gmail-thread', {
-        body: { email: targetEmail, max: 30 },
+        body: { email: targetEmail, max: 10, pageToken },
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error(JSON.stringify((data as any).error));
-      setMessages((data as any).messages || []);
+      const newMsgs = (data as any).messages || [];
+      setMessages((prev) => {
+        const combined = isFirstPage ? newMsgs : [...prev, ...newMsgs];
+        // dedupe by id, keep newest-first sort
+        const seen = new Set<string>();
+        return combined.filter((m: GmailMsg) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
+          .sort((a: GmailMsg, b: GmailMsg) => b.internalDate - a.internalDate);
+      });
+      setNextPageToken((data as any).nextPageToken || null);
     } catch (e: any) {
       toast.error('Failed to load Gmail thread: ' + (e?.message || 'unknown'));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  // Infinite scroll observer
+  useEffect(() => {
+    if (!sentinelRef.current || !nextPageToken || loadingMore || loading) return;
+    const el = sentinelRef.current;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && nextPageToken && !loadingMore) {
+        loadThread(email, nextPageToken);
+      }
+    }, { root: scrollRef.current, rootMargin: '100px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextPageToken, loadingMore, loading, email]);
 
   const selectLead = (l: Lead) => {
     setLead(l);
@@ -195,7 +223,7 @@ export default function MailboxPage() {
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               </Button>
             </div>
-            <div className="max-h-[420px] overflow-y-auto divide-y">
+            <div ref={scrollRef} className="max-h-[420px] overflow-y-auto divide-y">
               {loading && messages.length === 0 && (
                 <div className="p-8 text-center text-sm text-muted-foreground">Loading thread…</div>
               )}
@@ -237,6 +265,19 @@ export default function MailboxPage() {
                   </div>
                 );
               })}
+              {nextPageToken && messages.length > 0 && (
+                <div ref={sentinelRef} className="p-3 text-center">
+                  {loadingMore ? (
+                    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Loading more…
+                    </span>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => loadThread(email, nextPageToken)} className="text-xs">
+                      Load more
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

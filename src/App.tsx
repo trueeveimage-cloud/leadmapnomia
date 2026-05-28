@@ -5,34 +5,39 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CRMProvider } from "@/context/CRMContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import AddPage from "./pages/AddPage";
-import BulkPage from "./pages/BulkPage";
-import SectionPage from "./pages/SectionPage";
-import ClosingPage from "./pages/ClosingPage";
-import CallbacksPage from "./pages/CallbacksPage";
-import SettingsPage from "./pages/SettingsPage";
-import FinderPage from "./pages/FinderPage";
-import FinderRunPage from "./pages/FinderRunPage";
-import FinderBatchPage from "./pages/FinderBatchPage";
-import FinderCoveragePage from "./pages/FinderCoveragePage";
-import CostCalculatorPage from "./pages/CostCalculatorPage";
+import { lazy, Suspense, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+// Eager: auth + small pages on critical path
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
-import CampaignsPage from "./pages/CampaignsPage";
-import CampaignNewPage from "./pages/CampaignNewPage";
-import CampaignDetailPage from "./pages/CampaignDetailPage";
-import InboxPage from "./pages/InboxPage";
-import CallListPage from "./pages/CallListPage";
-import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
-import GuidePage from "./pages/GuidePage";
-import CampaignStatsPage from "./pages/CampaignStatsPage";
-import DashboardPage from "./pages/DashboardPage";
-import QuickSendPage from "./pages/QuickSendPage";
-import HotLeadsPage from "./pages/HotLeadsPage";
-import MailboxPage from "./pages/MailboxPage";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+
+// Lazy: everything else — splits bundle per route for faster initial load
+const AddPage = lazy(() => import("./pages/AddPage"));
+const BulkPage = lazy(() => import("./pages/BulkPage"));
+const SectionPage = lazy(() => import("./pages/SectionPage"));
+const ClosingPage = lazy(() => import("./pages/ClosingPage"));
+const CallbacksPage = lazy(() => import("./pages/CallbacksPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const FinderPage = lazy(() => import("./pages/FinderPage"));
+const FinderRunPage = lazy(() => import("./pages/FinderRunPage"));
+const FinderBatchPage = lazy(() => import("./pages/FinderBatchPage"));
+const FinderCoveragePage = lazy(() => import("./pages/FinderCoveragePage"));
+const CostCalculatorPage = lazy(() => import("./pages/CostCalculatorPage"));
+const CampaignsPage = lazy(() => import("./pages/CampaignsPage"));
+const CampaignNewPage = lazy(() => import("./pages/CampaignNewPage"));
+const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
+const CallListPage = lazy(() => import("./pages/CallListPage"));
+const NextLeadPage = lazy(() => import("./pages/NextLeadPage"));
+const GuidePage = lazy(() => import("./pages/GuidePage"));
+const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
+const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
+const MailboxPage = lazy(() => import("./pages/MailboxPage"));
+
 
 const queryClient = new QueryClient();
 
@@ -154,49 +159,51 @@ const App = () => (
                 <CRMProvider>
                   <GlobalHotkeys />
                   <ScoringWeightsBootstrap />
-                  <Routes>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/hot-leads" element={<HotLeadsPage />} />
-                    <Route path="/add" element={<AddPage />} />
-                    <Route path="/bulk" element={<BulkPage />} />
-                    <Route path="/unsorted" element={<SectionPage allSections title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />
-                    <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
-                    <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
-                    <Route path="/gmail" element={<Navigate to="/email" replace />} />
-                    <Route path="/both" element={<SectionPage section="both" title="Has Both" emptyMessage="No leads with both contact methods" />} />
-                    <Route path="/missing" element={<SectionPage section="missing" title="Missing Contact" emptyMessage="No missing contact leads" />} />
-                    <Route path="/status/has-website" element={<SectionPage optOut title="Has Website" emptyMessage="No leads with websites" />} />
-                    <Route path="/callbacks" element={<CallbacksPage />} />
-                    <Route path="/status/not-contacted" element={<SectionPage status="not_contacted" title="Not Contacted" excludeSection="missing" />} />
-                    <Route path="/status/contacted" element={<SectionPage status="contacted" title="Contacted" />} />
-                    <Route path="/status/answered" element={<SectionPage status="answered" title="Answered" />} />
-                    <Route path="/status/callback" element={<SectionPage status="callback" title="Callback" />} />
-                    <Route path="/status/interested" element={<ClosingPage status="interested" title="Interested" />} />
-                    <Route path="/status/not-interested" element={<ClosingPage status="not_interested" title="Not Interested" />} />
-                    <Route path="/status/unsure" element={<ClosingPage status="unsure" title="Unsure" />} />
-                    <Route path="/status/demo" element={<ClosingPage status="demo" title="Demo" />} />
-                    <Route path="/status/making-demo" element={<ClosingPage status="making_demo" title="Making Demo" />} />
-                    <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
-                    <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
-                    <Route path="/finder" element={<FinderPage />} />
-                    <Route path="/finder/coverage" element={<FinderCoveragePage />} />
-                    <Route path="/finder/runs/:id" element={<FinderRunPage />} />
-                    <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />
-                    <Route path="/costs" element={<CostCalculatorPage />} />
-                    <Route path="/campaigns" element={<CampaignsPage />} />
-                    <Route path="/campaigns/new" element={<CampaignNewPage />} />
-                    <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
-                    <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
-                    <Route path="/inbox" element={<InboxPage />} />
-                    <Route path="/call-list" element={<CallListPage />} />
-                    <Route path="/next" element={<NextLeadPage />} />
-                    <Route path="/quick-send" element={<QuickSendPage />} />
-                    <Route path="/mailbox" element={<MailboxPage />} />
-                    <Route path="/guide" element={<GuidePage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
+                  <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>}>
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/hot-leads" element={<HotLeadsPage />} />
+                      <Route path="/add" element={<AddPage />} />
+                      <Route path="/bulk" element={<BulkPage />} />
+                      <Route path="/unsorted" element={<SectionPage allSections title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />
+                      <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
+                      <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
+                      <Route path="/gmail" element={<Navigate to="/email" replace />} />
+                      <Route path="/both" element={<SectionPage section="both" title="Has Both" emptyMessage="No leads with both contact methods" />} />
+                      <Route path="/missing" element={<SectionPage section="missing" title="Missing Contact" emptyMessage="No missing contact leads" />} />
+                      <Route path="/status/has-website" element={<SectionPage optOut title="Has Website" emptyMessage="No leads with websites" />} />
+                      <Route path="/callbacks" element={<CallbacksPage />} />
+                      <Route path="/status/not-contacted" element={<SectionPage status="not_contacted" title="Not Contacted" excludeSection="missing" />} />
+                      <Route path="/status/contacted" element={<SectionPage status="contacted" title="Contacted" />} />
+                      <Route path="/status/answered" element={<SectionPage status="answered" title="Answered" />} />
+                      <Route path="/status/callback" element={<SectionPage status="callback" title="Callback" />} />
+                      <Route path="/status/interested" element={<ClosingPage status="interested" title="Interested" />} />
+                      <Route path="/status/not-interested" element={<ClosingPage status="not_interested" title="Not Interested" />} />
+                      <Route path="/status/unsure" element={<ClosingPage status="unsure" title="Unsure" />} />
+                      <Route path="/status/demo" element={<ClosingPage status="demo" title="Demo" />} />
+                      <Route path="/status/making-demo" element={<ClosingPage status="making_demo" title="Making Demo" />} />
+                      <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
+                      <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
+                      <Route path="/finder" element={<FinderPage />} />
+                      <Route path="/finder/coverage" element={<FinderCoveragePage />} />
+                      <Route path="/finder/runs/:id" element={<FinderRunPage />} />
+                      <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />
+                      <Route path="/costs" element={<CostCalculatorPage />} />
+                      <Route path="/campaigns" element={<CampaignsPage />} />
+                      <Route path="/campaigns/new" element={<CampaignNewPage />} />
+                      <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
+                      <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
+                      <Route path="/inbox" element={<InboxPage />} />
+                      <Route path="/call-list" element={<CallListPage />} />
+                      <Route path="/next" element={<NextLeadPage />} />
+                      <Route path="/quick-send" element={<QuickSendPage />} />
+                      <Route path="/mailbox" element={<MailboxPage />} />
+                      <Route path="/guide" element={<GuidePage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Suspense>
                 </CRMProvider>
               </AuthGate>
             } />
