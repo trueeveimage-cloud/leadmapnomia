@@ -12,6 +12,7 @@ const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1'
 const BodySchema = z.object({
   email: z.string().email(),
   max: z.number().int().min(1).max(50).optional(),
+  pageToken: z.string().optional(),
 });
 
 function jsonResp(payload: unknown, status = 200) {
