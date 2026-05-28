@@ -39,6 +39,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI' : '');
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
+  const [lastSent, setLastSent] = useState<Record<string, { snippet: string; created_at: string } | null>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const abortRef = React.useRef(false);
@@ -52,6 +53,34 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
       abortRef.current = false;
     }
   }, [open, recipients.length]);
+
+  // Fetch most-recent sent email per recipient (one query, all leads)
+  React.useEffect(() => {
+    if (!open || recipients.length === 0) return;
+    const ids = recipients.map((r) => r.id);
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from('message_logs')
+        .select('lead_id, body, created_at')
+        .in('lead_id', ids)
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .in('status', ['sent', 'queued'])
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (!active) return;
+      const map: Record<string, { snippet: string; created_at: string }> = {};
+      for (const row of (data || []) as any[]) {
+        if (!map[row.lead_id]) {
+          const firstLine = (row.body || '').split('\n').find((l: string) => l.trim());
+          map[row.lead_id] = { snippet: (firstLine || row.body || '').slice(0, 120), created_at: row.created_at };
+        }
+      }
+      setLastSent(map);
+    })();
+    return () => { active = false; };
+  }, [open, recipients]);
 
   const send = async () => {
     const targets = recipients.filter((l) => enabled[l.id]);
