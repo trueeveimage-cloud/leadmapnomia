@@ -137,6 +137,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
               <div className="border rounded-md max-h-72 overflow-y-auto">
                 {recipients.map((l) => {
                   const open = !!historyOpen[l.id];
+                  const last = lastSent[l.id];
                   return (
                     <div key={l.id} className="border-b last:border-0">
                       <div className="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent">
@@ -155,12 +156,19 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
                         <Link
                           to={`/mailbox?email=${encodeURIComponent(l.email || '')}`}
                           target="_blank"
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                          title="Open in Mailbox (Gmail chat)"
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary font-medium"
+                          title="Open full Gmail conversation in Mailbox"
                         >
                           <ExternalLink size={11} />
+                          <span>Open thread</span>
                         </Link>
                       </div>
+                      {last && !open && (
+                        <div className="px-2 pb-1.5 -mt-0.5 text-[11px] text-muted-foreground flex items-start gap-1.5">
+                          <span className="shrink-0 text-green">↳ Last sent</span>
+                          <span className="truncate flex-1 italic">{last.snippet || '(no preview)'}</span>
+                        </div>
+                      )}
                       {open && (
                         <div className="px-2 pb-2 bg-muted/30">
                           <LeadEmailHistory leadId={l.id} />
