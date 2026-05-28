@@ -5,34 +5,39 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CRMProvider } from "@/context/CRMContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import AddPage from "./pages/AddPage";
-import BulkPage from "./pages/BulkPage";
-import SectionPage from "./pages/SectionPage";
-import ClosingPage from "./pages/ClosingPage";
-import CallbacksPage from "./pages/CallbacksPage";
-import SettingsPage from "./pages/SettingsPage";
-import FinderPage from "./pages/FinderPage";
-import FinderRunPage from "./pages/FinderRunPage";
-import FinderBatchPage from "./pages/FinderBatchPage";
-import FinderCoveragePage from "./pages/FinderCoveragePage";
-import CostCalculatorPage from "./pages/CostCalculatorPage";
+import { lazy, Suspense, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+// Eager: auth + small pages on critical path
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
-import CampaignsPage from "./pages/CampaignsPage";
-import CampaignNewPage from "./pages/CampaignNewPage";
-import CampaignDetailPage from "./pages/CampaignDetailPage";
-import InboxPage from "./pages/InboxPage";
-import CallListPage from "./pages/CallListPage";
-import NextLeadPage from "./pages/NextLeadPage";
 import NotFound from "./pages/NotFound";
-import GuidePage from "./pages/GuidePage";
-import CampaignStatsPage from "./pages/CampaignStatsPage";
-import DashboardPage from "./pages/DashboardPage";
-import QuickSendPage from "./pages/QuickSendPage";
-import HotLeadsPage from "./pages/HotLeadsPage";
-import MailboxPage from "./pages/MailboxPage";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+
+// Lazy: everything else — splits bundle per route for faster initial load
+const AddPage = lazy(() => import("./pages/AddPage"));
+const BulkPage = lazy(() => import("./pages/BulkPage"));
+const SectionPage = lazy(() => import("./pages/SectionPage"));
+const ClosingPage = lazy(() => import("./pages/ClosingPage"));
+const CallbacksPage = lazy(() => import("./pages/CallbacksPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const FinderPage = lazy(() => import("./pages/FinderPage"));
+const FinderRunPage = lazy(() => import("./pages/FinderRunPage"));
+const FinderBatchPage = lazy(() => import("./pages/FinderBatchPage"));
+const FinderCoveragePage = lazy(() => import("./pages/FinderCoveragePage"));
+const CostCalculatorPage = lazy(() => import("./pages/CostCalculatorPage"));
+const CampaignsPage = lazy(() => import("./pages/CampaignsPage"));
+const CampaignNewPage = lazy(() => import("./pages/CampaignNewPage"));
+const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
+const CallListPage = lazy(() => import("./pages/CallListPage"));
+const NextLeadPage = lazy(() => import("./pages/NextLeadPage"));
+const GuidePage = lazy(() => import("./pages/GuidePage"));
+const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
+const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
+const MailboxPage = lazy(() => import("./pages/MailboxPage"));
+
 
 const queryClient = new QueryClient();
 
