@@ -223,7 +223,7 @@ export default function MailboxPage() {
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               </Button>
             </div>
-            <div className="max-h-[420px] overflow-y-auto divide-y">
+            <div ref={scrollRef} className="max-h-[420px] overflow-y-auto divide-y">
               {loading && messages.length === 0 && (
                 <div className="p-8 text-center text-sm text-muted-foreground">Loading thread…</div>
               )}
@@ -265,6 +265,19 @@ export default function MailboxPage() {
                   </div>
                 );
               })}
+              {nextPageToken && messages.length > 0 && (
+                <div ref={sentinelRef} className="p-3 text-center">
+                  {loadingMore ? (
+                    <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Loading more…
+                    </span>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => loadThread(email, nextPageToken)} className="text-xs">
+                      Load more
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
