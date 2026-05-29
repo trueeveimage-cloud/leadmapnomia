@@ -106,6 +106,13 @@ export default function SettingsPage() {
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
   const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
 
+  // Gmail auto-send (100/business-day)
+  const [autosendEnabled, setAutosendEnabled] = useState(false);
+  const [autosendDaily, setAutosendDaily] = useState('100');
+  const [autosendSubject, setAutosendSubject] = useState('En snabb fråga om era inkommande samtal');
+  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nJag heter Simon och driver Leadline AI. Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.\n\n— Simon, Leadline AI');
+  const [autosendRunning, setAutosendRunning] = useState(false);
+
   // Scoring weights (multipliers, default 1.0)
   const [weights, setWeights] = useState({
     niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
@@ -140,6 +147,10 @@ export default function SettingsPage() {
     getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
     getSetting('gmail_daily_cap').then(v => { if (v) setGmailDailyCap(v); });
     getSetting('gmail_from_address').then(v => { if (v) setGmailFromAddress(v); });
+    getSetting('gmail_autosend_enabled').then(v => setAutosendEnabled(v === 'true'));
+    getSetting('gmail_autosend_daily').then(v => { if (v) setAutosendDaily(v); });
+    getSetting('gmail_autosend_subject').then(v => { if (v) setAutosendSubject(v); });
+    getSetting('gmail_autosend_body').then(v => { if (v) setAutosendBody(v); });
     getSetting('scoring_weights').then(v => {
       if (!v) return;
       try { const p = JSON.parse(v); setWeights((w) => ({ ...w, ...p })); } catch {}
@@ -169,6 +180,10 @@ export default function SettingsPage() {
       setSetting('followup_template', followupTemplate),
       setSetting('gmail_daily_cap', gmailDailyCap),
       setSetting('gmail_from_address', gmailFromAddress),
+      setSetting('gmail_autosend_enabled', autosendEnabled ? 'true' : 'false'),
+      setSetting('gmail_autosend_daily', autosendDaily),
+      setSetting('gmail_autosend_subject', autosendSubject),
+      setSetting('gmail_autosend_body', autosendBody),
       setSetting('scoring_weights', JSON.stringify(weights)),
     ]);
     setSaved(true);
@@ -366,6 +381,61 @@ export default function SettingsPage() {
             </p>
             <Input value={gmailFromAddress} onChange={(e) => setGmailFromAddress(e.target.value)} placeholder="leadmapai.se@gmail.com" className="h-8 text-sm max-w-sm" />
           </div>
+
+          {/* Gmail Auto-Send (cold outreach) */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <h2 className="font-semibold text-foreground flex items-center gap-2">
+                <Zap size={15} className="text-[hsl(280,80%,65%)]" /> Gmail Auto-Send (Mon–Fri)
+                <InfoTip text="Each business day at 09:00 UTC the system picks top-scoring leads (S/A+/A tier) with email, who haven't been emailed yet and haven't opted out, then sends up to N emails using the template below. {name} and {city} are personalized per lead." />
+              </h2>
+              <Switch checked={autosendEnabled} onCheckedChange={setAutosendEnabled} />
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Automatically sends cold outreach emails every business day. Respects the daily limit above and skips opt-outs and already-emailed leads.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Emails per business day</label>
+                <Input type="number" min="1" max="500" value={autosendDaily} onChange={e => setAutosendDaily(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={autosendRunning}
+                  onClick={async () => {
+                    setAutosendRunning(true);
+                    try {
+                      await setSetting('gmail_autosend_force', 'true');
+                      const { data, error } = await supabase.functions.invoke('auto-send-gmail-daily', { body: {} });
+                      if (error) throw error;
+                      const d: any = data;
+                      if (d?.skipped) toast.message(`Skipped: ${d.reason}`);
+                      else toast.success(`Run done — sent ${d?.sent ?? 0}, skipped ${d?.skipped ?? 0}, failed ${d?.failed ?? 0}`);
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Run failed');
+                    } finally {
+                      setAutosendRunning(false);
+                    }
+                  }}
+                >
+                  {autosendRunning ? 'Running…' : 'Run now'}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Subject</label>
+                <Input value={autosendSubject} onChange={(e) => setAutosendSubject(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Body (uses {'{name}'} and {'{city}'})</label>
+                <Textarea value={autosendBody} onChange={(e) => setAutosendBody(e.target.value)} rows={6} className="text-sm font-mono" />
+              </div>
+            </div>
+          </div>
+
 
           {/* Scoring Weights */}
           <div className="bg-card border border-border rounded-lg p-5">

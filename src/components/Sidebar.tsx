@@ -68,11 +68,11 @@ function SidebarNavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) 
 }
 
 const OUTREACH_PATHS = ['/campaigns', '/inbox', '/call-list', '/callbacks'];
-const EMAIL_PATHS = ['/hot-leads', '/mailbox'];
-const TOOLS_PATHS = ['/add', '/finder'];
+const EMAIL_PATHS = ['/hot-leads', '/mailbox', '/email-finder'];
+const TOOLS_PATHS = ['/add', '/email-finder'];
 const CLOSING_PATHS = ['/status/interested', '/status/not-interested', '/status/unsure', '/status/demo', '/status/making-demo', '/status/closed-won', '/status/closed-lost'];
 const LEADS_PATHS = ['/unsorted', '/phone', '/email', '/both', '/missing', '/status/has-website'];
-const NOMIA_PATHS = ['/bulk', '/quick-send', '/finder/coverage', '/costs', '/campaigns/compare', '/guide', '/dashboard'];
+const NOMIA_PATHS = ['/bulk', '/quick-send', '/finder', '/finder/coverage', '/costs', '/campaigns/compare', '/guide', '/dashboard'];
 
 function NavGroup({ label, children, icon, color, paths }: { label: string; children: React.ReactNode; icon: React.ReactNode; color?: string; paths: string[] }) {
   const { pathname } = useLocation();
@@ -245,6 +245,17 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
         {/* Email Outreach (new) */}
         <NavGroup label="Email Outreach" icon={<Send size={14} />} color="hsl(280, 80%, 65%)" paths={EMAIL_PATHS}>
+          {/* Prominent Compose button */}
+          <Link
+            to="/mailbox"
+            onClick={onClose}
+            className="flex items-center gap-2 px-3 py-2 mb-1 rounded-lg text-sm font-semibold bg-gradient-to-r from-[hsl(280,80%,65%)]/20 to-[hsl(280,80%,65%)]/5 text-[hsl(280,80%,75%)] border border-[hsl(280,80%,65%)]/30 hover:from-[hsl(280,80%,65%)]/30 hover:to-[hsl(280,80%,65%)]/10 hover:shadow-md hover:shadow-[hsl(280,80%,65%)]/10 transition-all group"
+          >
+            <div className="w-6 h-6 rounded-md bg-[hsl(280,80%,65%)]/25 flex items-center justify-center transition-transform group-hover:scale-110">
+              <Send size={13} />
+            </div>
+            <span>Compose Email</span>
+          </Link>
           <SidebarNavLink item={{ label: 'S-Tier Queue', path: '/hot-leads?view=s', icon: <Crown size={15} />, color: 'hsl(300 85% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'A+ Hot Queue', path: '/hot-leads?view=aplus', icon: <Flame size={15} />, color: 'hsl(0 85% 60%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Gmail Outreach', path: '/hot-leads?view=no_email', icon: <Mail size={15} />, color: 'hsl(280 80% 65%)' }} onNav={onClose} />
@@ -255,7 +266,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         {/* Tools */}
         <NavGroup label="Tools" icon={<Search size={14} />} color="hsl(262, 83%, 65%)" paths={TOOLS_PATHS}>
           <SidebarNavLink item={{ label: 'Add Lead', path: '/add', icon: <Plus size={15} /> }} onNav={onClose} />
-          <SidebarNavLink item={{ label: 'Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
+          <SidebarNavLink item={{ label: 'Email Finder', path: '/email-finder', icon: <Mail size={15} />, color: 'hsl(280 80% 65%)' }} onNav={onClose} />
         </NavGroup>
 
         {/* Closing */}
@@ -274,6 +285,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
         {/* Nomia — legacy/extras */}
         <NavGroup label="Nomia" icon={<Archive size={14} />} color="hsl(215, 15%, 55%)" paths={NOMIA_PATHS}>
+          <SidebarNavLink item={{ label: 'Maps Finder', path: '/finder', icon: <Search size={15} />, color: 'hsl(262 83% 65%)' }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Statistics', path: '/dashboard', icon: <BarChart2 size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'A/B Compare', path: '/campaigns/compare', icon: <BarChart2 size={15} /> }} onNav={onClose} />
           <SidebarNavLink item={{ label: 'Quick Send', path: '/quick-send', icon: <MessageCircle size={15} /> }} onNav={onClose} />
