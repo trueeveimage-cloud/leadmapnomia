@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const PRIORITY_PREFIXES = ['info','kontakt','hello','hej','boka','booking','reception','admin','sales','support','contact','office','mail'];
-const CANDIDATE_PATHS = ['/kontakt','/contact','/contact-us','/om-oss','/about','/about-us','/boka','/booking','/integritetspolicy','/privacy','/privacy-policy','/villkor','/impressum'];
+const CANDIDATE_PATHS = ['/kontakt','/contact','/about','/om-oss'];
 
 function extractEmails(text: string): string[] {
   const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
@@ -33,7 +33,7 @@ function rank(email: string, domain: string): number {
   return score;
 }
 
-async function fetchPage(url: string, timeoutMs = 4000): Promise<string | null> {
+async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -52,7 +52,7 @@ async function fetchPage(url: string, timeoutMs = 4000): Promise<string | null> 
     const decoder = new TextDecoder();
     let html = '';
     let bytes = 0;
-    const MAX = 200_000;
+    const MAX = 80_000;
     while (bytes < MAX) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const batch = urls.slice(0, 5);
+    const batch = urls.slice(0, 2);
     const results: { leadId: string; emails: string[]; email?: string; source?: string; error?: string }[] = [];
 
     for (const item of batch) {
@@ -109,15 +109,17 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Try up to 2 candidate paths concurrently
-        const paths = CANDIDATE_PATHS;
-        const pageResults = await Promise.all(paths.map((p) => fetchPage(u.origin + p, 3000).then((html) => ({ p, html }))));
-        for (const { p, html } of pageResults) {
-          if (!html) continue;
-          for (const e of extractEmails(html)) {
-            if (!allFound.some((f) => f.email.toLowerCase() === e.toLowerCase())) {
-              allFound.push({ email: e, source: detectSource(p, html, e) });
+        // Only try extra paths if no email found on homepage
+        if (allFound.length === 0) {
+          for (const p of CANDIDATE_PATHS) {
+            const html = await fetchPage(u.origin + p, 2500);
+            if (!html) continue;
+            for (const e of extractEmails(html)) {
+              if (!allFound.some((f) => f.email.toLowerCase() === e.toLowerCase())) {
+                allFound.push({ email: e, source: detectSource(p, html, e) });
+              }
             }
+            if (allFound.length > 0) break;
           }
         }
 
