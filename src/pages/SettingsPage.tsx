@@ -106,6 +106,13 @@ export default function SettingsPage() {
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
   const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
 
+  // Gmail auto-send (100/business-day)
+  const [autosendEnabled, setAutosendEnabled] = useState(false);
+  const [autosendDaily, setAutosendDaily] = useState('100');
+  const [autosendSubject, setAutosendSubject] = useState('En snabb fråga om era inkommande samtal');
+  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nJag heter Simon och driver Leadline AI. Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.\n\n— Simon, Leadline AI');
+  const [autosendRunning, setAutosendRunning] = useState(false);
+
   // Scoring weights (multipliers, default 1.0)
   const [weights, setWeights] = useState({
     niche: 1, reviews: 1, rating: 1, phone: 1, email: 1, afterHours: 1, bookingGap: 1, website: 1,
@@ -140,6 +147,10 @@ export default function SettingsPage() {
     getSetting('followup_template').then(v => { if (v) setFollowupTemplate(v); });
     getSetting('gmail_daily_cap').then(v => { if (v) setGmailDailyCap(v); });
     getSetting('gmail_from_address').then(v => { if (v) setGmailFromAddress(v); });
+    getSetting('gmail_autosend_enabled').then(v => setAutosendEnabled(v === 'true'));
+    getSetting('gmail_autosend_daily').then(v => { if (v) setAutosendDaily(v); });
+    getSetting('gmail_autosend_subject').then(v => { if (v) setAutosendSubject(v); });
+    getSetting('gmail_autosend_body').then(v => { if (v) setAutosendBody(v); });
     getSetting('scoring_weights').then(v => {
       if (!v) return;
       try { const p = JSON.parse(v); setWeights((w) => ({ ...w, ...p })); } catch {}
@@ -169,6 +180,10 @@ export default function SettingsPage() {
       setSetting('followup_template', followupTemplate),
       setSetting('gmail_daily_cap', gmailDailyCap),
       setSetting('gmail_from_address', gmailFromAddress),
+      setSetting('gmail_autosend_enabled', autosendEnabled ? 'true' : 'false'),
+      setSetting('gmail_autosend_daily', autosendDaily),
+      setSetting('gmail_autosend_subject', autosendSubject),
+      setSetting('gmail_autosend_body', autosendBody),
       setSetting('scoring_weights', JSON.stringify(weights)),
     ]);
     setSaved(true);
