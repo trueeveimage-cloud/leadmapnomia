@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const batch = urls.slice(0, 5);
+    const batch = urls.slice(0, 2);
     const results: { leadId: string; emails: string[]; email?: string; source?: string; error?: string }[] = [];
 
     for (const item of batch) {
