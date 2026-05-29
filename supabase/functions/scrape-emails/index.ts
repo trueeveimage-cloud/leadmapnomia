@@ -33,7 +33,7 @@ function rank(email: string, domain: string): number {
   return score;
 }
 
-async function fetchPage(url: string, timeoutMs = 4000): Promise<string | null> {
+async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
