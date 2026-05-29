@@ -23,12 +23,15 @@ interface GmailMsg {
   labels: string[];
 }
 
+type SortKey = 'recent' | 'score' | 'rating' | 'reviews' | 'name';
+
 export default function MailboxPage() {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [lead, setLead] = useState<Lead | null>(null);
   const [leadResults, setLeadResults] = useState<Lead[]>([]);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<SortKey>('score');
   const [messages, setMessages] = useState<GmailMsg[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -52,21 +55,25 @@ export default function MailboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Lead search
+  // Lead search — empty query lists top leads by chosen sort, otherwise filters by name/email
   useEffect(() => {
-    if (!search.trim()) { setLeadResults([]); return; }
     const t = setTimeout(async () => {
       const q = search.trim();
-      const { data } = await supabase
-        .from('leads')
-        .select('*')
-        .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
-        .not('email', 'is', null)
-        .limit(8);
+      let query = supabase.from('leads').select('*').not('email', 'is', null).neq('email', '');
+      if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);
+      switch (sortBy) {
+        case 'rating': query = query.order('rating', { ascending: false, nullsFirst: false }); break;
+        case 'reviews': query = query.order('reviews_count', { ascending: false, nullsFirst: false }); break;
+        case 'score': query = query.order('potential_score', { ascending: false, nullsFirst: false }); break;
+        case 'name': query = query.order('name', { ascending: true }); break;
+        case 'recent':
+        default: query = query.order('created_at', { ascending: false }); break;
+      }
+      const { data } = await query.limit(q ? 12 : 20);
       setLeadResults((data as Lead[]) || []);
-    }, 250);
+    }, 200);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, sortBy]);
 
   const loadThread = async (targetEmail: string, pageToken?: string) => {
     if (!targetEmail) return;
@@ -162,8 +169,22 @@ export default function MailboxPage() {
         <div className="rounded-lg border bg-card p-4 space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div className="relative">
-              <label className="text-xs font-medium text-muted-foreground">Search lead</label>
-              <div className="relative mt-1">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-muted-foreground">Search lead</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortKey)}
+                  className="text-[11px] bg-transparent border border-border rounded px-1.5 py-0.5 text-muted-foreground focus:outline-none focus:border-primary"
+                  title="Sort leads"
+                >
+                  <option value="score">Sort: Highest potential</option>
+                  <option value="rating">Sort: Highest rating</option>
+                  <option value="reviews">Sort: Most reviews</option>
+                  <option value="recent">Sort: Recently added</option>
+                  <option value="name">Sort: Name (A–Z)</option>
+                </select>
+              </div>
+              <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={search}
@@ -173,14 +194,21 @@ export default function MailboxPage() {
                 />
               </div>
               {leadResults.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full bg-popover border rounded-md shadow-lg max-h-64 overflow-y-auto">
+                <div className="absolute z-10 mt-1 w-full bg-popover border rounded-md shadow-lg max-h-72 overflow-y-auto">
                   {leadResults.map((l) => (
                     <button
                       key={l.id}
                       onClick={() => selectLead(l)}
                       className="w-full text-left px-3 py-2 hover:bg-accent text-sm border-b last:border-0"
                     >
-                      <div className="font-medium truncate">{l.name}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium truncate">{l.name}</div>
+                        <div className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                          {l.rating ? `★ ${l.rating}` : ''}
+                          {l.reviews_count ? ` · ${l.reviews_count}` : ''}
+                          {l.potential_score ? ` · ${l.potential_score}` : ''}
+                        </div>
+                      </div>
                       <div className="text-xs text-muted-foreground truncate">{l.email}</div>
                     </button>
                   ))}
