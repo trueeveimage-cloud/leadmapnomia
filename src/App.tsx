@@ -37,6 +37,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
+const EmailFinderPage = lazy(() => import("./pages/EmailFinderPage"));
 
 
 const queryClient = new QueryClient();
@@ -186,6 +187,7 @@ const App = () => (
                       <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
                       <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
                       <Route path="/finder" element={<FinderPage />} />
+                      <Route path="/email-finder" element={<EmailFinderPage />} />
                       <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                       <Route path="/finder/runs/:id" element={<FinderRunPage />} />
                       <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />
