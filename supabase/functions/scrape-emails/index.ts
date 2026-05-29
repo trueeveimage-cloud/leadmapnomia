@@ -109,15 +109,17 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Try up to 2 candidate paths concurrently
-        const paths = CANDIDATE_PATHS;
-        const pageResults = await Promise.all(paths.map((p) => fetchPage(u.origin + p, 3000).then((html) => ({ p, html }))));
-        for (const { p, html } of pageResults) {
-          if (!html) continue;
-          for (const e of extractEmails(html)) {
-            if (!allFound.some((f) => f.email.toLowerCase() === e.toLowerCase())) {
-              allFound.push({ email: e, source: detectSource(p, html, e) });
+        // Only try extra paths if no email found on homepage
+        if (allFound.length === 0) {
+          for (const p of CANDIDATE_PATHS) {
+            const html = await fetchPage(u.origin + p, 2500);
+            if (!html) continue;
+            for (const e of extractEmails(html)) {
+              if (!allFound.some((f) => f.email.toLowerCase() === e.toLowerCase())) {
+                allFound.push({ email: e, source: detectSource(p, html, e) });
+              }
             }
+            if (allFound.length > 0) break;
           }
         }
 
