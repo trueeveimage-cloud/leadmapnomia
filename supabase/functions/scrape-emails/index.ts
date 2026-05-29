@@ -52,7 +52,7 @@ async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> 
     const decoder = new TextDecoder();
     let html = '';
     let bytes = 0;
-    const MAX = 200_000;
+    const MAX = 80_000;
     while (bytes < MAX) {
       const { done, value } = await reader.read();
       if (done) break;
