@@ -197,11 +197,87 @@ export default function MailboxPage() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Mail className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-semibold">Mailbox</h1>
-          <span className="text-xs text-muted-foreground">— manual Gmail chat with any business</span>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-primary" />
+            <h1 className="text-xl font-semibold">Mailbox</h1>
+            <span className="text-xs text-muted-foreground">— Gmail chat with any business</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {senderChecked && (
+              senderEmail ? (
+                <span className="text-[11px] px-2 py-1 rounded bg-green/10 text-green border border-green/30">
+                  Sending from: <span className="font-medium">{senderEmail}</span>
+                </span>
+              ) : (
+                <span className="text-[11px] px-2 py-1 rounded bg-destructive/10 text-destructive border border-destructive/30">
+                  Connect Gmail before sending
+                </span>
+              )
+            )}
+            <Button
+              size="sm"
+              variant={inboxMode ? 'default' : 'outline'}
+              onClick={async () => {
+                const next = !inboxMode;
+                setInboxMode(next);
+                if (next && inboxMsgs.length === 0) {
+                  setInboxLoading(true);
+                  try {
+                    const { data } = await supabase.functions.invoke('gmail-thread', {
+                      body: { email: 'in:inbox', max: 25 },
+                    });
+                    setInboxMsgs((data as any)?.messages || []);
+                  } catch (e: any) {
+                    toast.error('Failed to load inbox: ' + (e?.message || 'unknown'));
+                  } finally { setInboxLoading(false); }
+                }
+              }}
+              className="gap-1.5"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              {inboxMode ? 'Hide inbox' : 'Show inbox replies'}
+            </Button>
+          </div>
         </div>
+
+        {/* Inbox panel: recent incoming emails */}
+        {inboxMode && (
+          <div className="rounded-lg border bg-card">
+            <div className="px-4 py-2.5 border-b flex items-center justify-between">
+              <div className="text-sm font-medium flex items-center gap-2">
+                <Inbox className="h-4 w-4 text-muted-foreground" /> Recent incoming emails
+              </div>
+              {inboxLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="max-h-[360px] overflow-y-auto divide-y">
+              {!inboxLoading && inboxMsgs.length === 0 && (
+                <div className="p-6 text-center text-sm text-muted-foreground">No incoming messages.</div>
+              )}
+              {inboxMsgs.filter(m => !m.labels?.includes('SENT')).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    // Extract email from "Name <email>"
+                    const match = m.from?.match(/<([^>]+)>/) || m.from?.match(/([\w.+-]+@[\w-]+\.[\w.-]+)/);
+                    const addr = match?.[1] || m.from;
+                    if (addr) { setEmail(addr); setInboxMode(false); loadThread(addr); }
+                  }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-accent"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium truncate">{m.subject || '(no subject)'}</div>
+                    <div className="text-[11px] text-muted-foreground shrink-0">
+                      {m.internalDate ? format(new Date(m.internalDate), 'MMM d, HH:mm') : ''}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">From: {m.from}</div>
+                  <div className="text-xs text-muted-foreground/80 mt-1 line-clamp-1">{m.snippet}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recipient picker */}
         <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -215,11 +291,9 @@ export default function MailboxPage() {
                   className="text-[11px] bg-transparent border border-border rounded px-1.5 py-0.5 text-muted-foreground focus:outline-none focus:border-primary"
                   title="Sort leads"
                 >
-                  <option value="score">Sort: Highest potential</option>
-                  <option value="rating">Sort: Highest rating</option>
-                  <option value="reviews">Sort: Most reviews</option>
-                  <option value="recent">Sort: Recently added</option>
-                  <option value="name">Sort: Name (A–Z)</option>
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                    <option key={k} value={k}>Sort: {SORT_LABELS[k]}</option>
+                  ))}
                 </select>
               </div>
               <div className="relative">
