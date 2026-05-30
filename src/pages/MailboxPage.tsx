@@ -89,12 +89,20 @@ export default function MailboxPage() {
   useEffect(() => {
     const t = setTimeout(async () => {
       const q = search.trim();
-      let query = supabase.from('leads').select('*').not('email', 'is', null).neq('email', '');
+      let query = supabase.from('leads').select('*');
+      if (sortBy === 'has_phone') query = query.not('phone', 'is', null).neq('phone', '');
+      else if (sortBy === 'has_email') query = query.not('email', 'is', null).neq('email', '');
+      else if (sortBy === 'followup') query = query.eq('needs_call', true);
+      else query = query.not('email', 'is', null).neq('email', '');
       if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);
       switch (sortBy) {
         case 'rating': query = query.order('rating', { ascending: false, nullsFirst: false }); break;
         case 'reviews': query = query.order('reviews_count', { ascending: false, nullsFirst: false }); break;
         case 'score': query = query.order('potential_score', { ascending: false, nullsFirst: false }); break;
+        case 'score_asc': query = query.order('potential_score', { ascending: true, nullsFirst: false }); break;
+        case 'has_phone':
+        case 'has_email': query = query.order('potential_score', { ascending: false, nullsFirst: false }); break;
+        case 'followup': query = query.order('last_outbound_at', { ascending: true, nullsFirst: false }); break;
         case 'name': query = query.order('name', { ascending: true }); break;
         case 'recent':
         default: query = query.order('created_at', { ascending: false }); break;
