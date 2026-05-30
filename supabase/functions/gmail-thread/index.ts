@@ -10,7 +10,7 @@ const corsHeaders = {
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
 
 const BodySchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1),
   max: z.number().int().min(1).max(50).optional(),
   pageToken: z.string().optional(),
 });
