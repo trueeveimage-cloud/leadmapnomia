@@ -23,7 +23,19 @@ interface GmailMsg {
   labels: string[];
 }
 
-type SortKey = 'recent' | 'score' | 'rating' | 'reviews' | 'name';
+type SortKey = 'score' | 'score_asc' | 'rating' | 'reviews' | 'has_phone' | 'has_email' | 'followup' | 'recent' | 'name';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  score: 'Highest potential',
+  score_asc: 'Lowest potential',
+  reviews: 'Most reviews',
+  rating: 'Highest rating',
+  has_phone: 'Has phone',
+  has_email: 'Has email',
+  followup: 'Needs follow-up',
+  recent: 'Recently added',
+  name: 'Name (A–Z)',
+};
 
 export default function MailboxPage() {
   const [searchParams] = useSearchParams();
@@ -40,10 +52,28 @@ export default function MailboxPage() {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
+  // Connected Gmail account
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
+  const [senderChecked, setSenderChecked] = useState(false);
+
+  // Inbox view (inbound from any address)
+  const [inboxMode, setInboxMode] = useState(false);
+  const [inboxMsgs, setInboxMsgs] = useState<GmailMsg[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+
   // Compose state
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Fetch connected Gmail address once
+  useEffect(() => {
+    supabase.functions.invoke('gmail-profile', { body: {} }).then(({ data }) => {
+      const d = data as any;
+      if (d?.connected && d.emailAddress) setSenderEmail(d.emailAddress);
+      setSenderChecked(true);
+    }).catch(() => setSenderChecked(true));
+  }, []);
 
   // Deep-link via ?email=
   useEffect(() => {
@@ -59,12 +89,20 @@ export default function MailboxPage() {
   useEffect(() => {
     const t = setTimeout(async () => {
       const q = search.trim();
-      let query = supabase.from('leads').select('*').not('email', 'is', null).neq('email', '');
+      let query = supabase.from('leads').select('*');
+      if (sortBy === 'has_phone') query = query.not('phone', 'is', null).neq('phone', '');
+      else if (sortBy === 'has_email') query = query.not('email', 'is', null).neq('email', '');
+      else if (sortBy === 'followup') query = query.eq('needs_call', true);
+      else query = query.not('email', 'is', null).neq('email', '');
       if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);
       switch (sortBy) {
         case 'rating': query = query.order('rating', { ascending: false, nullsFirst: false }); break;
         case 'reviews': query = query.order('reviews_count', { ascending: false, nullsFirst: false }); break;
         case 'score': query = query.order('potential_score', { ascending: false, nullsFirst: false }); break;
+        case 'score_asc': query = query.order('potential_score', { ascending: true, nullsFirst: false }); break;
+        case 'has_phone':
+        case 'has_email': query = query.order('potential_score', { ascending: false, nullsFirst: false }); break;
+        case 'followup': query = query.order('last_outbound_at', { ascending: true, nullsFirst: false }); break;
         case 'name': query = query.order('name', { ascending: true }); break;
         case 'recent':
         default: query = query.order('created_at', { ascending: false }); break;
@@ -159,11 +197,87 @@ export default function MailboxPage() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <Mail className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-semibold">Mailbox</h1>
-          <span className="text-xs text-muted-foreground">— manual Gmail chat with any business</span>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-primary" />
+            <h1 className="text-xl font-semibold">Mailbox</h1>
+            <span className="text-xs text-muted-foreground">— Gmail chat with any business</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {senderChecked && (
+              senderEmail ? (
+                <span className="text-[11px] px-2 py-1 rounded bg-green/10 text-green border border-green/30">
+                  Sending from: <span className="font-medium">{senderEmail}</span>
+                </span>
+              ) : (
+                <span className="text-[11px] px-2 py-1 rounded bg-destructive/10 text-destructive border border-destructive/30">
+                  Connect Gmail before sending
+                </span>
+              )
+            )}
+            <Button
+              size="sm"
+              variant={inboxMode ? 'default' : 'outline'}
+              onClick={async () => {
+                const next = !inboxMode;
+                setInboxMode(next);
+                if (next && inboxMsgs.length === 0) {
+                  setInboxLoading(true);
+                  try {
+                    const { data } = await supabase.functions.invoke('gmail-thread', {
+                      body: { email: 'in:inbox', max: 25 },
+                    });
+                    setInboxMsgs((data as any)?.messages || []);
+                  } catch (e: any) {
+                    toast.error('Failed to load inbox: ' + (e?.message || 'unknown'));
+                  } finally { setInboxLoading(false); }
+                }
+              }}
+              className="gap-1.5"
+            >
+              <Inbox className="h-3.5 w-3.5" />
+              {inboxMode ? 'Hide inbox' : 'Show inbox replies'}
+            </Button>
+          </div>
         </div>
+
+        {/* Inbox panel: recent incoming emails */}
+        {inboxMode && (
+          <div className="rounded-lg border bg-card">
+            <div className="px-4 py-2.5 border-b flex items-center justify-between">
+              <div className="text-sm font-medium flex items-center gap-2">
+                <Inbox className="h-4 w-4 text-muted-foreground" /> Recent incoming emails
+              </div>
+              {inboxLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="max-h-[360px] overflow-y-auto divide-y">
+              {!inboxLoading && inboxMsgs.length === 0 && (
+                <div className="p-6 text-center text-sm text-muted-foreground">No incoming messages.</div>
+              )}
+              {inboxMsgs.filter(m => !m.labels?.includes('SENT')).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    // Extract email from "Name <email>"
+                    const match = m.from?.match(/<([^>]+)>/) || m.from?.match(/([\w.+-]+@[\w-]+\.[\w.-]+)/);
+                    const addr = match?.[1] || m.from;
+                    if (addr) { setEmail(addr); setInboxMode(false); loadThread(addr); }
+                  }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-accent"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium truncate">{m.subject || '(no subject)'}</div>
+                    <div className="text-[11px] text-muted-foreground shrink-0">
+                      {m.internalDate ? format(new Date(m.internalDate), 'MMM d, HH:mm') : ''}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">From: {m.from}</div>
+                  <div className="text-xs text-muted-foreground/80 mt-1 line-clamp-1">{m.snippet}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recipient picker */}
         <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -177,11 +291,9 @@ export default function MailboxPage() {
                   className="text-[11px] bg-transparent border border-border rounded px-1.5 py-0.5 text-muted-foreground focus:outline-none focus:border-primary"
                   title="Sort leads"
                 >
-                  <option value="score">Sort: Highest potential</option>
-                  <option value="rating">Sort: Highest rating</option>
-                  <option value="reviews">Sort: Most reviews</option>
-                  <option value="recent">Sort: Recently added</option>
-                  <option value="name">Sort: Name (A–Z)</option>
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                    <option key={k} value={k}>Sort: {SORT_LABELS[k]}</option>
+                  ))}
                 </select>
               </div>
               <div className="relative">
@@ -313,8 +425,15 @@ export default function MailboxPage() {
         {/* Manual compose */}
         {email && (
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center gap-2">
-              <Send className="h-4 w-4 text-primary" /> Send a manual email to {email}
+            <div className="text-sm font-medium flex items-center gap-2 justify-between">
+              <span className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-primary" /> Send a manual email to {email}
+              </span>
+              {senderEmail && (
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  From: <span className="text-foreground font-medium">{senderEmail}</span>
+                </span>
+              )}
             </div>
             <Input
               placeholder="Subject"
@@ -328,8 +447,11 @@ export default function MailboxPage() {
               rows={8}
               className="font-mono text-sm"
             />
-            <div className="flex justify-end">
-              <Button onClick={send} disabled={sending || !subject || !body}>
+            <div className="flex justify-end items-center gap-2">
+              {senderChecked && !senderEmail && (
+                <span className="text-xs text-destructive">Connect Gmail before sending.</span>
+              )}
+              <Button onClick={send} disabled={sending || !subject || !body || (senderChecked && !senderEmail)}>
                 {sending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
                 Send email
               </Button>

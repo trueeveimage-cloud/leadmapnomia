@@ -104,13 +104,13 @@ export default function SettingsPage() {
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
   const [gmailDailyCap, setGmailDailyCap] = useState('200');
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
-  const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
+  const [gmailFromAddress, setGmailFromAddress] = useState('');
 
   // Gmail auto-send (100/business-day)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
   const [autosendDaily, setAutosendDaily] = useState('100');
   const [autosendSubject, setAutosendSubject] = useState('En snabb fråga om era inkommande samtal');
-  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nJag heter Simon och driver Leadline AI. Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.\n\n— Simon, Leadline AI');
+  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nVi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.');
   const [autosendRunning, setAutosendRunning] = useState(false);
 
   // Scoring weights (multipliers, default 1.0)
@@ -278,7 +278,7 @@ export default function SettingsPage() {
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `leadmap-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `crm-export-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       toast.success(`Exported ${leads.length} leads`);
     } finally {
@@ -370,16 +370,16 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Gmail Sender Address */}
+          {/* Gmail Sender Address (alias override) */}
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
-              <Mail size={15} /> Gmail Sender Address
-              <InfoTip text="The 'From:' header on outbound emails. Note: Gmail will only allow sending from this address if it is configured as a 'Send As' alias on the connected Gmail account. Otherwise Gmail silently uses the connected account's primary address." />
+              <Mail size={15} /> Gmail Sender Alias (optional)
+              <InfoTip text="Leave empty to send from the connected Gmail account's own address (recommended). Only set this if you have configured a 'Send mail as' alias on the connected Gmail account — otherwise Gmail will silently use the connected primary address anyway." />
             </h2>
             <p className="text-xs text-muted-foreground mb-3">
-              The address that appears as the sender. Must be configured as a 'Send As' alias on the connected Gmail account.
+              Leave empty to send from the connected Gmail account. Only set if you have a verified Gmail alias.
             </p>
-            <Input value={gmailFromAddress} onChange={(e) => setGmailFromAddress(e.target.value)} placeholder="leadmapai.se@gmail.com" className="h-8 text-sm max-w-sm" />
+            <Input value={gmailFromAddress} onChange={(e) => setGmailFromAddress(e.target.value)} placeholder="(empty — use connected Gmail)" className="h-8 text-sm max-w-sm" />
           </div>
 
           {/* Gmail Auto-Send (cold outreach) */}
@@ -485,7 +485,7 @@ export default function SettingsPage() {
           <div className="bg-card border border-destructive/30 rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
               <Trash2 size={15} className="text-destructive" /> Reset Outreach Stats
-              <InfoTip text="Use this when transitioning from one business (e.g. Nomia) to another (e.g. Leadline AI) to start outreach tracking from zero. Leads themselves are always kept." />
+              <InfoTip text="Use this when switching outreach campaigns to start tracking from zero. Leads themselves are always kept." />
             </h2>
             <p className="text-xs text-muted-foreground mb-3">
               Clears outreach history so dashboard counts and "Emailed" / follow-up flags start fresh. Leads themselves stay in your CRM.

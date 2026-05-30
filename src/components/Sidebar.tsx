@@ -180,8 +180,8 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
             <BarChart2 size={15} className="text-primary-foreground" />
           </div>
           <div>
-            <div className="text-sm font-bold text-foreground leading-tight">LeadMap</div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">CRM</div>
+            <div className="text-sm font-bold text-foreground leading-tight">CRM</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Sales</div>
           </div>
         </Link>
         {onClose && (

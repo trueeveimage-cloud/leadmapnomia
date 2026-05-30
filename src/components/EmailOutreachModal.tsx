@@ -36,7 +36,7 @@ function personalize(template: string, lead: Lead): string {
 export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }: Props) {
   const recipients = useMemo(() => leads.filter((l) => l.email), [leads]);
   const [subject, setSubject] = useState<string>(() => recipients[0] ? defaultSubject(recipients[0]) : 'En snabb fråga');
-  const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI' : '');
+  const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) : '');
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [lastSent, setLastSent] = useState<Record<string, { snippet: string; created_at: string } | null>>({});
@@ -47,7 +47,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   React.useEffect(() => {
     if (open && recipients[0]) {
       setSubject(defaultSubject(recipients[0]));
-      setBody(generateOutreachMessage(recipients[0]) + '\n\n— Skickat från Leadline AI');
+      setBody(generateOutreachMessage(recipients[0]));
       setEnabled(Object.fromEntries(recipients.map((l) => [l.id, true])));
       setProgress({ done: 0, sent: 0, skipped: 0, failed: 0 });
       abortRef.current = false;

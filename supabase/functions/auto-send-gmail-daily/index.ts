@@ -13,11 +13,9 @@ const DEFAULT_DAILY = 100;
 const DEFAULT_SUBJECT = 'En snabb fråga om era inkommande samtal';
 const DEFAULT_BODY = `Hej {name}!
 
-Jag heter Simon och driver Leadline AI. Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.
+Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.
 
-Vill du höra hur det fungerar? Tar 5 minuter.
-
-— Simon, Leadline AI`;
+Vill du höra hur det fungerar? Tar 5 minuter.`;
 
 function personalize(t: string, lead: any) {
   return t

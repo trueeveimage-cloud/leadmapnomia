@@ -32,7 +32,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <span className="font-bold text-sm text-foreground">LeadMap CRM</span>
+          <span className="font-bold text-sm text-foreground">CRM</span>
         </div>
         {children}
       </main>

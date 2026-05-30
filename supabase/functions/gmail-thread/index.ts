@@ -10,7 +10,7 @@ const corsHeaders = {
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
 
 const BodySchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1),
   max: z.number().int().min(1).max(50).optional(),
   pageToken: z.string().optional(),
 });
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
   const { email, max = 10, pageToken } = parsed.data;
 
-  const q = encodeURIComponent(`(to:${email} OR from:${email})`);
+  const q = encodeURIComponent(email.includes('@') ? `(to:${email} OR from:${email})` : email);
   const headers = {
     'Authorization': `Bearer ${LOVABLE_API_KEY}`,
     'X-Connection-Api-Key': GMAIL_KEY,
