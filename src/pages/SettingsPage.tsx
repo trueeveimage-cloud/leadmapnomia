@@ -278,7 +278,7 @@ export default function SettingsPage() {
       const blob = new Blob([csv], { type: 'text/csv' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `leadmap-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `crm-export-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       toast.success(`Exported ${leads.length} leads`);
     } finally {
