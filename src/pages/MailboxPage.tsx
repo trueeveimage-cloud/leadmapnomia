@@ -425,8 +425,15 @@ export default function MailboxPage() {
         {/* Manual compose */}
         {email && (
           <div className="rounded-lg border bg-card p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center gap-2">
-              <Send className="h-4 w-4 text-primary" /> Send a manual email to {email}
+            <div className="text-sm font-medium flex items-center gap-2 justify-between">
+              <span className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-primary" /> Send a manual email to {email}
+              </span>
+              {senderEmail && (
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  From: <span className="text-foreground font-medium">{senderEmail}</span>
+                </span>
+              )}
             </div>
             <Input
               placeholder="Subject"
@@ -440,8 +447,11 @@ export default function MailboxPage() {
               rows={8}
               className="font-mono text-sm"
             />
-            <div className="flex justify-end">
-              <Button onClick={send} disabled={sending || !subject || !body}>
+            <div className="flex justify-end items-center gap-2">
+              {senderChecked && !senderEmail && (
+                <span className="text-xs text-destructive">Connect Gmail before sending.</span>
+              )}
+              <Button onClick={send} disabled={sending || !subject || !body || (senderChecked && !senderEmail)}>
                 {sending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Send className="h-4 w-4 mr-1.5" />}
                 Send email
               </Button>
