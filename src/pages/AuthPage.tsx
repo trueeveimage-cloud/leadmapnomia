@@ -66,8 +66,8 @@ export default function AuthPage() {
             <BarChart2 size={18} className="text-primary-foreground" />
           </div>
           <div>
-            <div className="text-lg font-bold text-foreground">LeadMap</div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">CRM</div>
+            <div className="text-lg font-bold text-foreground">CRM</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-widest">Sales</div>
           </div>
         </div>
 
@@ -76,7 +76,7 @@ export default function AuthPage() {
             {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
           </h2>
           <p className="text-xs text-muted-foreground mb-5">
-            {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Get started with LeadMap' : 'Enter your email to reset'}
+            {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Get started with the CRM' : 'Enter your email to reset'}
           </p>
 
           <form onSubmit={mode === 'login' ? handleLogin : mode === 'signup' ? handleSignup : handleForgot} className="space-y-3">
