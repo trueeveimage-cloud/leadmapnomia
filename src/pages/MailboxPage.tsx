@@ -23,7 +23,19 @@ interface GmailMsg {
   labels: string[];
 }
 
-type SortKey = 'recent' | 'score' | 'rating' | 'reviews' | 'name';
+type SortKey = 'score' | 'score_asc' | 'rating' | 'reviews' | 'has_phone' | 'has_email' | 'followup' | 'recent' | 'name';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  score: 'Highest potential',
+  score_asc: 'Lowest potential',
+  reviews: 'Most reviews',
+  rating: 'Highest rating',
+  has_phone: 'Has phone',
+  has_email: 'Has email',
+  followup: 'Needs follow-up',
+  recent: 'Recently added',
+  name: 'Name (A–Z)',
+};
 
 export default function MailboxPage() {
   const [searchParams] = useSearchParams();
@@ -40,10 +52,28 @@ export default function MailboxPage() {
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
+  // Connected Gmail account
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
+  const [senderChecked, setSenderChecked] = useState(false);
+
+  // Inbox view (inbound from any address)
+  const [inboxMode, setInboxMode] = useState(false);
+  const [inboxMsgs, setInboxMsgs] = useState<GmailMsg[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+
   // Compose state
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+
+  // Fetch connected Gmail address once
+  useEffect(() => {
+    supabase.functions.invoke('gmail-profile', { body: {} }).then(({ data }) => {
+      const d = data as any;
+      if (d?.connected && d.emailAddress) setSenderEmail(d.emailAddress);
+      setSenderChecked(true);
+    }).catch(() => setSenderChecked(true));
+  }, []);
 
   // Deep-link via ?email=
   useEffect(() => {
