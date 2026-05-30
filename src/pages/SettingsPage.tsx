@@ -110,7 +110,7 @@ export default function SettingsPage() {
   const [autosendEnabled, setAutosendEnabled] = useState(false);
   const [autosendDaily, setAutosendDaily] = useState('100');
   const [autosendSubject, setAutosendSubject] = useState('En snabb fråga om era inkommande samtal');
-  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nJag heter Simon och driver Leadline AI. Vi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.\n\n— Simon, Leadline AI');
+  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nVi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.');
   const [autosendRunning, setAutosendRunning] = useState(false);
 
   // Scoring weights (multipliers, default 1.0)
