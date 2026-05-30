@@ -485,7 +485,7 @@ export default function SettingsPage() {
           <div className="bg-card border border-destructive/30 rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
               <Trash2 size={15} className="text-destructive" /> Reset Outreach Stats
-              <InfoTip text="Use this when transitioning from one business (e.g. Nomia) to another (e.g. Leadline AI) to start outreach tracking from zero. Leads themselves are always kept." />
+              <InfoTip text="Use this when switching outreach campaigns to start tracking from zero. Leads themselves are always kept." />
             </h2>
             <p className="text-xs text-muted-foreground mb-3">
               Clears outreach history so dashboard counts and "Emailed" / follow-up flags start fresh. Leads themselves stay in your CRM.
