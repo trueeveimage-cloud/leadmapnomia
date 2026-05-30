@@ -104,7 +104,7 @@ export default function SettingsPage() {
   const [optOutKeywords, setOptOutKeywords] = useState('STOP, AVSLUTA, SLUTA');
   const [gmailDailyCap, setGmailDailyCap] = useState('200');
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
-  const [gmailFromAddress, setGmailFromAddress] = useState('leadmapai.se@gmail.com');
+  const [gmailFromAddress, setGmailFromAddress] = useState('');
 
   // Gmail auto-send (100/business-day)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
