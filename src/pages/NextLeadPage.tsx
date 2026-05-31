@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead, updateLead, logActivity } from '@/lib/supabase';
+import { detectLeadCountry } from '@/lib/countryRouting';
 import { useCRM } from '@/context/CRMContext';
 import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
