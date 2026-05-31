@@ -14,10 +14,11 @@ import LeadQuickActions from '@/components/LeadQuickActions';
 import EmailOutreachModal from '@/components/EmailOutreachModal';
 import { toast } from 'sonner';
 
-type SortKey = 'score' | 'reviews' | 'rating' | 'worst_site' | 'no_booking' | 'emergency' | 'recent' | 'not_contacted';
+type SortKey = 'score' | 'score_asc' | 'reviews' | 'rating' | 'worst_site' | 'no_booking' | 'emergency' | 'recent' | 'not_contacted';
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'score', label: 'Highest potential' },
+  { key: 'score_asc', label: 'Lowest potential' },
   { key: 'reviews', label: 'Most reviews' },
   { key: 'rating', label: 'Highest rating' },
   { key: 'worst_site', label: 'Worst website first' },
@@ -140,6 +141,7 @@ export default function HotLeadsPage() {
 
     switch (sort) {
       case 'score': arr.sort((a, b) => b.score - a.score); break;
+      case 'score_asc': arr.sort((a, b) => a.score - b.score); break;
       case 'reviews': arr.sort((a, b) => (b.lead.reviews_count ?? 0) - (a.lead.reviews_count ?? 0)); break;
       case 'rating': arr.sort((a, b) => (b.lead.rating ?? 0) - (a.lead.rating ?? 0)); break;
       case 'worst_site': arr.sort((a, b) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead, updateLead, logActivity } from '@/lib/supabase';
+import { detectLeadCountry } from '@/lib/countryRouting';
 import { useCRM } from '@/context/CRMContext';
 import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,12 @@ export default function NextLeadPage() {
     setStep('preview');
     setNote('');
     try {
+      // Sweden-only: exclude Denmark & Norway leads from this calling queue
+      const isSwedish = (l: any) =>
+        detectLeadCountry(l.address, l.phone) === 'SE';
+      const baseFilter = (l: any) =>
+        !skipIds.includes(l.id) && l.phone && isSwedish(l);
+
       // Priority 1: Overdue callbacks
       let { data } = await supabase
         .from('leads').select('*')
@@ -96,15 +103,15 @@ export default function NextLeadPage() {
         .not('next_action_at', 'is', null)
         .lte('next_action_at', new Date().toISOString())
         .eq('outreach_opt_out', false)
-        .order('next_action_at', { ascending: true }).limit(20);
-      let candidates = (data || []).filter(l => !skipIds.includes(l.id) && l.phone);
-      
+        .order('next_action_at', { ascending: true }).limit(50);
+      let candidates = (data || []).filter(baseFilter);
+
       if (candidates.length === 0) {
         const res2 = await supabase
           .from('leads').select('*')
           .eq('needs_call', true).eq('outreach_opt_out', false)
-          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(20);
-        candidates = (res2.data || []).filter(l => !skipIds.includes(l.id) && l.phone);
+          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(50);
+        candidates = (res2.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
@@ -112,8 +119,8 @@ export default function NextLeadPage() {
           .from('leads').select('*')
           .eq('status', 'not_contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .order('created_at', { ascending: true }).limit(20);
-        candidates = (res3.data || []).filter(l => !skipIds.includes(l.id) && l.phone);
+          .order('created_at', { ascending: true }).limit(50);
+        candidates = (res3.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
@@ -121,8 +128,8 @@ export default function NextLeadPage() {
           .from('leads').select('*')
           .eq('status', 'contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(20);
-        candidates = (res4.data || []).filter(l => !skipIds.includes(l.id) && l.phone);
+          .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(50);
+        candidates = (res4.data || []).filter(baseFilter);
       }
 
       setLead(candidates.length > 0 ? (candidates[0] as Lead) : null);
