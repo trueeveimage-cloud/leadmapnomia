@@ -29,6 +29,8 @@ const STATUS_LABELS: Partial<Record<LeadStatus, string>> = {
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
+  { value: 'highest_potential', label: 'Highest potential' },
+  { value: 'lowest_potential', label: 'Lowest potential' },
   { value: 'rating', label: 'Rating' },
   { value: 'reviews', label: 'Reviews' },
   { value: 'followup', label: 'Follow-up' },
