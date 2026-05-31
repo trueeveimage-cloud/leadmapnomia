@@ -14,10 +14,11 @@ import LeadQuickActions from '@/components/LeadQuickActions';
 import EmailOutreachModal from '@/components/EmailOutreachModal';
 import { toast } from 'sonner';
 
-type SortKey = 'score' | 'reviews' | 'rating' | 'worst_site' | 'no_booking' | 'emergency' | 'recent' | 'not_contacted';
+type SortKey = 'score' | 'score_asc' | 'reviews' | 'rating' | 'worst_site' | 'no_booking' | 'emergency' | 'recent' | 'not_contacted';
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'score', label: 'Highest potential' },
+  { key: 'score_asc', label: 'Lowest potential' },
   { key: 'reviews', label: 'Most reviews' },
   { key: 'rating', label: 'Highest rating' },
   { key: 'worst_site', label: 'Worst website first' },
