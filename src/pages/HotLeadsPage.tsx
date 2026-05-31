@@ -141,6 +141,7 @@ export default function HotLeadsPage() {
 
     switch (sort) {
       case 'score': arr.sort((a, b) => b.score - a.score); break;
+      case 'score_asc': arr.sort((a, b) => a.score - b.score); break;
       case 'reviews': arr.sort((a, b) => (b.lead.reviews_count ?? 0) - (a.lead.reviews_count ?? 0)); break;
       case 'rating': arr.sort((a, b) => (b.lead.rating ?? 0) - (a.lead.rating ?? 0)); break;
       case 'worst_site': arr.sort((a, b) => {
