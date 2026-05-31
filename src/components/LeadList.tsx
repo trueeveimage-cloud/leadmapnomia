@@ -110,6 +110,8 @@ export default function LeadList({ section, allSections, status, optOut, showTri
     switch (sort) {
       case 'rating': return [...result].sort((a, b) => (b.rating || 0) - (a.rating || 0));
       case 'reviews': return [...result].sort((a, b) => (b.reviews_count || 0) - (a.reviews_count || 0));
+      case 'highest_potential': return [...result].sort((a, b) => (b.potential_score ?? 0) - (a.potential_score ?? 0));
+      case 'lowest_potential': return [...result].sort((a, b) => (a.potential_score ?? 0) - (b.potential_score ?? 0));
       case 'followup': return [...result].sort((a, b) => {
         if (!a.next_action_at) return 1;
         if (!b.next_action_at) return -1;
