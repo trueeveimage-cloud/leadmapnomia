@@ -90,11 +90,15 @@ export default function NextLeadPage() {
     setStep('preview');
     setNote('');
     try {
-      // Sweden-only: exclude Denmark & Norway leads from this calling queue
+      // Sweden-only + must have phone + must NOT have a website
       const isSwedish = (l: any) =>
         detectLeadCountry(l.address, l.phone) === 'SE';
+      const hasNoWebsite = (l: any) => {
+        const w = (l.website || '').trim();
+        return !w || w.toLowerCase() === 'none' || w.toLowerCase() === 'null';
+      };
       const baseFilter = (l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l);
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && hasNoWebsite(l);
 
       // Priority 1: Overdue callbacks
       let { data } = await supabase
@@ -103,6 +107,7 @@ export default function NextLeadPage() {
         .not('next_action_at', 'is', null)
         .lte('next_action_at', new Date().toISOString())
         .eq('outreach_opt_out', false)
+        .is('website', null)
         .order('next_action_at', { ascending: true }).limit(50);
       let candidates = (data || []).filter(baseFilter);
 
@@ -110,16 +115,19 @@ export default function NextLeadPage() {
         const res2 = await supabase
           .from('leads').select('*')
           .eq('needs_call', true).eq('outreach_opt_out', false)
+          .is('website', null)
           .order('call_after_at', { ascending: true, nullsFirst: false }).limit(50);
         candidates = (res2.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
+        // Rank by reviews so callers hit the most valuable no-website leads first
         const res3 = await supabase
           .from('leads').select('*')
           .eq('status', 'not_contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .order('created_at', { ascending: true }).limit(50);
+          .is('website', null)
+          .order('reviews_count', { ascending: false, nullsFirst: false }).limit(100);
         candidates = (res3.data || []).filter(baseFilter);
       }
 
@@ -128,6 +136,7 @@ export default function NextLeadPage() {
           .from('leads').select('*')
           .eq('status', 'contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
+          .is('website', null)
           .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(50);
         candidates = (res4.data || []).filter(baseFilter);
       }
@@ -143,6 +152,37 @@ export default function NextLeadPage() {
   useEffect(() => {
     // Don't auto-fetch — wait for caller selection
   }, []);
+
+  // Number-key shortcuts for fast wrap-up
+  useEffect(() => {
+    if (!lead) return;
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (step === 'preview' && e.key === 'c') { e.preventDefault(); handleCall(); }
+      if (step === 'preview' && e.key === 's') { e.preventDefault(); skip(); }
+      if (step === 'outcome') {
+        const idx = parseInt(e.key, 10);
+        if (idx >= 1 && idx <= OUTCOMES.length) {
+          e.preventDefault();
+          handleOutcome(OUTCOMES[idx - 1].key);
+        }
+      }
+      if (step === 'status') {
+        const idx = parseInt(e.key, 10);
+        if (idx >= 1 && idx <= STATUSES.length) {
+          e.preventDefault();
+          handleStatus(STATUSES[idx - 1].key);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lead, step, note]);
+
+
 
   const skip = () => {
     if (lead) {
@@ -433,17 +473,40 @@ export default function NextLeadPage() {
           <div className="space-y-4">
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
-                  {lead.category && <span className="text-xs text-muted-foreground">{lead.niche_label || lead.category}</span>}
-                  {lead.address && <p className="text-xs text-muted-foreground mt-0.5">{lead.address}</p>}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    {(lead as any).lead_tier && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold uppercase tracking-wider">
+                        {(lead as any).lead_tier}
+                      </span>
+                    )}
+                    {(lead as any).potential_score != null && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
+                        {(lead as any).potential_score}/100
+                      </span>
+                    )}
+                  </div>
+                  {(lead.niche_label || lead.category) && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{lead.niche_label || lead.category}</div>
+                  )}
+                  {lead.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.address)}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-xs text-muted-foreground hover:text-primary mt-0.5 inline-block"
+                    >
+                      📍 {lead.address}
+                    </a>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={skip}>
                   <SkipForward size={14} className="mr-1" /> Skip
                 </Button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                 {lead.phone && (
                   <div className="flex items-center gap-2 text-foreground">
                     <Phone size={13} className="text-green-400" />
@@ -453,15 +516,32 @@ export default function NextLeadPage() {
                     </button>
                   </div>
                 )}
-                {lead.rating && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Star size={13} className="text-amber-400 fill-amber-400" />
-                    <span>{lead.rating} ({lead.reviews_count})</span>
+                {lead.email && (
+                  <div className="flex items-center gap-2 text-foreground text-xs">
+                    <MessageSquare size={12} className="text-blue-400" />
+                    <span className="truncate">{lead.email}</span>
                   </div>
                 )}
-                {(lead as any).last_contacted_at && (
+                {lead.rating != null && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Clock size={13} />
+                    <Star size={13} className="text-amber-400 fill-amber-400" />
+                    <span>{lead.rating} ({lead.reviews_count || 0} reviews)</span>
+                  </div>
+                )}
+                {(lead as any).opening_hours && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <Clock size={12} /> <span className="truncate">{(lead as any).opening_hours}</span>
+                  </div>
+                )}
+                {(lead as any).estimated_value && (
+                  <div className="text-xs text-muted-foreground">💰 Est. value: <span className="text-foreground">{(lead as any).estimated_value}</span></div>
+                )}
+                {(lead as any).best_contact_method && (
+                  <div className="text-xs text-muted-foreground">🎯 Best contact: <span className="text-foreground">{(lead as any).best_contact_method}</span></div>
+                )}
+                {(lead as any).last_contacted_at && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <Clock size={12} />
                     <span>Last: {format(new Date((lead as any).last_contacted_at), 'MMM d h:mma')}</span>
                   </div>
                 )}
@@ -473,11 +553,32 @@ export default function NextLeadPage() {
                 )}
               </div>
 
+              {/* Signal flags */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(lead as any).has_emergency && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">🚨 Emergency service</span>}
+                {(lead as any).has_booking && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">📅 Takes bookings</span>}
+                {(lead as any).has_receptionist && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400">👥 Has receptionist</span>}
+                {(lead as any).has_contact_form && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">📝 Contact form</span>}
+                {(lead.maps_url) && (
+                  <a href={lead.maps_url} target="_blank" rel="noreferrer" className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-primary hover:bg-primary/10">
+                    🗺 Google Maps
+                  </a>
+                )}
+              </div>
+
+              {/* Why good lead */}
+              {(lead as any).why_good_lead && (
+                <div className="text-xs bg-primary/5 border border-primary/20 rounded p-2 mb-3">
+                  <div className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Why this lead</div>
+                  <div className="text-foreground">{(lead as any).why_good_lead}</div>
+                </div>
+              )}
+
               {/* Demo brief if exists */}
               <DemoBriefSummary notes={lead.notes} />
 
               {lead.notes && !lead.notes.includes('[DEMO]') && (
-                <div className="text-xs text-muted-foreground bg-muted rounded p-2 mb-4 italic">{lead.notes}</div>
+                <div className="text-xs text-muted-foreground bg-muted rounded p-2 mb-3 italic whitespace-pre-wrap">{lead.notes}</div>
               )}
 
               <div className="mb-4">
@@ -504,12 +605,13 @@ export default function NextLeadPage() {
                     <div className="text-xs text-muted-foreground">Dial this number</div>
                     <a href={`tel:${lead.phone}`} className="text-xl font-mono font-bold text-primary tracking-wide hover:underline">{lead.phone}</a>
                   </div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome <span className="normal-case font-normal text-[10px]">— press 1-{OUTCOMES.length}</span></div>
                   <div className="flex flex-wrap gap-2">
-                    {OUTCOMES.map(o => (
+                    {OUTCOMES.map((o, i) => (
                       <button key={o.key} onClick={() => handleOutcome(o.key)}
-                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
                         style={{ color: o.color }}>
+                        <kbd className="text-[9px] px-1 py-px rounded bg-muted text-muted-foreground">{i + 1}</kbd>
                         {o.label}
                       </button>
                     ))}
@@ -525,12 +627,13 @@ export default function NextLeadPage() {
 
               {step === 'status' && (
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Set Status</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Set Status <span className="normal-case font-normal text-[10px]">— press 1-{STATUSES.length}</span></div>
                   <div className="flex flex-wrap gap-2">
-                    {STATUSES.map(s => (
+                    {STATUSES.map((s, i) => (
                       <button key={s.key} onClick={() => handleStatus(s.key)}
-                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
                         style={{ color: s.color }}>
+                        <kbd className="text-[9px] px-1 py-px rounded bg-muted text-muted-foreground">{i + 1}</kbd>
                         {s.label}
                       </button>
                     ))}
