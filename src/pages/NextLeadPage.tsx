@@ -153,6 +153,37 @@ export default function NextLeadPage() {
     // Don't auto-fetch — wait for caller selection
   }, []);
 
+  // Number-key shortcuts for fast wrap-up
+  useEffect(() => {
+    if (!lead) return;
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (step === 'preview' && e.key === 'c') { e.preventDefault(); handleCall(); }
+      if (step === 'preview' && e.key === 's') { e.preventDefault(); skip(); }
+      if (step === 'outcome') {
+        const idx = parseInt(e.key, 10);
+        if (idx >= 1 && idx <= OUTCOMES.length) {
+          e.preventDefault();
+          handleOutcome(OUTCOMES[idx - 1].key);
+        }
+      }
+      if (step === 'status') {
+        const idx = parseInt(e.key, 10);
+        if (idx >= 1 && idx <= STATUSES.length) {
+          e.preventDefault();
+          handleStatus(STATUSES[idx - 1].key);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lead, step, note]);
+
+
+
   const skip = () => {
     if (lead) {
       const next = [...skippedIds, lead.id];
