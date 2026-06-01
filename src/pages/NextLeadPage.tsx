@@ -442,17 +442,40 @@ export default function NextLeadPage() {
           <div className="space-y-4">
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
-                  {lead.category && <span className="text-xs text-muted-foreground">{lead.niche_label || lead.category}</span>}
-                  {lead.address && <p className="text-xs text-muted-foreground mt-0.5">{lead.address}</p>}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    {(lead as any).lead_tier && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold uppercase tracking-wider">
+                        {(lead as any).lead_tier}
+                      </span>
+                    )}
+                    {(lead as any).potential_score != null && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
+                        {(lead as any).potential_score}/100
+                      </span>
+                    )}
+                  </div>
+                  {(lead.niche_label || lead.category) && (
+                    <div className="text-xs text-muted-foreground mt-0.5">{lead.niche_label || lead.category}</div>
+                  )}
+                  {lead.address && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.address)}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-xs text-muted-foreground hover:text-primary mt-0.5 inline-block"
+                    >
+                      📍 {lead.address}
+                    </a>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={skip}>
                   <SkipForward size={14} className="mr-1" /> Skip
                 </Button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                 {lead.phone && (
                   <div className="flex items-center gap-2 text-foreground">
                     <Phone size={13} className="text-green-400" />
@@ -462,15 +485,32 @@ export default function NextLeadPage() {
                     </button>
                   </div>
                 )}
-                {lead.rating && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Star size={13} className="text-amber-400 fill-amber-400" />
-                    <span>{lead.rating} ({lead.reviews_count})</span>
+                {lead.email && (
+                  <div className="flex items-center gap-2 text-foreground text-xs">
+                    <MessageSquare size={12} className="text-blue-400" />
+                    <span className="truncate">{lead.email}</span>
                   </div>
                 )}
-                {(lead as any).last_contacted_at && (
+                {lead.rating != null && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Clock size={13} />
+                    <Star size={13} className="text-amber-400 fill-amber-400" />
+                    <span>{lead.rating} ({lead.reviews_count || 0} reviews)</span>
+                  </div>
+                )}
+                {(lead as any).opening_hours && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <Clock size={12} /> <span className="truncate">{(lead as any).opening_hours}</span>
+                  </div>
+                )}
+                {(lead as any).estimated_value && (
+                  <div className="text-xs text-muted-foreground">💰 Est. value: <span className="text-foreground">{(lead as any).estimated_value}</span></div>
+                )}
+                {(lead as any).best_contact_method && (
+                  <div className="text-xs text-muted-foreground">🎯 Best contact: <span className="text-foreground">{(lead as any).best_contact_method}</span></div>
+                )}
+                {(lead as any).last_contacted_at && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    <Clock size={12} />
                     <span>Last: {format(new Date((lead as any).last_contacted_at), 'MMM d h:mma')}</span>
                   </div>
                 )}
@@ -482,11 +522,32 @@ export default function NextLeadPage() {
                 )}
               </div>
 
+              {/* Signal flags */}
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(lead as any).has_emergency && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">🚨 Emergency service</span>}
+                {(lead as any).has_booking && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">📅 Takes bookings</span>}
+                {(lead as any).has_receptionist && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400">👥 Has receptionist</span>}
+                {(lead as any).has_contact_form && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">📝 Contact form</span>}
+                {(lead.maps_url) && (
+                  <a href={lead.maps_url} target="_blank" rel="noreferrer" className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-primary hover:bg-primary/10">
+                    🗺 Google Maps
+                  </a>
+                )}
+              </div>
+
+              {/* Why good lead */}
+              {(lead as any).why_good_lead && (
+                <div className="text-xs bg-primary/5 border border-primary/20 rounded p-2 mb-3">
+                  <div className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Why this lead</div>
+                  <div className="text-foreground">{(lead as any).why_good_lead}</div>
+                </div>
+              )}
+
               {/* Demo brief if exists */}
               <DemoBriefSummary notes={lead.notes} />
 
               {lead.notes && !lead.notes.includes('[DEMO]') && (
-                <div className="text-xs text-muted-foreground bg-muted rounded p-2 mb-4 italic">{lead.notes}</div>
+                <div className="text-xs text-muted-foreground bg-muted rounded p-2 mb-3 italic whitespace-pre-wrap">{lead.notes}</div>
               )}
 
               <div className="mb-4">
