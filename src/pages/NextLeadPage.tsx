@@ -605,12 +605,13 @@ export default function NextLeadPage() {
                     <div className="text-xs text-muted-foreground">Dial this number</div>
                     <a href={`tel:${lead.phone}`} className="text-xl font-mono font-bold text-primary tracking-wide hover:underline">{lead.phone}</a>
                   </div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Outcome <span className="normal-case font-normal text-[10px]">— press 1-{OUTCOMES.length}</span></div>
                   <div className="flex flex-wrap gap-2">
-                    {OUTCOMES.map(o => (
+                    {OUTCOMES.map((o, i) => (
                       <button key={o.key} onClick={() => handleOutcome(o.key)}
-                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
                         style={{ color: o.color }}>
+                        <kbd className="text-[9px] px-1 py-px rounded bg-muted text-muted-foreground">{i + 1}</kbd>
                         {o.label}
                       </button>
                     ))}
@@ -626,12 +627,13 @@ export default function NextLeadPage() {
 
               {step === 'status' && (
                 <div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Set Status</div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Set Status <span className="normal-case font-normal text-[10px]">— press 1-{STATUSES.length}</span></div>
                   <div className="flex flex-wrap gap-2">
-                    {STATUSES.map(s => (
+                    {STATUSES.map((s, i) => (
                       <button key={s.key} onClick={() => handleStatus(s.key)}
-                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors"
+                        className="px-3 py-2 rounded-md text-sm font-medium border border-border hover:bg-muted transition-colors flex items-center gap-1.5"
                         style={{ color: s.color }}>
+                        <kbd className="text-[9px] px-1 py-px rounded bg-muted text-muted-foreground">{i + 1}</kbd>
                         {s.label}
                       </button>
                     ))}
