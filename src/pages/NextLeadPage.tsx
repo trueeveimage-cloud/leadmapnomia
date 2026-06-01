@@ -90,11 +90,15 @@ export default function NextLeadPage() {
     setStep('preview');
     setNote('');
     try {
-      // Sweden-only: exclude Denmark & Norway leads from this calling queue
+      // Sweden-only + must have phone + must NOT have a website
       const isSwedish = (l: any) =>
         detectLeadCountry(l.address, l.phone) === 'SE';
+      const hasNoWebsite = (l: any) => {
+        const w = (l.website || '').trim();
+        return !w || w.toLowerCase() === 'none' || w.toLowerCase() === 'null';
+      };
       const baseFilter = (l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l);
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && hasNoWebsite(l);
 
       // Priority 1: Overdue callbacks
       let { data } = await supabase
@@ -103,6 +107,7 @@ export default function NextLeadPage() {
         .not('next_action_at', 'is', null)
         .lte('next_action_at', new Date().toISOString())
         .eq('outreach_opt_out', false)
+        .is('website', null)
         .order('next_action_at', { ascending: true }).limit(50);
       let candidates = (data || []).filter(baseFilter);
 
@@ -110,16 +115,19 @@ export default function NextLeadPage() {
         const res2 = await supabase
           .from('leads').select('*')
           .eq('needs_call', true).eq('outreach_opt_out', false)
+          .is('website', null)
           .order('call_after_at', { ascending: true, nullsFirst: false }).limit(50);
         candidates = (res2.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
+        // Rank by reviews so callers hit the most valuable no-website leads first
         const res3 = await supabase
           .from('leads').select('*')
           .eq('status', 'not_contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .order('created_at', { ascending: true }).limit(50);
+          .is('website', null)
+          .order('reviews_count', { ascending: false, nullsFirst: false }).limit(100);
         candidates = (res3.data || []).filter(baseFilter);
       }
 
@@ -128,6 +136,7 @@ export default function NextLeadPage() {
           .from('leads').select('*')
           .eq('status', 'contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
+          .is('website', null)
           .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(50);
         candidates = (res4.data || []).filter(baseFilter);
       }
