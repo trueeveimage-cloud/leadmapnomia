@@ -515,7 +515,11 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    {mode === 'leadline' ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 font-semibold uppercase tracking-wider">Needs receptionist</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    )}
                     {(lead as any).lead_tier && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold uppercase tracking-wider">
                         {(lead as any).lead_tier}
