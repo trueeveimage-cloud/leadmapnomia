@@ -441,7 +441,15 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <ChevronRight size={20} className="text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Next Lead</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              {mode === 'leadline' ? 'Leadline · Next Call' : 'Nomia · Next Call'}
+            </h1>
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
+              style={mode === 'leadline'
+                ? { background: 'hsl(213 94% 58% / 0.15)', color: 'hsl(213 94% 70%)' }
+                : { background: 'hsl(262 83% 65% / 0.15)', color: 'hsl(262 83% 75%)' }}>
+              {mode === 'leadline' ? 'Voice Receptionist' : 'No-Website Site'}
+            </span>
             <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground ml-2">N</kbd>
           </div>
           <Button variant="ghost" size="sm" onClick={() => { setShowCallerPicker(true); setActiveCaller(null); }} className="text-xs gap-1.5">
