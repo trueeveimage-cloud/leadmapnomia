@@ -113,55 +113,62 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
     setStep('preview');
     setNote('');
     try {
-      // Sweden-only + must have phone + must NOT have a website
       const isSwedish = (l: any) =>
         detectLeadCountry(l.address, l.phone) === 'SE';
       const hasNoWebsite = (l: any) => {
         const w = (l.website || '').trim();
         return !w || w.toLowerCase() === 'none' || w.toLowerCase() === 'null';
       };
-      const baseFilter = (l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l) && hasNoWebsite(l);
+      // "Already contacted" = a completed call outcome exists on this lead.
+      const notAlreadyCalled = (l: any) => !l.call_outcome_last;
 
-      // Priority 1: Overdue callbacks
+      const modeFilter = (l: any) => {
+        if (mode === 'leadline') {
+          // Leadline: businesses that need a voice receptionist.
+          // Phone present + no receptionist signal + high-call-volume niche.
+          return !!l.phone && l.has_receptionist !== true && isLeadlineNiche(l);
+        }
+        // Nomia: businesses with no website.
+        return hasNoWebsite(l);
+      };
+
+      const baseFilter = (l: any) =>
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l) && notAlreadyCalled(l);
+
+      // Priority 1: Overdue callbacks (these intentionally bypass notAlreadyCalled — they're scheduled callbacks)
       let { data } = await supabase
         .from('leads').select('*')
         .eq('status', 'callback')
         .not('next_action_at', 'is', null)
         .lte('next_action_at', new Date().toISOString())
         .eq('outreach_opt_out', false)
-        .is('website', null)
         .order('next_action_at', { ascending: true }).limit(50);
-      let candidates = (data || []).filter(baseFilter);
+      let candidates = (data || []).filter((l: any) =>
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l)
+      );
 
       if (candidates.length === 0) {
         const res2 = await supabase
           .from('leads').select('*')
           .eq('needs_call', true).eq('outreach_opt_out', false)
-          .is('website', null)
-          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(50);
+          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(100);
         candidates = (res2.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
-        // Rank by reviews so callers hit the most valuable no-website leads first
+        // Highest potential / most reviews first
         const res3 = await supabase
           .from('leads').select('*')
           .eq('status', 'not_contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .is('website', null)
-          .order('reviews_count', { ascending: false, nullsFirst: false }).limit(100);
-        candidates = (res3.data || []).filter(baseFilter);
-      }
-
-      if (candidates.length === 0) {
-        const res4 = await supabase
-          .from('leads').select('*')
-          .eq('status', 'contacted').eq('outreach_opt_out', false)
-          .not('phone', 'is', null)
-          .is('website', null)
-          .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(50);
-        candidates = (res4.data || []).filter(baseFilter);
+          .order('potential_score', { ascending: false, nullsFirst: false })
+          .limit(200);
+        candidates = (res3.data || [])
+          .filter(baseFilter)
+          .sort((a: any, b: any) =>
+            (b.potential_score ?? 0) - (a.potential_score ?? 0) ||
+            (b.reviews_count ?? 0) - (a.reviews_count ?? 0)
+          );
       }
 
       setLead(candidates.length > 0 ? (candidates[0] as Lead) : null);
@@ -170,7 +177,8 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
+
 
   useEffect(() => {
     // Don't auto-fetch — wait for caller selection
