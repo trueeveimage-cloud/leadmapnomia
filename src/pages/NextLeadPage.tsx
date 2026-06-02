@@ -46,7 +46,30 @@ const FOLLOWUP_PRESETS = [
   { label: '2 days', fn: () => { const d = addDays(new Date(), 2); d.setHours(10, 0, 0, 0); return d; } },
 ];
 
-export default function NextLeadPage() {
+// High call-volume niches that benefit most from a voice receptionist (Leadline)
+const LEADLINE_NICHE_KEYWORDS = [
+  'dent', 'klinik', 'clinic', 'salon', 'frisör', 'frisor', 'barber',
+  'advokat', 'law', 'juridik', 'lawyer', 'attorney',
+  'plumb', 'vvs', 'rörmokare', 'rormokare',
+  'electric', 'elektriker',
+  'mäklare', 'maklare', 'real_estate', 'realtor',
+  'doctor', 'läkare', 'lakare', 'vård', 'vard', 'medical', 'physio',
+  'vet', 'veterinär', 'veterinar',
+  'spa', 'massage', 'beauty', 'skön', 'skon', 'nail',
+  'auto', 'workshop', 'verkstad', 'mekaniker',
+  'hotel', 'hotell', 'restaurant', 'restaurang',
+];
+
+const isLeadlineNiche = (l: any) => {
+  const hay = `${l.category || ''} ${l.niche_label || ''} ${l.detected_niche || ''} ${(l.types || []).join(' ')}`.toLowerCase();
+  return LEADLINE_NICHE_KEYWORDS.some(k => hay.includes(k));
+};
+
+interface NextLeadPageProps {
+  mode?: 'nomia' | 'leadline';
+}
+
+export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {}) {
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<'preview' | 'outcome' | 'status' | 'followup'>('preview');
@@ -90,55 +113,62 @@ export default function NextLeadPage() {
     setStep('preview');
     setNote('');
     try {
-      // Sweden-only + must have phone + must NOT have a website
       const isSwedish = (l: any) =>
         detectLeadCountry(l.address, l.phone) === 'SE';
       const hasNoWebsite = (l: any) => {
         const w = (l.website || '').trim();
         return !w || w.toLowerCase() === 'none' || w.toLowerCase() === 'null';
       };
-      const baseFilter = (l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l) && hasNoWebsite(l);
+      // "Already contacted" = a completed call outcome exists on this lead.
+      const notAlreadyCalled = (l: any) => !l.call_outcome_last;
 
-      // Priority 1: Overdue callbacks
+      const modeFilter = (l: any) => {
+        if (mode === 'leadline') {
+          // Leadline: businesses that need a voice receptionist.
+          // Phone present + no receptionist signal + high-call-volume niche.
+          return !!l.phone && l.has_receptionist !== true && isLeadlineNiche(l);
+        }
+        // Nomia: businesses with no website.
+        return hasNoWebsite(l);
+      };
+
+      const baseFilter = (l: any) =>
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l) && notAlreadyCalled(l);
+
+      // Priority 1: Overdue callbacks (these intentionally bypass notAlreadyCalled — they're scheduled callbacks)
       let { data } = await supabase
         .from('leads').select('*')
         .eq('status', 'callback')
         .not('next_action_at', 'is', null)
         .lte('next_action_at', new Date().toISOString())
         .eq('outreach_opt_out', false)
-        .is('website', null)
         .order('next_action_at', { ascending: true }).limit(50);
-      let candidates = (data || []).filter(baseFilter);
+      let candidates = (data || []).filter((l: any) =>
+        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l)
+      );
 
       if (candidates.length === 0) {
         const res2 = await supabase
           .from('leads').select('*')
           .eq('needs_call', true).eq('outreach_opt_out', false)
-          .is('website', null)
-          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(50);
+          .order('call_after_at', { ascending: true, nullsFirst: false }).limit(100);
         candidates = (res2.data || []).filter(baseFilter);
       }
 
       if (candidates.length === 0) {
-        // Rank by reviews so callers hit the most valuable no-website leads first
+        // Highest potential / most reviews first
         const res3 = await supabase
           .from('leads').select('*')
           .eq('status', 'not_contacted').eq('outreach_opt_out', false)
           .not('phone', 'is', null)
-          .is('website', null)
-          .order('reviews_count', { ascending: false, nullsFirst: false }).limit(100);
-        candidates = (res3.data || []).filter(baseFilter);
-      }
-
-      if (candidates.length === 0) {
-        const res4 = await supabase
-          .from('leads').select('*')
-          .eq('status', 'contacted').eq('outreach_opt_out', false)
-          .not('phone', 'is', null)
-          .is('website', null)
-          .order('last_contacted_at', { ascending: true, nullsFirst: true }).limit(50);
-        candidates = (res4.data || []).filter(baseFilter);
+          .order('potential_score', { ascending: false, nullsFirst: false })
+          .limit(200);
+        candidates = (res3.data || [])
+          .filter(baseFilter)
+          .sort((a: any, b: any) =>
+            (b.potential_score ?? 0) - (a.potential_score ?? 0) ||
+            (b.reviews_count ?? 0) - (a.reviews_count ?? 0)
+          );
       }
 
       setLead(candidates.length > 0 ? (candidates[0] as Lead) : null);
@@ -147,7 +177,8 @@ export default function NextLeadPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
+
 
   useEffect(() => {
     // Don't auto-fetch — wait for caller selection
@@ -410,7 +441,15 @@ export default function NextLeadPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <ChevronRight size={20} className="text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Next Lead</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              {mode === 'leadline' ? 'Leadline · Next Call' : 'Nomia · Next Call'}
+            </h1>
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
+              style={mode === 'leadline'
+                ? { background: 'hsl(213 94% 58% / 0.15)', color: 'hsl(213 94% 70%)' }
+                : { background: 'hsl(262 83% 65% / 0.15)', color: 'hsl(262 83% 75%)' }}>
+              {mode === 'leadline' ? 'Voice Receptionist' : 'No-Website Site'}
+            </span>
             <kbd className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground ml-2">N</kbd>
           </div>
           <Button variant="ghost" size="sm" onClick={() => { setShowCallerPicker(true); setActiveCaller(null); }} className="text-xs gap-1.5">
@@ -476,7 +515,11 @@ export default function NextLeadPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-lg font-semibold text-foreground">{lead.name}</h2>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    {mode === 'leadline' ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 font-semibold uppercase tracking-wider">Needs receptionist</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold uppercase tracking-wider">No website</span>
+                    )}
                     {(lead as any).lead_tier && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-semibold uppercase tracking-wider">
                         {(lead as any).lead_tier}

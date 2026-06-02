@@ -198,7 +198,8 @@ const App = () => (
                       <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
                       <Route path="/inbox" element={<InboxPage />} />
                       <Route path="/call-list" element={<CallListPage />} />
-                      <Route path="/next" element={<NextLeadPage />} />
+                      <Route path="/next" element={<NextLeadPage mode="nomia" />} />
+                      <Route path="/next-leadline" element={<NextLeadPage mode="leadline" />} />
                       <Route path="/quick-send" element={<QuickSendPage />} />
                       <Route path="/mailbox" element={<MailboxPage />} />
                       <Route path="/guide" element={<GuidePage />} />
