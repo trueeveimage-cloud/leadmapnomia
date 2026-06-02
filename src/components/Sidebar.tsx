@@ -191,18 +191,40 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
-      {/* Quick actions */}
+      {/* Quick actions: Nomia + Leadline split */}
       <div className="px-3 pt-3 pb-2 space-y-2">
         <Link
           to="/next"
           onClick={onClose}
-          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary/15 to-primary/5 text-primary hover:from-primary/25 hover:to-primary/10 transition-all duration-300 border border-primary/20 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 group"
+          className={cn(
+            "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 border group",
+            pathname === '/next'
+              ? "bg-primary/20 text-primary border-primary/40"
+              : "bg-gradient-to-r from-primary/15 to-primary/5 text-primary hover:from-primary/25 hover:to-primary/10 border-primary/20 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10"
+          )}
         >
           <div className="w-6 h-6 rounded-md bg-primary/20 flex items-center justify-center transition-transform duration-200 group-hover:scale-110">
             <ArrowRight size={13} />
           </div>
-          <span>Next Lead</span>
-          <span className="ml-auto text-[10px] text-primary/50 font-mono">N</span>
+          <span className="flex-1">Nomia · Next Call</span>
+          <span className="text-[9px] uppercase font-bold text-primary/60">No site</span>
+        </Link>
+
+        <Link
+          to="/next-leadline"
+          onClick={onClose}
+          className={cn(
+            "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 border group",
+            pathname === '/next-leadline'
+              ? "bg-[hsl(213,94%,58%)]/20 text-[hsl(213,94%,75%)] border-[hsl(213,94%,58%)]/40"
+              : "bg-gradient-to-r from-[hsl(213,94%,58%)]/12 to-[hsl(213,94%,58%)]/5 text-[hsl(213,94%,75%)] border-[hsl(213,94%,58%)]/20 hover:from-[hsl(213,94%,58%)]/22 hover:to-[hsl(213,94%,58%)]/10 hover:border-[hsl(213,94%,58%)]/35 hover:shadow-lg hover:shadow-[hsl(213,94%,58%)]/10"
+          )}
+        >
+          <div className="w-6 h-6 rounded-md bg-[hsl(213,94%,58%)]/25 flex items-center justify-center transition-transform duration-200 group-hover:scale-110">
+            <PhoneCall size={13} />
+          </div>
+          <span className="flex-1">Leadline · Next Call</span>
+          <span className="text-[9px] uppercase font-bold text-[hsl(213,94%,75%)]/70">Voice</span>
         </Link>
 
         <Link
@@ -220,7 +242,6 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           </div>
           <span>Hot Leads</span>
         </Link>
-
       </div>
 
 
