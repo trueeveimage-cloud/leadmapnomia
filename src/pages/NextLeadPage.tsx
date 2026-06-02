@@ -46,7 +46,30 @@ const FOLLOWUP_PRESETS = [
   { label: '2 days', fn: () => { const d = addDays(new Date(), 2); d.setHours(10, 0, 0, 0); return d; } },
 ];
 
-export default function NextLeadPage() {
+// High call-volume niches that benefit most from a voice receptionist (Leadline)
+const LEADLINE_NICHE_KEYWORDS = [
+  'dent', 'klinik', 'clinic', 'salon', 'frisör', 'frisor', 'barber',
+  'advokat', 'law', 'juridik', 'lawyer', 'attorney',
+  'plumb', 'vvs', 'rörmokare', 'rormokare',
+  'electric', 'elektriker',
+  'mäklare', 'maklare', 'real_estate', 'realtor',
+  'doctor', 'läkare', 'lakare', 'vård', 'vard', 'medical', 'physio',
+  'vet', 'veterinär', 'veterinar',
+  'spa', 'massage', 'beauty', 'skön', 'skon', 'nail',
+  'auto', 'workshop', 'verkstad', 'mekaniker',
+  'hotel', 'hotell', 'restaurant', 'restaurang',
+];
+
+const isLeadlineNiche = (l: any) => {
+  const hay = `${l.category || ''} ${l.niche_label || ''} ${l.detected_niche || ''} ${(l.types || []).join(' ')}`.toLowerCase();
+  return LEADLINE_NICHE_KEYWORDS.some(k => hay.includes(k));
+};
+
+interface NextLeadPageProps {
+  mode?: 'nomia' | 'leadline';
+}
+
+export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {}) {
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<'preview' | 'outcome' | 'status' | 'followup'>('preview');
