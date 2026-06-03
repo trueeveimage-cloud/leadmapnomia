@@ -144,6 +144,11 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Mail className="h-4 w-4" /> Gmail outreach — {recipients.length} recipient{recipients.length === 1 ? '' : 's'}</DialogTitle>
+          {fromAddress && (
+            <div className="text-[11px] text-muted-foreground -mt-1">
+              Sending from: <span className="font-mono text-foreground">{fromAddress}</span>
+            </div>
+          )}
         </DialogHeader>
 
         <div className="space-y-3 overflow-y-auto pr-1">
