@@ -202,6 +202,8 @@ export async function addLead(lead: Partial<Omit<Lead, 'id' | 'created_at' | 'up
   const insertData: any = { ...lead };
   const country = detectLeadCountry(lead.address, lead.phone);
   insertData.needs_call = shouldNeedCall(lead.phone || null, country);
+  // Stamp the active product side (Nomia / Leadmap) unless caller already set one
+  if (!insertData.product) insertData.product = getActiveProduct();
 
   const { data, error } = await supabase.from('leads').insert(insertData).select().single();
   if (error) return { error: error.message };
