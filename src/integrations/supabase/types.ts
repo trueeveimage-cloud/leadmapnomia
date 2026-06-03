@@ -165,6 +165,7 @@ export type Database = {
           daily_cap: number
           id: string
           name: string
+          product: string
           status: string
           template_text: string
           updated_at: string
@@ -179,6 +180,7 @@ export type Database = {
           daily_cap?: number
           id?: string
           name: string
+          product?: string
           status?: string
           template_text?: string
           updated_at?: string
@@ -193,6 +195,7 @@ export type Database = {
           daily_cap?: number
           id?: string
           name?: string
+          product?: string
           status?: string
           template_text?: string
           updated_at?: string
@@ -491,6 +494,7 @@ export type Database = {
           pinned: boolean
           place_id: string | null
           potential_score: number | null
+          product: string
           rating: number | null
           read_at: string | null
           reviews_count: number | null
@@ -547,6 +551,7 @@ export type Database = {
           pinned?: boolean
           place_id?: string | null
           potential_score?: number | null
+          product?: string
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
@@ -603,6 +608,7 @@ export type Database = {
           pinned?: boolean
           place_id?: string | null
           potential_score?: number | null
+          product?: string
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
@@ -637,6 +643,7 @@ export type Database = {
           id: string
           lead_id: string
           num_segments: number | null
+          product: string
           provider: string
           provider_message_sid: string | null
           status: string
@@ -654,6 +661,7 @@ export type Database = {
           id?: string
           lead_id: string
           num_segments?: number | null
+          product?: string
           provider?: string
           provider_message_sid?: string | null
           status?: string
@@ -671,6 +679,7 @@ export type Database = {
           id?: string
           lead_id?: string
           num_segments?: number | null
+          product?: string
           provider?: string
           provider_message_sid?: string | null
           status?: string
