@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CRMProvider } from "@/context/CRMContext";
+import { ProductProvider } from "@/context/ProductContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { lazy, Suspense, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -158,6 +159,7 @@ const App = () => (
             <Route path="/*" element={
               <AuthGate>
                 <CRMProvider>
+                  <ProductProvider>
                   <GlobalHotkeys />
                   <ScoringWeightsBootstrap />
                   <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>}>
@@ -207,6 +209,7 @@ const App = () => (
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
+                  </ProductProvider>
                 </CRMProvider>
               </AuthGate>
             } />

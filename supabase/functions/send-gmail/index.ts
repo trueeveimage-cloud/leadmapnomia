@@ -98,8 +98,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { data: fromSetting } = await supabase.from('settings').select('value').eq('key', 'gmail_from_address').maybeSingle();
-    const fromAddress = (fromSetting?.value || '').trim() || undefined;
+    // Always use the connected Gmail account as the From address.
+    // We resolve it via the Gmail profile endpoint so we never fall back to a stale
+    // "gmail_from_address" setting (which is what caused emails to go out as the wrong sender).
+    let fromAddress: string | undefined;
+    try {
+      const profResp = await fetch(`${GATEWAY_URL}/users/me/profile`, {
+        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': GMAIL_KEY },
+      });
+      const prof = await profResp.json().catch(() => ({}));
+      if (profResp.ok && prof?.emailAddress) fromAddress = String(prof.emailAddress);
+    } catch { /* fall through — Gmail will use connected account by default */ }
     const raw = buildRaw(to, subject, body, fromAddress);
     const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
       method: 'POST',

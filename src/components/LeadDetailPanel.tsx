@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import LeadEmailHistory from '@/components/LeadEmailHistory';
+import LeadTimeline from '@/components/LeadTimeline';
+import { Crown, Map as MapIcon } from 'lucide-react';
 
 interface Attachment {
   id: string;
@@ -219,6 +221,44 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
           <Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Label" className="h-7 text-xs bg-muted w-24" onKeyDown={e => e.key === 'Enter' && addLink()} />
           <Button size="sm" variant="outline" className="h-7 px-2" onClick={addLink}><Plus size={12} /></Button>
         </div>
+      </div>
+
+      {/* Product side (Nomia / Leadmap) */}
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Product</div>
+        <div className="flex gap-1.5">
+          {(['nomia','leadmap'] as const).map(p => {
+            const current = ((lead as any).product || 'nomia') === p;
+            const Icon = p === 'nomia' ? Crown : MapIcon;
+            return (
+              <button
+                key={p}
+                onClick={async () => {
+                  if (current) return;
+                  const updated = await updateLead(lead.id, { product: p } as any);
+                  onUpdate(updated);
+                  toast.success(`Moved to ${p === 'nomia' ? 'Nomia' : 'Leadmap'}`);
+                }}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium rounded border transition-all',
+                  current
+                    ? p === 'nomia'
+                      ? 'bg-[hsl(45,90%,55%)]/15 text-[hsl(45,90%,65%)] border-[hsl(45,90%,55%)]/40'
+                      : 'bg-white/10 text-white border-white/30'
+                    : 'bg-muted text-muted-foreground border-transparent hover:text-foreground'
+                )}
+              >
+                <Icon size={12} /> {p === 'nomia' ? 'Nomia' : 'Leadmap'}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Combined timeline */}
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Timeline</div>
+        <LeadTimeline leadId={lead.id} />
       </div>
 
       {/* Email outreach history */}

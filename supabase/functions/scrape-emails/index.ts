@@ -3,44 +3,88 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const PRIORITY_PREFIXES = ['info','kontakt','hello','hej','boka','booking','reception','admin','sales','support','contact','office','mail'];
-const CANDIDATE_PATHS = ['/kontakt','/contact','/about','/om-oss'];
+// Acceptable business prefixes — only emails using one of these are kept as "public business".
+const BUSINESS_PREFIXES = new Set([
+  'info','kontakt','contact','hello','hej','sales','booking','boka','admin','support',
+  'reception','office','mail','hq','team','order','orders','customerservice','kundtjanst',
+  'kundservice','sale','salg','salgs','sale','firma','post','enquiries','enquiry','hi'
+]);
+// Free-mail domains accepted when found publicly on the site.
+const FREE_MAIL_DOMAINS = /(gmail\.com|hotmail\.com|outlook\.com|live\.com|yahoo\.com|icloud\.com)$/i;
 
-function extractEmails(text: string): string[] {
-  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
-  const matches = text.match(emailRegex) || [];
+// Pages we'll try, in priority order. Homepage is fetched separately.
+const CANDIDATE_PATHS = [
+  '/kontakt','/kontakta-oss','/contact','/contact-us','/contacto',
+  '/about','/about-us','/om-oss','/om',
+  '/team','/personal','/staff','/medarbetare',
+  '/boka','/booking','/book','/reservation',
+  '/privacy','/integritet','/privacy-policy','/dataskydd',
+  '/terms','/villkor','/conditions',
+  '/footer','/sitemap',
+];
+
+function extractFromText(text: string): string[] {
+  const re = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  return text.match(re) || [];
+}
+function extractMailto(html: string): string[] {
+  const re = /mailto:([^"'?\s>&]+)/gi;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) out.push(decodeURIComponent(m[1]));
+  return out;
+}
+
+function cleanEmails(raw: string[]): string[] {
   const blacklist = ['.png','.jpg','.jpeg','.gif','.svg','.webp','.css','.js','.woff','.ttf','.eot'];
+  const noise = ['noreply','no-reply','donotreply','example.com','sentry.io','wixpress.com','wordpress.com','jsdelivr','googleapis','cloudflare','schema.org'];
   const seen = new Set<string>();
-  return matches.filter((email) => {
-    const lower = email.toLowerCase();
-    if (seen.has(lower)) return false;
-    if (blacklist.some((ext) => lower.endsWith(ext))) return false;
-    if (lower.includes('noreply') || lower.includes('no-reply') || lower.includes('example.com')) return false;
-    if (lower.includes('sentry.io') || lower.includes('wixpress.com')) return false;
+  const out: string[] = [];
+  for (const e of raw) {
+    const lower = e.toLowerCase().replace(/^mailto:/, '').replace(/[<>"',;]+/g, '').trim();
+    if (!lower || seen.has(lower)) continue;
+    if (blacklist.some(ext => lower.endsWith(ext))) continue;
+    if (noise.some(n => lower.includes(n))) continue;
+    if (!/^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/.test(lower)) continue;
     seen.add(lower);
-    return true;
-  });
+    out.push(lower);
+  }
+  return out;
+}
+
+/** Keep only PUBLIC business-style emails. No guessing/permutations — input emails are
+ * already verified as appearing on the public site. We filter to: business-prefix matches
+ * OR free-mail addresses (both indicate a real, publicly listed inbox). */
+function isPublicBusinessEmail(email: string, domain: string): boolean {
+  const [prefix] = email.split('@');
+  const isFreeMail = FREE_MAIL_DOMAINS.test(email);
+  const isSameDomain = !!domain && email.endsWith('@' + domain);
+  if (isFreeMail) return true;
+  if (BUSINESS_PREFIXES.has(prefix)) return true;
+  // Same-domain catch-all (e.g. firstname@site.se) is acceptable if it's clearly the company domain
+  if (isSameDomain) return true;
+  return false;
 }
 
 function rank(email: string, domain: string): number {
   const lower = email.toLowerCase();
   const prefix = lower.split('@')[0];
   let score = 0;
-  if (domain && lower.endsWith('@' + domain)) score += 50;
-  if (PRIORITY_PREFIXES.includes(prefix)) score += 30;
-  if (/gmail\.com$|hotmail\.com$|outlook\.com$|live\.com$/.test(lower)) score += 5;
+  if (domain && lower.endsWith('@' + domain)) score += 60;
+  if (BUSINESS_PREFIXES.has(prefix)) score += 35;
+  if (FREE_MAIL_DOMAINS.test(lower)) score += 5;
   if (/[0-9]{3,}/.test(prefix)) score -= 10;
   return score;
 }
 
-async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> {
+async function fetchPage(url: string, timeoutMs = 3500): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const resp = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; LeadBot/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; LeadBot/1.1; +https://lovable.app)',
         'Accept': 'text/html,application/xhtml+xml',
       },
       redirect: 'follow',
@@ -52,7 +96,7 @@ async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> 
     const decoder = new TextDecoder();
     let html = '';
     let bytes = 0;
-    const MAX = 80_000;
+    const MAX = 160_000; // raised cap so deeper pages (privacy, team) are reachable
     while (bytes < MAX) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -67,14 +111,17 @@ async function fetchPage(url: string, timeoutMs = 3000): Promise<string | null> 
 }
 
 function detectSource(path: string, html: string, email: string): string {
-  if (/\/kontakt|\/contact/i.test(path)) return 'contact';
-  if (/\/om-oss|\/about/i.test(path)) return 'about';
-  if (/\/boka|\/booking/i.test(path)) return 'booking';
-  // Heuristic: if email appears near "footer" tag
+  if (/\/kontakt|\/contact|contacto/i.test(path)) return 'contact';
+  if (/\/om-oss|\/about|\/om/i.test(path)) return 'about';
+  if (/\/boka|\/booking|\/book/i.test(path)) return 'booking';
+  if (/\/team|\/personal|\/staff|medarbetare/i.test(path)) return 'team';
+  if (/\/privacy|integritet|dataskydd/i.test(path)) return 'privacy';
+  if (/\/terms|villkor/i.test(path)) return 'terms';
+  if (/\/footer|sitemap/i.test(path)) return 'footer';
   const idx = html.toLowerCase().indexOf(email.toLowerCase());
   if (idx >= 0) {
-    const window = html.slice(Math.max(0, idx - 800), idx + 200).toLowerCase();
-    if (window.includes('<footer') || window.includes('footer')) return 'footer';
+    const w = html.slice(Math.max(0, idx - 800), idx + 200).toLowerCase();
+    if (w.includes('<footer') || w.includes('footer')) return 'footer';
   }
   return 'homepage';
 }
@@ -90,7 +137,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const batch = urls.slice(0, 2);
+    const batch = urls.slice(0, 3);
     const results: { leadId: string; emails: string[]; email?: string; source?: string; error?: string }[] = [];
 
     for (const item of batch) {
@@ -100,35 +147,37 @@ Deno.serve(async (req) => {
         const u = new URL(url);
         const domain = u.hostname.replace(/^www\./, '');
 
-        // Fetch homepage
+        const allFound: { email: string; source: string }[] = [];
+
+        // 1) homepage — fetch first, parse mailto + visible text
         const homepage = await fetchPage(u.origin + u.pathname);
-        let allFound: { email: string; source: string }[] = [];
         if (homepage) {
-          for (const e of extractEmails(homepage)) {
-            allFound.push({ email: e, source: detectSource('/', homepage, e) });
-          }
-        }
-
-        // Only try extra paths if no email found on homepage
-        if (allFound.length === 0) {
-          for (const p of CANDIDATE_PATHS) {
-            const html = await fetchPage(u.origin + p, 2500);
-            if (!html) continue;
-            for (const e of extractEmails(html)) {
-              if (!allFound.some((f) => f.email.toLowerCase() === e.toLowerCase())) {
-                allFound.push({ email: e, source: detectSource(p, html, e) });
-              }
+          const raws = [...extractMailto(homepage), ...extractFromText(homepage)];
+          for (const e of cleanEmails(raws)) {
+            if (isPublicBusinessEmail(e, domain) && !allFound.some(f => f.email === e)) {
+              allFound.push({ email: e, source: detectSource('/', homepage, e) });
             }
-            if (allFound.length > 0) break;
           }
         }
 
-        // Rank and pick best
+        // 2) Walk candidate pages until we've gathered a few, or exhausted list
+        for (const p of CANDIDATE_PATHS) {
+          if (allFound.length >= 5) break;
+          const html = await fetchPage(u.origin + p, 2800);
+          if (!html) continue;
+          const raws = [...extractMailto(html), ...extractFromText(html)];
+          for (const e of cleanEmails(raws)) {
+            if (isPublicBusinessEmail(e, domain) && !allFound.some(f => f.email === e)) {
+              allFound.push({ email: e, source: detectSource(p, html, e) });
+            }
+          }
+        }
+
         allFound.sort((a, b) => rank(b.email, domain) - rank(a.email, domain));
         const best = allFound[0];
         results.push({
           leadId: item.leadId,
-          emails: allFound.map((f) => f.email),
+          emails: allFound.map(f => f.email),
           email: best?.email,
           source: best?.source ?? (allFound.length ? 'homepage' : 'none'),
         });

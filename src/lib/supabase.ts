@@ -1,6 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 import { detectLeadCountry, shouldNeedCall } from "@/lib/countryRouting";
 
+export type Product = 'nomia' | 'leadmap';
+
+/** Read currently active product from localStorage (set by ProductContext). Defaults to nomia. */
+export function getActiveProduct(): Product {
+  if (typeof window === 'undefined') return 'nomia';
+  return ((localStorage.getItem('crm.activeProduct') as Product) || 'nomia');
+}
+
 const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
 
 export function isMobileNumber(phone: string): boolean {
@@ -105,10 +113,12 @@ export function determineSection(lead: Partial<Lead>): LeadSection {
   return 'missing';
 }
 
-export async function fetchLeads(filter?: { section?: LeadSection; status?: LeadStatus }) {
+export async function fetchLeads(filter?: { section?: LeadSection; status?: LeadStatus; product?: Product | 'all' }) {
+  const product = filter?.product ?? getActiveProduct();
   let query = supabase.from('leads').select('*').order('created_at', { ascending: false });
   if (filter?.section !== undefined) query = query.eq('section', filter.section);
   if (filter?.status) query = query.eq('status', filter.status);
+  if (product !== 'all') query = query.eq('product', product);
 
   // Fetch all rows (no 1000 limit) via pagination
   const allData: any[] = [];
@@ -126,11 +136,16 @@ export async function fetchLeads(filter?: { section?: LeadSection; status?: Lead
 }
 
 export async function fetchLeadCounts() {
+  const product = getActiveProduct();
   const allData: any[] = [];
   const PAGE_SIZE = 1000;
   let from = 0;
   while (true) {
-    const { data, error } = await supabase.from('leads').select('section, status, next_action_at, outreach_opt_out, email').range(from, from + PAGE_SIZE - 1);
+    const { data, error } = await supabase
+      .from('leads')
+      .select('section, status, next_action_at, outreach_opt_out, email')
+      .eq('product', product)
+      .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
     allData.push(...data);
@@ -187,6 +202,8 @@ export async function addLead(lead: Partial<Omit<Lead, 'id' | 'created_at' | 'up
   const insertData: any = { ...lead };
   const country = detectLeadCountry(lead.address, lead.phone);
   insertData.needs_call = shouldNeedCall(lead.phone || null, country);
+  // Stamp the active product side (Nomia / Leadmap) unless caller already set one
+  if (!insertData.product) insertData.product = getActiveProduct();
 
   const { data, error } = await supabase.from('leads').insert(insertData).select().single();
   if (error) return { error: error.message };
