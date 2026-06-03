@@ -11,6 +11,7 @@ import {
   Send, Inbox as InboxIcon, Crown, Clock, Ban, Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ProductSwitcher from '@/components/ProductSwitcher';
 
 interface NavItem {
   label: string;
@@ -190,6 +191,9 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
           </button>
         )}
       </div>
+
+      {/* Product switcher: Nomia (gold) / Leadmap (white) */}
+      <ProductSwitcher />
 
       {/* Quick actions: Nomia + Leadline split */}
       <div className="px-3 pt-3 pb-2 space-y-2">
