@@ -35,24 +35,49 @@ function personalize(template: string, lead: Lead): string {
 
 export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }: Props) {
   const recipients = useMemo(() => leads.filter((l) => l.email), [leads]);
-  const [subject, setSubject] = useState<string>(() => recipients[0] ? defaultSubject(recipients[0]) : 'En snabb fråga');
-  const [body, setBody] = useState<string>(() => recipients[0] ? generateOutreachMessage(recipients[0]) : '');
+  const draftKey = recipients[0] ? `crm.emailDraft.${recipients[0].id}` : 'crm.emailDraft.broadcast';
+  const readDraft = (): { subject?: string; body?: string } => {
+    try { return JSON.parse(localStorage.getItem(draftKey) || '{}'); } catch { return {}; }
+  };
+  const [subject, setSubject] = useState<string>(() => readDraft().subject ?? (recipients[0] ? defaultSubject(recipients[0]) : 'En snabb fråga'));
+  const [body, setBody] = useState<string>(() => readDraft().body ?? (recipients[0] ? generateOutreachMessage(recipients[0]) : ''));
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => Object.fromEntries(recipients.map((l) => [l.id, true])));
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [lastSent, setLastSent] = useState<Record<string, { snippet: string; created_at: string } | null>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
+  const [fromAddress, setFromAddress] = useState<string>('');
   const abortRef = React.useRef(false);
 
+  // Show which Gmail account will actually send
+  React.useEffect(() => {
+    if (!open) return;
+    supabase.functions.invoke('gmail-profile', { body: {} }).then(({ data }: any) => {
+      if (data?.connected && data?.emailAddress) setFromAddress(data.emailAddress);
+    }).catch(() => {});
+  }, [open]);
+
+  // Restore/refresh draft when target lead changes
   React.useEffect(() => {
     if (open && recipients[0]) {
-      setSubject(defaultSubject(recipients[0]));
-      setBody(generateOutreachMessage(recipients[0]));
+      const d = readDraft();
+      setSubject(d.subject ?? defaultSubject(recipients[0]));
+      setBody(d.body ?? generateOutreachMessage(recipients[0]));
       setEnabled(Object.fromEntries(recipients.map((l) => [l.id, true])));
       setProgress({ done: 0, sent: 0, skipped: 0, failed: 0 });
       abortRef.current = false;
     }
-  }, [open, recipients.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, recipients.length, draftKey]);
+
+  // Auto-save draft on edit (per lead) so switching leads never loses text
+  React.useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      try { localStorage.setItem(draftKey, JSON.stringify({ subject, body })); } catch {}
+    }, 400);
+    return () => clearTimeout(t);
+  }, [subject, body, draftKey, open]);
 
   // Fetch most-recent sent email per recipient (one query, all leads)
   React.useEffect(() => {
