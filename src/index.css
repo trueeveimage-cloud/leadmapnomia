@@ -68,6 +68,30 @@
     --row-hover: 222 22% 12%;
     --shadow-glow: 0 0 20px hsl(213 94% 58% / 0.15);
   }
+
+  /* Nomia: black + gold accent */
+  html[data-product="nomia"] {
+    --primary: 45 90% 55%;
+    --primary-foreground: 222 28% 7%;
+    --accent: 45 90% 55%;
+    --accent-foreground: 222 28% 7%;
+    --ring: 45 90% 55%;
+    --sidebar-primary: 45 90% 55%;
+    --sidebar-ring: 45 90% 55%;
+    --shadow-glow: 0 0 20px hsl(45 90% 55% / 0.18);
+  }
+
+  /* Leadmap: black + white accent */
+  html[data-product="leadmap"] {
+    --primary: 0 0% 96%;
+    --primary-foreground: 222 28% 7%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 222 28% 7%;
+    --ring: 0 0% 96%;
+    --sidebar-primary: 0 0% 96%;
+    --sidebar-ring: 0 0% 96%;
+    --shadow-glow: 0 0 20px hsl(0 0% 96% / 0.12);
+  }
 }
 
 @layer base {
