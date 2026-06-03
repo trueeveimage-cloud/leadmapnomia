@@ -33,7 +33,10 @@ const SORT_OPTIONS = [
   { value: 'lowest_potential', label: 'Lowest potential' },
   { value: 'rating', label: 'Rating' },
   { value: 'reviews', label: 'Reviews' },
-  { value: 'followup', label: 'Follow-up' },
+  { value: 'followup', label: 'Needs follow-up' },
+  { value: 'not_contacted', label: 'Not contacted' },
+  { value: 'has_email', label: 'Has email' },
+  { value: 'has_phone', label: 'Has phone' },
 ];
 
 interface LeadListProps {
@@ -111,12 +114,15 @@ export default function LeadList({ section, allSections, status, optOut, showTri
       case 'rating': return [...result].sort((a, b) => (b.rating || 0) - (a.rating || 0));
       case 'reviews': return [...result].sort((a, b) => (b.reviews_count || 0) - (a.reviews_count || 0));
       case 'highest_potential': return [...result].sort((a, b) => (b.potential_score ?? 0) - (a.potential_score ?? 0));
-      case 'lowest_potential': return [...result].sort((a, b) => (a.potential_score ?? 0) - (b.potential_score ?? 0));
-      case 'followup': return [...result].sort((a, b) => {
+      case 'lowest_potential': return [...result].sort((a, b) => (a.potential_score ?? 999) - (b.potential_score ?? 999));
+      case 'followup': return [...result].filter(l => !!l.next_action_at || l.status === 'callback').sort((a, b) => {
         if (!a.next_action_at) return 1;
         if (!b.next_action_at) return -1;
         return new Date(a.next_action_at).getTime() - new Date(b.next_action_at).getTime();
       });
+      case 'not_contacted': return [...result].filter(l => l.status === 'not_contacted').sort((a, b) => (b.potential_score ?? 0) - (a.potential_score ?? 0));
+      case 'has_email': return [...result].filter(l => !!(l.email && l.email.trim())).sort((a, b) => (b.potential_score ?? 0) - (a.potential_score ?? 0));
+      case 'has_phone': return [...result].filter(l => !!(l.phone && l.phone.trim())).sort((a, b) => (b.potential_score ?? 0) - (a.potential_score ?? 0));
       default: return [...result].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
   }, [leads, search, sort, filterStatus, filterCategory]);
