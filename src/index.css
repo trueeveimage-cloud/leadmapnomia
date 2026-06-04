@@ -14,7 +14,7 @@
     --popover: 222 24% 10%;
     --popover-foreground: 210 20% 92%;
 
-    --primary: 213 94% 58%;
+    --primary: 0 0% 96%;
     --primary-foreground: 222 28% 7%;
 
     --secondary: 222 22% 15%;
@@ -23,7 +23,7 @@
     --muted: 222 22% 13%;
     --muted-foreground: 215 15% 50%;
 
-    --accent: 213 94% 58%;
+    --accent: 0 0% 96%;
     --accent-foreground: 222 28% 7%;
 
     --destructive: 0 72% 55%;
@@ -38,12 +38,12 @@
     /* Sidebar */
     --sidebar-background: 222 30% 5%;
     --sidebar-foreground: 215 15% 60%;
-    --sidebar-primary: 213 94% 58%;
+    --sidebar-primary: 0 0% 96%;
     --sidebar-primary-foreground: 222 28% 7%;
     --sidebar-accent: 222 22% 13%;
     --sidebar-accent-foreground: 210 20% 85%;
     --sidebar-border: 222 22% 12%;
-    --sidebar-ring: 213 94% 58%;
+    --sidebar-ring: 0 0% 96%;
 
     /* Custom CRM tokens */
     --green: 142 69% 45%;

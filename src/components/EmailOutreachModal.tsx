@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, X, Mail, History, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Loader2, Send, X, Mail, History, ChevronDown, ChevronRight, ExternalLink, Save, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateOutreachMessage, detectNiche } from '@/lib/leadScoring';
@@ -47,7 +47,26 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const [fromAddress, setFromAddress] = useState<string>('');
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const abortRef = React.useRef(false);
+
+  const saveDraft = React.useCallback(() => {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ subject, body }));
+      setSavedAt(Date.now());
+      toast.success('Draft saved');
+    } catch { toast.error('Could not save draft'); }
+  }, [draftKey, subject, body]);
+
+  const clearDraft = React.useCallback(() => {
+    try { localStorage.removeItem(draftKey); } catch {}
+    if (recipients[0]) {
+      setSubject(defaultSubject(recipients[0]));
+      setBody(generateOutreachMessage(recipients[0]));
+    }
+    setSavedAt(null);
+    toast.success('Draft cleared');
+  }, [draftKey, recipients]);
 
   // Show which Gmail account will actually send
   React.useEffect(() => {
@@ -74,7 +93,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   React.useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(draftKey, JSON.stringify({ subject, body })); } catch {}
+      try { localStorage.setItem(draftKey, JSON.stringify({ subject, body })); setSavedAt(Date.now()); } catch {}
     }, 400);
     return () => clearTimeout(t);
   }, [subject, body, draftKey, open]);
@@ -224,6 +243,15 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
             </Button>
           ) : (
             <>
+              {savedAt && (
+                <span className="text-[11px] text-muted-foreground mr-auto flex items-center gap-1">
+                  <Check size={11} className="text-foreground/70" /> Draft saved · {new Date(savedAt).toLocaleTimeString()}
+                </span>
+              )}
+              <Button variant="ghost" onClick={clearDraft} title="Reset to template">Clear</Button>
+              <Button variant="outline" onClick={saveDraft}>
+                <Save className="h-4 w-4 mr-1.5" /> Save draft
+              </Button>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button onClick={send} disabled={recipients.length === 0}>
                 <Send className="h-4 w-4 mr-1.5" /> Send all
