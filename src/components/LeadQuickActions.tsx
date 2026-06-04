@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send } from 'lucide-react';
+import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
 import EmailOutreachModal from '@/components/EmailOutreachModal';
+import { getOutreachBlockReason } from '@/lib/outreachLock';
 
 interface Props {
   lead: Lead;
@@ -20,6 +21,9 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const [busy, setBusy] = useState(false);
   const [findingEmail, setFindingEmail] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+
+  const unlockWarning = (reason: string) =>
+    window.confirm(`${reason}\n\nUnlocking can contact the same business twice. Continue anyway?`);
 
   const findEmail = async () => {
     if (!lead.website) { toast.error('No website to scrape'); return; }
@@ -52,6 +56,25 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       toast.success('Marked as contacted');
       onUpdated?.();
     } finally { setBusy(false); }
+  };
+
+  const startAiCall = async () => {
+    const blockReason = getOutreachBlockReason(lead, 'ai_call');
+    if (blockReason && !unlockWarning(blockReason)) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('retell-start-call', {
+        body: { leadId: lead.id, manualUnlock: !!blockReason },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('AI call started');
+      onUpdated?.();
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not start AI call');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const setFollowUp = async () => {
@@ -108,7 +131,15 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
           <Button size="sm" variant="ghost" onClick={() => copy(lead.email!, 'Email')}>
             <Mail className="h-3.5 w-3.5 mr-1" /> Email
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setEmailModalOpen(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const blockReason = getOutreachBlockReason(lead, 'email');
+              if (blockReason && !unlockWarning(blockReason)) return;
+              setEmailModalOpen(true);
+            }}
+          >
             <Send className="h-3.5 w-3.5 mr-1" /> Send email
           </Button>
         </>
@@ -121,6 +152,11 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       <Button size="sm" variant="ghost" onClick={() => copy(outreach, 'Outreach message')}>
         <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
       </Button>
+      {lead.phone && (
+        <Button size="sm" variant="outline" onClick={startAiCall} disabled={busy}>
+          <Bot className="h-3.5 w-3.5 mr-1" /> Call with AI
+        </Button>
+      )}
       <Button size="sm" variant="secondary" onClick={markContacted} disabled={busy}>
         <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Contacted
       </Button>

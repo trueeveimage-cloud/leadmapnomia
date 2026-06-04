@@ -1,6 +1,6 @@
-/** Multi-country city dataset: Sweden, Norway, Denmark */
+/** Multi-country city dataset for the active Leadmap markets. */
 
-export type Country = 'SE' | 'NO' | 'DK';
+export type Country = 'SE' | 'NO' | 'DK' | 'UK' | 'ES';
 export type AreaType = 'METRO' | 'CITY' | 'TOWN';
 export type Density = 'HIGH' | 'MED' | 'LOW';
 
@@ -18,12 +18,16 @@ export const COUNTRY_LABELS: Record<Country, string> = {
   SE: 'Sweden',
   NO: 'Norway',
   DK: 'Denmark',
+  UK: 'United Kingdom',
+  ES: 'Spain',
 };
 
 export const COUNTRY_CENTER: Record<Country, { lat: number; lng: number; zoom: number }> = {
   SE: { lat: 62.0, lng: 15.5, zoom: 5 },
   NO: { lat: 64.5, lng: 12.0, zoom: 5 },
   DK: { lat: 56.0, lng: 10.0, zoom: 7 },
+  UK: { lat: 54.5, lng: -2.5, zoom: 6 },
+  ES: { lat: 40.2, lng: -3.7, zoom: 6 },
 };
 
 export const COUNTRY_DEFAULT_KEYWORDS: Record<Country, string> = {
@@ -108,6 +112,36 @@ elektriker
 vvs
 rengøring
 blomsterhandel`,
+  UK: `plumber
+electrician
+roofer
+builder
+cleaning company
+hair salon
+barber
+dental clinic
+beauty salon
+car repair
+accountant
+estate agent
+restaurant
+cafe
+law firm`,
+  ES: `fontanero
+electricista
+reformas
+limpieza
+peluqueria
+barberia
+clinica dental
+estetica
+taller mecanico
+inmobiliaria
+abogado
+restaurante
+cafeteria
+spa
+veterinario`,
 };
 
 // ─── SWEDEN ─────────────────────────────────────────
@@ -192,6 +226,32 @@ const SE_CITIES: CityProfile[] = [
   { name: 'Nacka', country: 'SE', lat: 59.3108, lng: 18.1636, population: 103000, type: 'TOWN', density: 'LOW' },
   { name: 'Haninge', country: 'SE', lat: 59.1740, lng: 18.1509, population: 92000, type: 'TOWN', density: 'LOW' },
   { name: 'Huddinge', country: 'SE', lat: 59.2372, lng: 17.9818, population: 112000, type: 'TOWN', density: 'LOW' },
+];
+
+const UK_CITIES: CityProfile[] = [
+  { name: 'London', country: 'UK', lat: 51.5072, lng: -0.1276, population: 8980000, type: 'METRO', density: 'HIGH' },
+  { name: 'Manchester', country: 'UK', lat: 53.4808, lng: -2.2426, population: 553000, type: 'METRO', density: 'HIGH' },
+  { name: 'Birmingham', country: 'UK', lat: 52.4862, lng: -1.8904, population: 1140000, type: 'METRO', density: 'HIGH' },
+  { name: 'Leeds', country: 'UK', lat: 53.8008, lng: -1.5491, population: 812000, type: 'CITY', density: 'MED' },
+  { name: 'Liverpool', country: 'UK', lat: 53.4084, lng: -2.9916, population: 500000, type: 'CITY', density: 'MED' },
+  { name: 'Bristol', country: 'UK', lat: 51.4545, lng: -2.5879, population: 472000, type: 'CITY', density: 'MED' },
+  { name: 'Edinburgh', country: 'UK', lat: 55.9533, lng: -3.1883, population: 526000, type: 'CITY', density: 'MED' },
+  { name: 'Glasgow', country: 'UK', lat: 55.8642, lng: -4.2518, population: 635000, type: 'CITY', density: 'MED' },
+  { name: 'Cardiff', country: 'UK', lat: 51.4816, lng: -3.1791, population: 362000, type: 'CITY', density: 'MED' },
+  { name: 'Brighton', country: 'UK', lat: 50.8225, lng: -0.1372, population: 290000, type: 'CITY', density: 'MED' },
+];
+
+const ES_CITIES: CityProfile[] = [
+  { name: 'Madrid', country: 'ES', lat: 40.4168, lng: -3.7038, population: 3223000, type: 'METRO', density: 'HIGH' },
+  { name: 'Barcelona', country: 'ES', lat: 41.3874, lng: 2.1686, population: 1620000, type: 'METRO', density: 'HIGH' },
+  { name: 'Valencia', country: 'ES', lat: 39.4699, lng: -0.3763, population: 792000, type: 'CITY', density: 'MED' },
+  { name: 'Sevilla', country: 'ES', lat: 37.3891, lng: -5.9845, population: 681000, type: 'CITY', density: 'MED' },
+  { name: 'Malaga', country: 'ES', lat: 36.7213, lng: -4.4214, population: 578000, type: 'CITY', density: 'MED' },
+  { name: 'Marbella', country: 'ES', lat: 36.5101, lng: -4.8824, population: 147000, type: 'CITY', density: 'MED' },
+  { name: 'Alicante', country: 'ES', lat: 38.3452, lng: -0.4810, population: 337000, type: 'CITY', density: 'MED' },
+  { name: 'Palma', country: 'ES', lat: 39.5696, lng: 2.6502, population: 416000, type: 'CITY', density: 'MED' },
+  { name: 'Zaragoza', country: 'ES', lat: 41.6488, lng: -0.8891, population: 675000, type: 'CITY', density: 'MED' },
+  { name: 'Murcia', country: 'ES', lat: 37.9922, lng: -1.1307, population: 460000, type: 'CITY', density: 'MED' },
 ];
 
 // ─── NORWAY ─────────────────────────────────────────
@@ -281,7 +341,9 @@ const DK_CITIES: CityProfile[] = [
   { name: 'Grenaa', country: 'DK', lat: 56.4156, lng: 10.8794, population: 15000, type: 'TOWN', density: 'LOW' },
 ];
 
-export const ALL_CITIES: CityProfile[] = [...SE_CITIES, ...NO_CITIES, ...DK_CITIES];
+export const ACTIVE_COUNTRIES: Country[] = ['SE', 'UK', 'ES'];
+
+export const ALL_CITIES: CityProfile[] = [...SE_CITIES, ...NO_CITIES, ...DK_CITIES, ...UK_CITIES, ...ES_CITIES];
 
 export function getCitiesByCountry(country: Country): CityProfile[] {
   return ALL_CITIES.filter(c => c.country === country);

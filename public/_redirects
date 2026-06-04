@@ -1,0 +1,2 @@
+/api/retell/start-call https://olfucdwmegdnczwpgaeg.supabase.co/functions/v1/retell-start-call 200
+/api/webhooks/retell https://olfucdwmegdnczwpgaeg.supabase.co/functions/v1/retell-webhook 200

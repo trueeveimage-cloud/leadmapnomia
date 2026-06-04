@@ -31,7 +31,7 @@
 
     --border: 222 22% 16%;
     --input: 222 22% 15%;
-    --ring: 213 94% 58%;
+    --ring: 0 0% 88%;
 
     --radius: 0.4rem;
 
@@ -46,39 +46,39 @@
     --sidebar-ring: 0 0% 96%;
 
     /* Custom CRM tokens */
-    --green: 142 69% 45%;
+    --green: 0 0% 88%;
     --green-foreground: 0 0% 100%;
-    --amber: 38 95% 55%;
+    --amber: 0 0% 64%;
     --amber-foreground: 0 0% 0%;
     --red: 0 72% 55%;
     --red-foreground: 0 0% 100%;
-    --purple: 262 83% 65%;
+    --purple: 0 0% 76%;
     --purple-foreground: 0 0% 100%;
-    --cyan: 192 91% 52%;
+    --cyan: 0 0% 72%;
     --cyan-foreground: 222 28% 7%;
 
-    --chip-phone: 142 69% 45%;
-    --chip-gmail: 0 72% 55%;
-    --chip-email: 213 94% 58%;
-    --chip-both: 262 83% 65%;
-    --chip-missing: 38 95% 55%;
+    --chip-phone: 0 0% 78%;
+    --chip-gmail: 0 0% 58%;
+    --chip-email: 0 0% 72%;
+    --chip-both: 0 0% 84%;
+    --chip-missing: 0 0% 54%;
     --chip-unsorted: 215 15% 50%;
 
     --surface-hover: 222 22% 13%;
     --row-hover: 222 22% 12%;
-    --shadow-glow: 0 0 20px hsl(213 94% 58% / 0.15);
+    --shadow-glow: 0 0 20px hsl(0 0% 96% / 0.10);
   }
 
-  /* Nomia: black + gold accent */
+  /* Nomia: black + warm white accent */
   html[data-product="nomia"] {
-    --primary: 45 90% 55%;
+    --primary: 0 0% 94%;
     --primary-foreground: 222 28% 7%;
-    --accent: 45 90% 55%;
+    --accent: 0 0% 94%;
     --accent-foreground: 222 28% 7%;
-    --ring: 45 90% 55%;
-    --sidebar-primary: 45 90% 55%;
-    --sidebar-ring: 45 90% 55%;
-    --shadow-glow: 0 0 20px hsl(45 90% 55% / 0.18);
+    --ring: 0 0% 94%;
+    --sidebar-primary: 0 0% 94%;
+    --sidebar-ring: 0 0% 94%;
+    --shadow-glow: 0 0 20px hsl(0 0% 94% / 0.10);
   }
 
   /* Leadmap: black + white accent */

@@ -6,6 +6,7 @@ import { detectLeadCountry } from '@/lib/countryRouting';
 import { useCRM } from '@/context/CRMContext';
 import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DemoFormModal, DemoBriefSummary } from '@/components/DemoFormModal';
@@ -88,6 +89,21 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
   
   // Demo modal
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const [filters, setFilters] = useState({
+    country: 'SE',
+    city: '',
+    niche: '',
+    minScore: '',
+    notContactedOnly: true,
+    phoneOnly: true,
+    businessType: '',
+    toolsUsed: '',
+    callState: 'not_called',
+    interestState: 'any',
+    followUpNeeded: false,
+    dailyTarget: '50',
+    mode: 'manual',
+  });
 
   // Load callers
   useEffect(() => {
@@ -113,8 +129,31 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
     setStep('preview');
     setNote('');
     try {
-      const isSwedish = (l: any) =>
-        detectLeadCountry(l.address, l.phone) === 'SE';
+      const countryMatches = (l: any) => {
+        const country = String(l.country || detectLeadCountry(l.address, l.phone) || '').toUpperCase();
+        const address = String(l.address || '').toLowerCase();
+        if (filters.country === 'UK') return country === 'UK' || address.includes('united kingdom') || address.includes(' uk');
+        if (filters.country === 'ES') return country === 'ES' || address.includes('spain') || address.includes('espa');
+        return country === 'SE';
+      };
+      const filterMatches = (l: any) => {
+        const hay = `${l.name || ''} ${l.category || ''} ${l.niche_label || ''} ${l.detected_niche || ''} ${l.business_type || ''}`.toLowerCase();
+        const tools = JSON.stringify(l.tools_used || {}).toLowerCase();
+        if (!countryMatches(l)) return false;
+        if (filters.city && !`${l.city || ''} ${l.address || ''}`.toLowerCase().includes(filters.city.toLowerCase())) return false;
+        if (filters.niche && !hay.includes(filters.niche.toLowerCase())) return false;
+        if (filters.businessType && !hay.includes(filters.businessType.toLowerCase())) return false;
+        if (filters.toolsUsed && !tools.includes(filters.toolsUsed.toLowerCase())) return false;
+        if (filters.minScore && (l.lead_score ?? l.potential_score ?? 0) < Number(filters.minScore)) return false;
+        if (filters.phoneOnly && !l.phone) return false;
+        if (filters.notContactedOnly && (l.last_contacted_at || l.outreach_state === 'called' || l.outreach_state === 'email_sent' || l.outreach_state === 'sms_sent')) return false;
+        if (filters.callState === 'called' && !l.call_outcome_last && l.outreach_state !== 'called') return false;
+        if (filters.callState === 'not_called' && (l.call_outcome_last || l.outreach_state === 'called')) return false;
+        if (filters.interestState === 'interested' && l.status !== 'interested') return false;
+        if (filters.interestState === 'not_interested' && l.status !== 'not_interested') return false;
+        if (filters.followUpNeeded && l.status !== 'callback' && l.outreach_state !== 'follow_up_needed') return false;
+        return true;
+      };
       const hasNoWebsite = (l: any) => {
         const w = (l.website || '').trim();
         return !w || w.toLowerCase() === 'none' || w.toLowerCase() === 'null';
@@ -133,7 +172,7 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
       };
 
       const baseFilter = (l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l) && notAlreadyCalled(l);
+        !skipIds.includes(l.id) && filterMatches(l) && modeFilter(l) && notAlreadyCalled(l);
 
       // Priority 1: Overdue callbacks (these intentionally bypass notAlreadyCalled — they're scheduled callbacks)
       let { data } = await supabase
@@ -144,7 +183,7 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
         .eq('outreach_opt_out', false)
         .order('next_action_at', { ascending: true }).limit(50);
       let candidates = (data || []).filter((l: any) =>
-        !skipIds.includes(l.id) && l.phone && isSwedish(l) && modeFilter(l)
+          !skipIds.includes(l.id) && filterMatches(l) && modeFilter(l)
       );
 
       if (candidates.length === 0) {
@@ -177,7 +216,7 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
     } finally {
       setLoading(false);
     }
-  }, [mode]);
+  }, [mode, filters]);
 
 
   useEffect(() => {
@@ -455,6 +494,64 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
           <Button variant="ghost" size="sm" onClick={() => { setShowCallerPicker(true); setActiveCaller(null); }} className="text-xs gap-1.5">
             <User size={12} /> Switch Caller
           </Button>
+        </div>
+
+        <div className="bg-card border border-border rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Call queue filters</div>
+              <div className="text-sm text-foreground font-medium">Manual or AI calling</div>
+            </div>
+            <div className="flex gap-2">
+              {(['manual', 'ai'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setFilters(f => ({ ...f, mode: m }))}
+                  className={cn('px-3 py-1.5 rounded-md border text-xs capitalize', filters.mode === m ? 'bg-foreground text-background border-foreground' : 'border-border text-muted-foreground')}
+                >
+                  {m} call mode
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <select value={filters.country} onChange={e => setFilters(f => ({ ...f, country: e.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="SE">Sweden</option>
+              <option value="UK">UK</option>
+              <option value="ES">Spain</option>
+            </select>
+            <Input value={filters.city} onChange={e => setFilters(f => ({ ...f, city: e.target.value }))} placeholder="City" />
+            <Input value={filters.niche} onChange={e => setFilters(f => ({ ...f, niche: e.target.value }))} placeholder="Niche" />
+            <Input value={filters.minScore} onChange={e => setFilters(f => ({ ...f, minScore: e.target.value }))} placeholder="Min lead score" type="number" />
+            <Input value={filters.businessType} onChange={e => setFilters(f => ({ ...f, businessType: e.target.value }))} placeholder="Business type" />
+            <Input value={filters.toolsUsed} onChange={e => setFilters(f => ({ ...f, toolsUsed: e.target.value }))} placeholder="Tools used" />
+            <select value={filters.callState} onChange={e => setFilters(f => ({ ...f, callState: e.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="not_called">Not called</option>
+              <option value="called">Called</option>
+              <option value="any">Called or not called</option>
+            </select>
+            <select value={filters.interestState} onChange={e => setFilters(f => ({ ...f, interestState: e.target.value }))} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="any">Any interest state</option>
+              <option value="interested">Interested</option>
+              <option value="not_interested">Not interested</option>
+            </select>
+            <Input value={filters.dailyTarget} onChange={e => setFilters(f => ({ ...f, dailyTarget: e.target.value }))} placeholder="Daily call target" type="number" />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3 text-xs">
+            {[
+              ['notContactedOnly', 'Not contacted only'],
+              ['phoneOnly', 'Has phone only'],
+              ['followUpNeeded', 'Follow-up needed'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setFilters(f => ({ ...f, [key]: !(f as any)[key] }))}
+                className={cn('rounded-md border px-2.5 py-1.5', (filters as any)[key] ? 'bg-foreground text-background border-foreground' : 'border-border text-muted-foreground')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Session stats bar */}

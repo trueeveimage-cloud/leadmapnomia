@@ -19,6 +19,9 @@ const AddPage = lazy(() => import("./pages/AddPage"));
 const BulkPage = lazy(() => import("./pages/BulkPage"));
 const SectionPage = lazy(() => import("./pages/SectionPage"));
 const ClosingPage = lazy(() => import("./pages/ClosingPage"));
+const LeadmapClosingPage = lazy(() => import("./pages/LeadmapClosingPage"));
+const EmailOutreachPage = lazy(() => import("./pages/EmailOutreachPage"));
+const SmsOutreachPage = lazy(() => import("./pages/SmsOutreachPage"));
 const CallbacksPage = lazy(() => import("./pages/CallbacksPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const FinderPage = lazy(() => import("./pages/FinderPage"));
@@ -189,6 +192,15 @@ const App = () => (
                       <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
                       <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
                       <Route path="/finder" element={<FinderPage />} />
+                      <Route path="/leadmap/closing" element={<LeadmapClosingPage />} />
+                      <Route path="/leadmap/email-outreach" element={<EmailOutreachPage />} />
+                      <Route path="/nomia/email-outreach" element={<EmailOutreachPage />} />
+                      <Route path="/nomia/sms-outreach" element={<SmsOutreachPage />} />
+                      <Route path="/nomia/closing" element={<ClosingPage status="interested" title="Nomia Closing" />} />
+                      <Route path="/cold-call" element={<NextLeadPage mode="leadline" />} />
+                      <Route path="/ai-calls" element={<CallListPage />} />
+                      <Route path="/leadmap-crm" element={<SectionPage allSections title="Leadmap CRM" showTriage emptyMessage="No leads yet" />} />
+                      <Route path="/nomia-crm" element={<SectionPage allSections title="Nomia CRM" showTriage emptyMessage="No leads yet" />} />
                       <Route path="/email-finder" element={<EmailFinderPage />} />
                       <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                       <Route path="/finder/runs/:id" element={<FinderRunPage />} />

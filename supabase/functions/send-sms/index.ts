@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { leadId, body, phone } = await req.json();
+    const { leadId, body, phone, manualUnlock } = await req.json();
     
     // Support direct phone sending (no lead required)
     if (!body) {
@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
 
     let toNumber: string;
     let resolvedLeadId: string | null = leadId || null;
+    let leadRecord: any = null;
 
     if (leadId) {
       // Fetch lead
@@ -62,9 +63,21 @@ Deno.serve(async (req) => {
       if (leadErr || !lead) {
         return new Response(JSON.stringify({ error: 'Lead not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
+      leadRecord = lead;
       toNumber = lead.phone_e164 || lead.phone;
       if (!toNumber) {
         return new Response(JSON.stringify({ error: 'Lead has no phone number' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
+        p_lead_id: leadId,
+        p_method: 'sms',
+        p_manual_unlock: !!manualUnlock,
+      });
+      if (lockError) {
+        return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (!lockResult?.allowed) {
+        return new Response(JSON.stringify({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     } else {
       toNumber = phone;
@@ -80,6 +93,22 @@ Deno.serve(async (req) => {
       e164 = '+46' + e164.slice(1);
     } else if (e164.startsWith('467')) {
       e164 = '+' + e164;
+    }
+
+    if (!leadId && resolvedLeadId) {
+      const { data: matchedLead } = await dbClient.from('leads').select('*').eq('id', resolvedLeadId).maybeSingle();
+      leadRecord = matchedLead;
+      const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
+        p_lead_id: resolvedLeadId,
+        p_method: 'sms',
+        p_manual_unlock: !!manualUnlock,
+      });
+      if (lockError) {
+        return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (!lockResult?.allowed) {
+        return new Response(JSON.stringify({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -129,7 +158,13 @@ Deno.serve(async (req) => {
         last_message_preview: body.slice(0, 80),
         last_message_direction: 'outbound',
         last_message_status: json.status || 'queued',
-        last_contact_method: 'sms',
+        outreach_state: 'sms_sent',
+        outreach_count: (leadRecord?.outreach_count || 0) + 1,
+        outreach_history: [
+          ...((Array.isArray(leadRecord?.outreach_history) ? leadRecord.outreach_history : [])),
+          { method: 'SMS', status: json.status || 'queued', to: e164, at: new Date().toISOString() },
+        ],
+        last_contact_method: 'SMS',
         last_contacted_at: new Date().toISOString(),
       }).eq('id', resolvedLeadId);
     }

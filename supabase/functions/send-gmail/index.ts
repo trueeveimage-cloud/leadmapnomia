@@ -15,6 +15,7 @@ const BodySchema = z.object({
   to: z.string().email(),
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(20000),
+  manualUnlock: z.boolean().optional(),
 });
 
 function b64url(s: string): string {
@@ -54,14 +55,16 @@ Deno.serve(async (req) => {
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
-  const { leadId, to, subject, body } = parsed.data;
+  const { leadId, to, subject, body, manualUnlock } = parsed.data;
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  let leadRecord: any = null;
 
   // 1) Opt-out check
   if (leadId) {
-    const { data: lead } = await supabase.from('leads').select('outreach_opt_out, email').eq('id', leadId).maybeSingle();
-    if (lead?.outreach_opt_out) {
+    const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
+    leadRecord = lead;
+    if (lead?.outreach_opt_out || lead?.do_not_contact || lead?.outreach_state === 'do_not_contact') {
       return jsonResp({ skipped: true, reason: 'opt_out' });
     }
   }
@@ -75,6 +78,39 @@ Deno.serve(async (req) => {
       .in('status', ['sent', 'queued']).limit(1);
     if (existing && existing.length > 0) {
       return jsonResp({ skipped: true, reason: 'already_emailed' });
+    }
+  }
+
+  // 2b) Dedupe across duplicate lead rows by recipient email.
+  const normalizedTo = to.trim().toLowerCase();
+  const { data: matchingLeads } = await supabase
+    .from('leads')
+    .select('id')
+    .ilike('email', normalizedTo);
+  const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
+  if (matchingLeadIds.length > 0) {
+    const { data: existingByEmail } = await supabase
+      .from('message_logs')
+      .select('id, lead_id')
+      .eq('channel', 'email')
+      .eq('direction', 'outbound')
+      .in('status', ['sent', 'queued'])
+      .in('lead_id', matchingLeadIds)
+      .limit(1);
+    if (existingByEmail && existingByEmail.length > 0) {
+      return jsonResp({ skipped: true, reason: 'email_already_contacted' });
+    }
+  }
+
+  if (leadId) {
+    const { data: lockResult, error: lockError } = await supabase.rpc('acquire_outreach_lock', {
+      p_lead_id: leadId,
+      p_method: 'email',
+      p_manual_unlock: !!manualUnlock,
+    });
+    if (lockError) return jsonResp({ error: 'outreach_lock_failed', details: lockError.message }, 500);
+    if (!lockResult?.allowed) {
+      return jsonResp({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }, 409);
     }
   }
 
@@ -139,6 +175,14 @@ Deno.serve(async (req) => {
       } as any);
       await supabase.from('leads').update({
         last_outbound_at: new Date().toISOString(),
+        last_contacted_at: new Date().toISOString(),
+        last_contact_method: 'Email',
+        outreach_state: 'email_sent',
+        outreach_count: (leadRecord?.outreach_count || 0) + 1,
+        outreach_history: [
+          ...((Array.isArray(leadRecord?.outreach_history) ? leadRecord.outreach_history : [])),
+          { method: 'Email', status: 'sent', to, subject, at: new Date().toISOString() },
+        ],
         outreach_stage: 'email_sent',
         last_message_direction: 'outbound',
         last_message_status: 'sent',

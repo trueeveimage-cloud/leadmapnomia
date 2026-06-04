@@ -75,6 +75,26 @@ export interface Lead {
   call_attempts: number;
   last_contacted_at: string | null;
   last_contact_method: string | null;
+  outreach_state?: string | null;
+  outreach_count?: number | null;
+  outreach_history?: any[] | null;
+  do_not_contact?: boolean | null;
+  country?: string | null;
+  city?: string | null;
+  business_type?: string | null;
+  tools_used?: Record<string, any> | null;
+  owner_name?: string | null;
+  lead_score?: number | null;
+  call_status?: string | null;
+  last_called_at?: string | null;
+  retell_call_id?: string | null;
+  retell_agent_id?: string | null;
+  call_outcome?: string | null;
+  call_summary?: string | null;
+  call_transcript?: string | null;
+  demo_delivery_method?: string | null;
+  demo_contact_value?: string | null;
+  next_step?: string | null;
   // AI receptionist scoring
   potential_score?: number | null;
   lead_tier?: LeadTier | null;

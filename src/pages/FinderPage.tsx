@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import InfoTip from '@/components/InfoTip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createFinderRun, fetchFinderRuns, runFinderSearch, fetchFinderCandidates, FinderRun, FinderCandidate } from '@/lib/finder';
-import { ALL_CITIES, getCitiesByCountry, findCity, searchCities, getAreaLabel, CityProfile, Country, COUNTRY_LABELS, COUNTRY_DEFAULT_KEYWORDS } from '@/lib/cities';
+import { ACTIVE_COUNTRIES, getCitiesByCountry, findCity, searchCities, getAreaLabel, CityProfile, Country, COUNTRY_LABELS, COUNTRY_DEFAULT_KEYWORDS } from '@/lib/cities';
 import { getRecommendedSearches, SearchRecommendation, buildCampaignPerformance, CampaignPerformance } from '@/lib/recommendedSearches';
 import { computeAllPresets, adjustForLeadsTarget, estimateCostFromPreset, PresetConfig, PresetKey } from '@/lib/finderPresets';
 import { getSetting, setSetting, addLead, determineSection } from '@/lib/supabase';
@@ -75,7 +75,7 @@ export default function FinderPage() {
     loadRuns();
     getSetting('finder_default_keywords').then(v => { if (v) setKeywords(v); });
     getSetting('finder_default_country').then(v => {
-      if (v && (v === 'SE' || v === 'NO' || v === 'DK')) setCountry(v as Country);
+      if (v && ACTIVE_COUNTRIES.includes(v as Country)) setCountry(v as Country);
     });
     getSetting('finder_default_city').then(v => {
       if (v) {
@@ -311,14 +311,14 @@ export default function FinderPage() {
 
   // Country stats for the header
   const countryStats = useMemo(() => {
-    const stats: Record<Country, { runs: number; leads: number }> = {
+    const stats = {
       SE: { runs: 0, leads: 0 },
-      NO: { runs: 0, leads: 0 },
-      DK: { runs: 0, leads: 0 },
-    };
+      UK: { runs: 0, leads: 0 },
+      ES: { runs: 0, leads: 0 },
+    } as Record<Country, { runs: number; leads: number }>;
     for (const run of runs) {
       const city = findCity(run.city);
-      const c = city?.country || 'SE';
+      const c = city && ACTIVE_COUNTRIES.includes(city.country) ? city.country : 'SE';
       stats[c].runs++;
       const s = run.stats as any;
       stats[c].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
@@ -491,7 +491,7 @@ export default function FinderPage() {
               <Globe size={13} /> Country
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(['SE', 'NO', 'DK'] as Country[]).map(c => {
+              {ACTIVE_COUNTRIES.map(c => {
                 const cs = countryStats[c];
                 const isActive = country === c;
                 return (
