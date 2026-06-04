@@ -243,6 +243,15 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
             </Button>
           ) : (
             <>
+              {savedAt && (
+                <span className="text-[11px] text-muted-foreground mr-auto flex items-center gap-1">
+                  <Check size={11} className="text-foreground/70" /> Draft saved · {new Date(savedAt).toLocaleTimeString()}
+                </span>
+              )}
+              <Button variant="ghost" onClick={clearDraft} title="Reset to template">Clear</Button>
+              <Button variant="outline" onClick={saveDraft}>
+                <Save className="h-4 w-4 mr-1.5" /> Save draft
+              </Button>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button onClick={send} disabled={recipients.length === 0}>
                 <Send className="h-4 w-4 mr-1.5" /> Send all
