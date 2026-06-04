@@ -452,14 +452,24 @@ export type Database = {
         Row: {
           address: string | null
           best_contact_method: string | null
+          business_name: string | null
           call_after_at: string | null
           call_attempts: number
+          call_outcome: string | null
           call_outcome_last: string | null
+          call_status: string | null
+          call_summary: string | null
+          call_transcript: string | null
           caller_id: string | null
           caller_name: string | null
           category: string | null
+          city: string | null
+          country: string | null
           created_at: string
           detected_niche: string | null
+          demo_contact_value: string | null
+          demo_delivery_method: string | null
+          do_not_contact: boolean
           email: string | null
           email_source: string | null
           estimated_value: string | null
@@ -479,16 +489,23 @@ export type Database = {
           last_message_preview: string | null
           last_message_status: string | null
           last_outbound_at: string | null
+          last_called_at: string | null
+          lead_score: number | null
           lead_tier: string | null
           maps_url: string | null
           name: string
           needs_call: boolean
           next_action_at: string | null
+          next_step: string | null
           niche_label: string | null
           notes: string | null
           opening_hours: string | null
+          outreach_count: number
+          outreach_history: Json
           outreach_opt_out: boolean
           outreach_stage: string
+          outreach_state: string
+          owner_name: string | null
           phone: string | null
           phone_e164: string | null
           pinned: boolean
@@ -498,9 +515,12 @@ export type Database = {
           rating: number | null
           read_at: string | null
           reviews_count: number | null
+          retell_agent_id: string | null
+          retell_call_id: string | null
           section: string
           status: string
           tags: string[] | null
+          tools_used: Json
           updated_at: string
           website: string | null
           website_quality: string | null
@@ -509,14 +529,24 @@ export type Database = {
         Insert: {
           address?: string | null
           best_contact_method?: string | null
+          business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
+          call_outcome?: string | null
           call_outcome_last?: string | null
+          call_status?: string | null
+          call_summary?: string | null
+          call_transcript?: string | null
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           detected_niche?: string | null
+          demo_contact_value?: string | null
+          demo_delivery_method?: string | null
+          do_not_contact?: boolean
           email?: string | null
           email_source?: string | null
           estimated_value?: string | null
@@ -536,16 +566,23 @@ export type Database = {
           last_message_preview?: string | null
           last_message_status?: string | null
           last_outbound_at?: string | null
+          last_called_at?: string | null
+          lead_score?: number | null
           lead_tier?: string | null
           maps_url?: string | null
           name: string
           needs_call?: boolean
           next_action_at?: string | null
+          next_step?: string | null
           niche_label?: string | null
           notes?: string | null
           opening_hours?: string | null
+          outreach_count?: number
+          outreach_history?: Json
           outreach_opt_out?: boolean
           outreach_stage?: string
+          outreach_state?: string
+          owner_name?: string | null
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
@@ -555,9 +592,12 @@ export type Database = {
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
+          retell_agent_id?: string | null
+          retell_call_id?: string | null
           section?: string
           status?: string
           tags?: string[] | null
+          tools_used?: Json
           updated_at?: string
           website?: string | null
           website_quality?: string | null
@@ -566,14 +606,24 @@ export type Database = {
         Update: {
           address?: string | null
           best_contact_method?: string | null
+          business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
+          call_outcome?: string | null
           call_outcome_last?: string | null
+          call_status?: string | null
+          call_summary?: string | null
+          call_transcript?: string | null
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           detected_niche?: string | null
+          demo_contact_value?: string | null
+          demo_delivery_method?: string | null
+          do_not_contact?: boolean
           email?: string | null
           email_source?: string | null
           estimated_value?: string | null
@@ -593,16 +643,23 @@ export type Database = {
           last_message_preview?: string | null
           last_message_status?: string | null
           last_outbound_at?: string | null
+          last_called_at?: string | null
+          lead_score?: number | null
           lead_tier?: string | null
           maps_url?: string | null
           name?: string
           needs_call?: boolean
           next_action_at?: string | null
+          next_step?: string | null
           niche_label?: string | null
           notes?: string | null
           opening_hours?: string | null
+          outreach_count?: number
+          outreach_history?: Json
           outreach_opt_out?: boolean
           outreach_stage?: string
+          outreach_state?: string
+          owner_name?: string | null
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
@@ -612,9 +669,12 @@ export type Database = {
           rating?: number | null
           read_at?: string | null
           reviews_count?: number | null
+          retell_agent_id?: string | null
+          retell_call_id?: string | null
           section?: string
           status?: string
           tags?: string[] | null
+          tools_used?: Json
           updated_at?: string
           website?: string | null
           website_quality?: string | null

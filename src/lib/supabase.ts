@@ -54,6 +54,8 @@ export interface Lead {
   section: LeadSection;
   status: LeadStatus;
   call_outcome_last: string | null;
+  caller_id?: string | null;
+  caller_name?: string | null;
   next_action_at: string | null;
   notes: string | null;
   tags: string[];

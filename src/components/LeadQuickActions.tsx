@@ -25,6 +25,14 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
   const unlockWarning = (reason: string) =>
     window.confirm(`${reason}\n\nUnlocking can contact the same business twice. Continue anyway?`);
 
+  const aiCallBlockReason = (() => {
+    if (!(lead.phone_e164 || lead.phone)) return 'This lead has no phone number.';
+    if (lead.outreach_opt_out || lead.do_not_contact) return 'This lead is marked Do not contact.';
+    if (lead.call_status === 'Calling') return 'This lead is already being called.';
+    if ((lead.call_attempts || 0) >= 2) return 'AI call limit reached for this lead.';
+    return null;
+  })();
+
   const findEmail = async () => {
     if (!lead.website) { toast.error('No website to scrape'); return; }
     setFindingEmail(true);
@@ -43,8 +51,8 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       } else {
         toast.info('No email found on website');
       }
-    } catch (e: any) {
-      toast.error(e?.message || 'Scrape failed');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Scrape failed');
     } finally { setFindingEmail(false); }
   };
 
@@ -59,7 +67,11 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
   };
 
   const startAiCall = async () => {
-    const blockReason = getOutreachBlockReason(lead, 'ai_call');
+    const blockReason = aiCallBlockReason || getOutreachBlockReason(lead, 'ai_call');
+    if (aiCallBlockReason) {
+      toast.error(aiCallBlockReason);
+      return;
+    }
     if (blockReason && !unlockWarning(blockReason)) return;
     setBusy(true);
     try {
@@ -67,11 +79,11 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
         body: { leadId: lead.id, manualUnlock: !!blockReason },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success('AI call started');
+      if (data?.error) throw new Error(data.message || data.error);
+      toast.success(data?.retell_call_id ? `AI call started: ${data.retell_call_id}` : 'AI call started');
       onUpdated?.();
-    } catch (e: any) {
-      toast.error(e?.message || 'Could not start AI call');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not start AI call');
     } finally {
       setBusy(false);
     }
@@ -153,7 +165,7 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
         <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
       </Button>
       {lead.phone && (
-        <Button size="sm" variant="outline" onClick={startAiCall} disabled={busy}>
+        <Button size="sm" variant="outline" onClick={startAiCall} disabled={busy || !!aiCallBlockReason} title={aiCallBlockReason || 'Call with AI'}>
           <Bot className="h-3.5 w-3.5 mr-1" /> Call with AI
         </Button>
       )}

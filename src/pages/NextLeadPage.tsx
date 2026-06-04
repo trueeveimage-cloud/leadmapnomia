@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Lead, updateLead, logActivity } from '@/lib/supabase';
 import { detectLeadCountry } from '@/lib/countryRouting';
 import { useCRM } from '@/context/CRMContext';
-import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target } from 'lucide-react';
+import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target, Bot, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -76,6 +76,7 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
   const [step, setStep] = useState<'preview' | 'outcome' | 'status' | 'followup'>('preview');
   const [note, setNote] = useState('');
   const [copied, setCopied] = useState(false);
+  const [aiCallLoading, setAiCallLoading] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const { refreshCounts } = useCRM();
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
@@ -266,6 +267,44 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
     if (!lead) return;
     window.open(`tel:${lead.phone}`, '_self');
     setStep('outcome');
+  };
+
+  const aiCallBlockReason = lead ? (() => {
+    if (!(lead.phone_e164 || lead.phone)) return 'No phone number';
+    if (lead.do_not_contact || lead.outreach_opt_out) return 'Do not contact';
+    if (lead.call_status === 'Calling') return 'Already calling';
+    if ((lead.call_attempts || 0) >= 2) return 'AI call limit reached';
+    return null;
+  })() : null;
+
+  const handleAiCall = async () => {
+    if (!lead || aiCallBlockReason) return;
+    setAiCallLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('retell-start-call', {
+        body: { leadId: lead.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.message || data.error);
+
+      const now = new Date().toISOString();
+      setLead({
+        ...lead,
+        retell_call_id: data?.retell_call_id || lead.retell_call_id,
+        call_status: 'Calling',
+        outreach_state: 'called',
+        call_attempts: (lead.call_attempts || 0) + 1,
+        last_called_at: now,
+        last_contacted_at: now,
+        last_contact_method: 'AI Call',
+      });
+      toast.success(`AI call started${data?.retell_call_id ? `: ${data.retell_call_id}` : ''}`);
+      refreshCounts();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not start AI call');
+    } finally {
+      setAiCallLoading(false);
+    }
   };
 
   const updateSession = async (field: 'calls_made' | 'demos_booked' | 'leads_interested') => {
@@ -685,10 +724,20 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
                     <span>Last: {format(new Date((lead as any).last_contacted_at), 'MMM d h:mma')}</span>
                   </div>
                 )}
-                {(lead as any).call_attempts > 0 && (
+                {lead.call_attempts > 0 && (
                   <div className="text-muted-foreground text-xs">
-                    {(lead as any).call_attempts} attempt{(lead as any).call_attempts !== 1 ? 's' : ''}
-                    {(lead as any).caller_name && <span className="ml-1 text-primary/60">by {(lead as any).caller_name}</span>}
+                    {lead.call_attempts} attempt{lead.call_attempts !== 1 ? 's' : ''}
+                    {lead.caller_name && <span className="ml-1 text-primary/60">by {lead.caller_name}</span>}
+                  </div>
+                )}
+                {lead.call_status && lead.call_status !== 'New' && (
+                  <div className="text-xs text-muted-foreground">
+                    AI status: <span className="text-foreground">{lead.call_status}</span>
+                  </div>
+                )}
+                {lead.retell_call_id && (
+                  <div className="text-xs text-muted-foreground truncate">
+                    Retell: <span className="font-mono text-foreground">{lead.retell_call_id}</span>
                   </div>
                 )}
               </div>
@@ -736,6 +785,19 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
                   <Button onClick={handleCall} className="bg-[hsl(142,69%,45%)] hover:bg-[hsl(142,69%,40%)] text-white gap-1.5">
                     <Phone size={14} /> Call
                   </Button>
+                  <Button
+                    onClick={handleAiCall}
+                    disabled={aiCallLoading || !!aiCallBlockReason}
+                    variant="outline"
+                    className="gap-1.5"
+                    title={aiCallBlockReason || 'Start Retell AI call'}
+                  >
+                    {aiCallLoading ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
+                    Call with AI
+                  </Button>
+                  {aiCallBlockReason && (
+                    <span className="text-xs text-muted-foreground">{aiCallBlockReason}</span>
+                  )}
                 </div>
               )}
 
