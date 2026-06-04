@@ -442,7 +442,7 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
           <div className="flex items-center gap-2">
             <ChevronRight size={20} className="text-primary" />
             <h1 className="text-2xl font-bold text-foreground">
-              {mode === 'leadline' ? 'Leadline · Next Call' : 'Nomia · Next Call'}
+              {mode === 'leadline' ? 'Cold Call · Leadmap' : 'Cold Call · Nomia'}
             </h1>
             <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider"
               style={mode === 'leadline'
