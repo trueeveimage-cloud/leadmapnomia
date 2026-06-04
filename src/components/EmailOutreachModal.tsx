@@ -47,7 +47,26 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState({ done: 0, sent: 0, skipped: 0, failed: 0 });
   const [fromAddress, setFromAddress] = useState<string>('');
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const abortRef = React.useRef(false);
+
+  const saveDraft = React.useCallback(() => {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ subject, body }));
+      setSavedAt(Date.now());
+      toast.success('Draft saved');
+    } catch { toast.error('Could not save draft'); }
+  }, [draftKey, subject, body]);
+
+  const clearDraft = React.useCallback(() => {
+    try { localStorage.removeItem(draftKey); } catch {}
+    if (recipients[0]) {
+      setSubject(defaultSubject(recipients[0]));
+      setBody(generateOutreachMessage(recipients[0]));
+    }
+    setSavedAt(null);
+    toast.success('Draft cleared');
+  }, [draftKey, recipients]);
 
   // Show which Gmail account will actually send
   React.useEffect(() => {
