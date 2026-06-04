@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, X, Mail, History, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { Loader2, Send, X, Mail, History, ChevronDown, ChevronRight, ExternalLink, Save, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateOutreachMessage, detectNiche } from '@/lib/leadScoring';
