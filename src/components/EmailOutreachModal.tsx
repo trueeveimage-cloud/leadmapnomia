@@ -93,7 +93,7 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
   React.useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      try { localStorage.setItem(draftKey, JSON.stringify({ subject, body })); } catch {}
+      try { localStorage.setItem(draftKey, JSON.stringify({ subject, body })); setSavedAt(Date.now()); } catch {}
     }, 400);
     return () => clearTimeout(t);
   }, [subject, body, draftKey, open]);
