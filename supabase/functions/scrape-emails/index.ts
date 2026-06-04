@@ -13,14 +13,9 @@ const BUSINESS_PREFIXES = new Set([
 const FREE_MAIL_DOMAINS = /(gmail\.com|hotmail\.com|outlook\.com|live\.com|yahoo\.com|icloud\.com)$/i;
 
 // Pages we'll try, in priority order. Homepage is fetched separately.
+// Keep small to stay under edge-function CPU limits.
 const CANDIDATE_PATHS = [
-  '/kontakt','/kontakta-oss','/contact','/contact-us','/contacto',
-  '/about','/about-us','/om-oss','/om',
-  '/team','/personal','/staff','/medarbetare',
-  '/boka','/booking','/book','/reservation',
-  '/privacy','/integritet','/privacy-policy','/dataskydd',
-  '/terms','/villkor','/conditions',
-  '/footer','/sitemap',
+  '/kontakt','/contact','/om-oss','/about','/privacy','/integritet',
 ];
 
 function extractFromText(text: string): string[] {
@@ -96,7 +91,7 @@ async function fetchPage(url: string, timeoutMs = 3500): Promise<string | null> 
     const decoder = new TextDecoder();
     let html = '';
     let bytes = 0;
-    const MAX = 160_000; // raised cap so deeper pages (privacy, team) are reachable
+    const MAX = 60_000;
     while (bytes < MAX) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -137,7 +132,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const batch = urls.slice(0, 3);
+    const batch = urls.slice(0, 2);
     const results: { leadId: string; emails: string[]; email?: string; source?: string; error?: string }[] = [];
 
     for (const item of batch) {
@@ -160,10 +155,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 2) Walk candidate pages until we've gathered a few, or exhausted list
+        // 2) Walk a few candidate pages, stop as soon as we find a business email
         for (const p of CANDIDATE_PATHS) {
-          if (allFound.length >= 5) break;
-          const html = await fetchPage(u.origin + p, 2800);
+          if (allFound.length >= 2) break;
+          const html = await fetchPage(u.origin + p, 2000);
           if (!html) continue;
           const raws = [...extractMailto(html), ...extractFromText(html)];
           for (const e of cleanEmails(raws)) {
