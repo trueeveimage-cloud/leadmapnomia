@@ -155,10 +155,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 2) Walk candidate pages until we've gathered a few, or exhausted list
+        // 2) Walk a few candidate pages, stop as soon as we find a business email
         for (const p of CANDIDATE_PATHS) {
-          if (allFound.length >= 5) break;
-          const html = await fetchPage(u.origin + p, 2800);
+          if (allFound.length >= 2) break;
+          const html = await fetchPage(u.origin + p, 2000);
           if (!html) continue;
           const raws = [...extractMailto(html), ...extractFromText(html)];
           for (const e of cleanEmails(raws)) {
