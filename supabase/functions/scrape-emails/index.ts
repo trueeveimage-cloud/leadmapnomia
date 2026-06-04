@@ -13,14 +13,9 @@ const BUSINESS_PREFIXES = new Set([
 const FREE_MAIL_DOMAINS = /(gmail\.com|hotmail\.com|outlook\.com|live\.com|yahoo\.com|icloud\.com)$/i;
 
 // Pages we'll try, in priority order. Homepage is fetched separately.
+// Keep small to stay under edge-function CPU limits.
 const CANDIDATE_PATHS = [
-  '/kontakt','/kontakta-oss','/contact','/contact-us','/contacto',
-  '/about','/about-us','/om-oss','/om',
-  '/team','/personal','/staff','/medarbetare',
-  '/boka','/booking','/book','/reservation',
-  '/privacy','/integritet','/privacy-policy','/dataskydd',
-  '/terms','/villkor','/conditions',
-  '/footer','/sitemap',
+  '/kontakt','/contact','/om-oss','/about','/privacy','/integritet',
 ];
 
 function extractFromText(text: string): string[] {
