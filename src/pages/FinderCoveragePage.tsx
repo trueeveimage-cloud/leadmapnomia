@@ -165,7 +165,7 @@ export default function FinderCoveragePage() {
 
   // Per-country summary for the tabs
   const perCountryStats = useMemo(() => {
-    const stats: Record<Country, { runs: number; leads: number }> = { SE: { runs: 0, leads: 0 }, NO: { runs: 0, leads: 0 }, DK: { runs: 0, leads: 0 } };
+    const stats: Record<Country, { runs: number; leads: number }> = { SE: { runs: 0, leads: 0 }, NO: { runs: 0, leads: 0 }, DK: { runs: 0, leads: 0 }, UK: { runs: 0, leads: 0 }, ES: { runs: 0, leads: 0 } };
     for (const run of runs) {
       const city = findCity(run.city);
       const c = city?.country || 'SE';
