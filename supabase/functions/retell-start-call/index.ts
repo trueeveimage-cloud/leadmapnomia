@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3';
+import { requireUserJwt } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,10 @@ function normalizeE164(value?: string | null) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
+
+  const authFail = await requireUserJwt(req, corsHeaders);
+  if (authFail) return authFail;
+
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return json({ error: 'invalid_body', details: parsed.error.flatten().fieldErrors }, 400);

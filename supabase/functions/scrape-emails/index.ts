@@ -124,6 +124,10 @@ function detectSource(path: string, html: string, email: string): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  const { requireUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireUserJwt(req, corsHeaders);
+  if (authFail) return authFail;
+
   try {
     const { urls } = await req.json() as { urls: { leadId: string; website: string }[] };
     if (!urls?.length) {

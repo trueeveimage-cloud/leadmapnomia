@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3';
+import { requireUserJwt } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -45,6 +46,11 @@ function jsonResp(payload: unknown, status = 200) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const authFail = await requireUserJwt(req, corsHeaders);
+  if (authFail) return authFail;
+
+
 
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');

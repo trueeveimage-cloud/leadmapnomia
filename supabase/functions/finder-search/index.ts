@@ -414,6 +414,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const { requireUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireUserJwt(req, corsHeaders);
+  if (authFail) return authFail;
+
+
+
   try {
     const apiKey = Deno.env.get('GOOGLE_PLACES_API_KEY');
     if (!apiKey) {
