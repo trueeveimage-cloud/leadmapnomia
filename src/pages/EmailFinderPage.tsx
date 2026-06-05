@@ -4,9 +4,12 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Mail, Loader2, MapPin, Sparkles } from 'lucide-react';
+import { Mail, Loader2, MapPin, Sparkles, Search } from 'lucide-react';
 import { createFinderRun, runFinderSearch } from '@/lib/finder';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { determineSection, updateLead } from '@/lib/supabase';
+import { useCRM } from '@/context/CRMContext';
 
 // Curated niches optimized for Gmail discovery:
 // businesses that almost always have a website with a contact email,
@@ -28,10 +31,13 @@ const PRESETS = [
 
 export default function EmailFinderPage() {
   const navigate = useNavigate();
+  const { refreshCounts } = useCRM();
   const [city, setCity] = useState('Stockholm');
   const [selectedPreset, setSelectedPreset] = useState(0);
   const [targetLeads, setTargetLeads] = useState(50);
   const [running, setRunning] = useState(false);
+  const [scrapingExisting, setScrapingExisting] = useState(false);
+  const [existingProgress, setExistingProgress] = useState({ done: 0, total: 0, found: 0 });
 
   const start = async () => {
     if (!city.trim()) { toast.error('Enter a city'); return; }
@@ -74,6 +80,82 @@ export default function EmailFinderPage() {
     }
   };
 
+  const scrapeExistingLeads = async () => {
+    setScrapingExisting(true);
+    setExistingProgress({ done: 0, total: 0, found: 0 });
+
+    try {
+      const targets: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('id, name, website, phone, email, section, facebook_url, instagram_url')
+          .not('website', 'is', null)
+          .neq('website', '')
+          .or('email.is.null,email.eq.')
+          .range(from, from + 999);
+
+        if (error) throw error;
+        if (!data?.length) break;
+        targets.push(...data);
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+
+      if (targets.length === 0) {
+        toast.info('All saved leads with websites already have emails');
+        return;
+      }
+
+      setExistingProgress({ done: 0, total: targets.length, found: 0 });
+      let found = 0;
+
+      for (let i = 0; i < targets.length; i += 4) {
+        const batch = targets.slice(i, i + 4).map((lead) => ({
+          leadId: lead.id,
+          website: lead.website,
+          businessName: lead.name,
+        }));
+
+        try {
+          const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
+          if (error) throw error;
+
+          if (data?.success && data.results) {
+            for (const result of data.results) {
+              const email = result.email || result.emails?.[0];
+              if (!email) continue;
+
+              const lead = targets.find((item) => item.id === result.leadId);
+              if (!lead) continue;
+
+              await updateLead(result.leadId, {
+                email,
+                email_source: result.source || 'website',
+                section: determineSection({ phone: lead.phone, email }),
+                facebook_url: result.facebook_url || lead.facebook_url,
+                instagram_url: result.instagram_url || lead.instagram_url,
+              });
+              found++;
+            }
+          }
+        } catch (error) {
+          console.error('Existing lead scrape batch failed:', error);
+        }
+
+        setExistingProgress({ done: Math.min(i + 4, targets.length), total: targets.length, found });
+      }
+
+      await refreshCounts();
+      toast.success(`Found emails for ${found} of ${targets.length} saved leads`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to scrape saved leads');
+    } finally {
+      setScrapingExisting(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto p-6 space-y-5">
@@ -86,6 +168,40 @@ export default function EmailFinderPage() {
             Finds businesses that are likely to have a discoverable email. Auto-scrapes websites for emails after the run completes.
           </p>
         </div>
+
+        <Card className="p-5 space-y-4 border-primary/25 bg-primary/5">
+          <div>
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Search className="h-4 w-4 text-primary" />
+              Scrape emails from saved leads
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Scans every existing CRM lead that has a website but no email, then saves the best email and social links back to the lead.
+            </p>
+          </div>
+
+          {scrapingExisting && (
+            <div className="rounded-md bg-background/80 border border-border p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Scraping saved leads</span>
+                <span className="font-medium">
+                  {existingProgress.found}/{existingProgress.done} found of {existingProgress.total}
+                </span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${existingProgress.total ? (existingProgress.done / existingProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <Button onClick={scrapeExistingLeads} disabled={scrapingExisting} className="w-full" size="lg">
+            {scrapingExisting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+            {scrapingExisting ? 'Scraping existing leads...' : 'Scrape emails for existing CRM leads'}
+          </Button>
+        </Card>
 
         <Card className="p-5 space-y-4">
           <div>

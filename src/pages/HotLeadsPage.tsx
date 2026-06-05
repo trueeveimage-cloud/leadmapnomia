@@ -193,8 +193,8 @@ export default function HotLeadsPage() {
     setScrapeProgress({ done: 0, total: targets.length, found: 0 });
     let found = 0;
     try {
-      for (let i = 0; i < targets.length; i += 5) {
-        const batch = targets.slice(i, i + 5).map((l) => ({ leadId: l.id, website: l.website! }));
+      for (let i = 0; i < targets.length; i += 4) {
+        const batch = targets.slice(i, i + 4).map((l) => ({ leadId: l.id, website: l.website!, businessName: l.name }));
         try {
           const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
           if (data?.success && data.results) {
@@ -212,7 +212,7 @@ export default function HotLeadsPage() {
             }
           }
         } catch (e) { console.error('scrape batch', e); }
-        setScrapeProgress({ done: Math.min(i + 5, targets.length), total: targets.length, found });
+        setScrapeProgress({ done: Math.min(i + 4, targets.length), total: targets.length, found });
       }
       toast.success(`Found emails for ${found} / ${targets.length} leads`);
       await load();

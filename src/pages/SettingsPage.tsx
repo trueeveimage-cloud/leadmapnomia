@@ -39,7 +39,7 @@ export default function SettingsPage() {
       while (true) {
         const { data, error } = await supabase
           .from('leads')
-          .select('id, website, phone, section')
+          .select('id, name, website, phone, section, facebook_url, instagram_url')
           .not('website', 'is', null)
           .neq('website', '')
           .or('email.is.null,email.eq.')
@@ -60,9 +60,9 @@ export default function SettingsPage() {
       setScrapeProgress({ done: 0, total: allLeads.length, found: 0 });
       let totalFound = 0;
 
-      for (let i = 0; i < allLeads.length; i += 5) {
+      for (let i = 0; i < allLeads.length; i += 4) {
         if (scrapeStopRef.current) break;
-        const batch = allLeads.slice(i, i + 5).map((l: any) => ({ leadId: l.id, website: l.website }));
+        const batch = allLeads.slice(i, i + 4).map((l: any) => ({ leadId: l.id, website: l.website, businessName: l.name }));
 
         try {
           const { data } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
@@ -89,7 +89,7 @@ export default function SettingsPage() {
           console.error('Scrape batch error:', e);
         }
 
-        setScrapeProgress(p => ({ ...p, done: Math.min(i + 5, allLeads.length), found: totalFound }));
+        setScrapeProgress(p => ({ ...p, done: Math.min(i + 4, allLeads.length), found: totalFound }));
       }
 
       refreshCounts();
