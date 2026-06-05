@@ -695,6 +695,36 @@ export type Database = {
           },
         ]
       }
+      outreach_locks: {
+        Row: {
+          created_at: string
+          id: string
+          lead_id: string
+          lock_type: string
+          lock_value: string
+          manually_unlocked: boolean
+          method: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lead_id: string
+          lock_type: string
+          lock_value: string
+          manually_unlocked?: boolean
+          method: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lead_id?: string
+          lock_type?: string
+          lock_value?: string
+          manually_unlocked?: boolean
+          method?: string
+        }
+        Relationships: []
+      }
       place_cache: {
         Row: {
           address: string | null
