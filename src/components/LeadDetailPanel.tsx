@@ -5,7 +5,7 @@ import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Paperclip, Link2, Plus, Trash2, Upload, X, Ban, RotateCcw } from 'lucide-react';
+import { Bot, FileText, Paperclip, Link2, Plus, Trash2, Upload, X, Ban, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -47,6 +47,7 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const notesTimer = useRef<ReturnType<typeof setTimeout>>();
+  const hasAiCallResult = !!(lead.retell_call_id || lead.call_status || lead.call_summary || lead.call_transcript);
 
   useEffect(() => {
     setNotes(lead.notes || '');
@@ -161,6 +162,50 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
           rows={3}
         />
       </div>
+
+      {/* AI call result */}
+      {hasAiCallResult && (
+        <div className="rounded-md border border-border bg-muted/30 p-3">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <Bot size={14} className="text-primary" />
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI call result</div>
+            </div>
+            {lead.call_status && (
+              <span className="text-xs px-2 py-0.5 rounded-full border border-border bg-background text-foreground">
+                {lead.call_status}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
+            {lead.last_called_at && <div>Called: <span className="text-foreground">{format(new Date(lead.last_called_at), 'MMM d h:mma')}</span></div>}
+            {lead.call_outcome && <div>Outcome: <span className="text-foreground">{lead.call_outcome}</span></div>}
+            {lead.retell_call_id && <div className="col-span-2 truncate">Retell ID: <span className="font-mono text-foreground">{lead.retell_call_id}</span></div>}
+          </div>
+
+          {lead.call_summary ? (
+            <div className="text-xs text-foreground whitespace-pre-wrap mb-2">{lead.call_summary}</div>
+          ) : (
+            <div className="text-xs text-muted-foreground mb-2">No summary saved yet.</div>
+          )}
+
+          {lead.next_step && (
+            <div className="text-xs text-primary mb-2">{lead.next_step}</div>
+          )}
+
+          {lead.call_transcript && (
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+                <FileText size={12} /> Transcript
+              </summary>
+              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2.5 text-xs text-foreground font-sans">
+                {lead.call_transcript}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Attachments */}
       <div>

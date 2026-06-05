@@ -46,19 +46,33 @@ function hasAny(text: string, values: string[]) {
   return values.some((value) => text.includes(value));
 }
 
+function boolish(value: unknown) {
+  return value === true || String(value).toLowerCase() === 'true';
+}
+
+function outcomeFromCustom(custom: JsonRecord) {
+  if (boolish(custom.do_not_contact)) return 'do_not_contact';
+  if (boolish(custom.meeting_requested)) return 'meeting_requested';
+  if (boolish(custom.demo_requested)) return 'demo_requested';
+  if (boolish(custom.interested)) return 'interested';
+  return '';
+}
+
 function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
   const analysis = record(call.call_analysis || payload.call_analysis);
   const custom = record(analysis.custom_analysis_data);
   const transcript = transcriptToText(call.transcript || payload.transcript || call.transcript_with_tool_calls || payload.transcript_with_tool_calls);
+  const summary = firstString(analysis.call_summary, analysis.summary, custom.short_summary, custom.summary, payload.summary);
   const primary = firstString(
     custom.outcome,
     custom.call_outcome,
     custom.lead_outcome,
     custom.status,
     custom.interest_level,
+    outcomeFromCustom(custom),
     analysis.call_successful,
   ).toLowerCase();
-  const fallback = `${firstString(call.call_status, payload.call_status)} ${firstString(call.disconnection_reason, payload.disconnection_reason)} ${transcript}`.toLowerCase();
+  const fallback = `${firstString(call.call_status, payload.call_status)} ${firstString(call.disconnection_reason, payload.disconnection_reason)} ${summary} ${transcript}`.toLowerCase();
   const text = `${primary} ${fallback}`;
 
   if (event === 'call_started' || hasAny(text, ['ongoing', 'registered'])) {
@@ -77,11 +91,11 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
   if (hasAny(text, ['meeting requested', 'book meeting', 'schedule meeting', 'meeting'])) {
     return { call_status: 'Meeting requested', status: 'interested', outreach_state: 'called', next_step: 'Schedule meeting and follow up manually' };
   }
+  if (hasAny(text, ['not interested', 'declined', 'declined further contact', 'no interest', 'nothing today', 'ingenting strax idag', 'without the user opting in'])) {
+    return { call_status: 'Not interested', status: 'not_interested', outreach_state: 'called', next_step: 'No follow-up needed' };
+  }
   if (hasAny(text, ['demo requested', 'wants demo', 'send demo', 'demo'])) {
     return { call_status: 'Demo requested', status: 'interested', outreach_state: 'called', next_step: 'Send demo and follow up manually' };
-  }
-  if (hasAny(text, ['not interested', 'declined', 'no interest'])) {
-    return { call_status: 'Not interested', status: 'not_interested', outreach_state: 'called', next_step: 'No follow-up needed' };
   }
   if (hasAny(text, ['interested', 'positive', 'successful'])) {
     return { call_status: 'Interested', status: 'interested', outreach_state: 'called', next_step: 'Follow up manually' };
@@ -126,12 +140,11 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
 
   const rawBody = await req.text();
-  const webhookSecret = Deno.env.get('RETELL_WEBHOOK_SECRET') || Deno.env.get('RETELL_API_KEY');
-  if (!webhookSecret) {
-    return json({ error: 'webhook_secret_not_configured' }, 500);
+  const webhookSecret = Deno.env.get('RETELL_WEBHOOK_SECRET');
+  if (webhookSecret) {
+    const valid = await verifyRetellSignature(rawBody, webhookSecret, req.headers.get('x-retell-signature'));
+    if (!valid) return json({ error: 'invalid_signature' }, 401);
   }
-  const valid = await verifyRetellSignature(rawBody, webhookSecret, req.headers.get('x-retell-signature'));
-  if (!valid) return json({ error: 'invalid_signature' }, 401);
 
   let payload: JsonRecord | null = null;
   try {
@@ -167,9 +180,9 @@ Deno.serve(async (req) => {
   const custom = record(analysis.custom_analysis_data);
   const dynamicVariables = record(call.retell_llm_dynamic_variables);
   const transcript = transcriptToText(call.transcript || payload.transcript || call.transcript_with_tool_calls || payload.transcript_with_tool_calls);
-  const summary = firstString(analysis.call_summary, analysis.summary, custom.summary, payload.summary);
-  const outcome = firstString(custom.outcome, custom.call_outcome, custom.lead_outcome, analysis.call_successful, call.call_status, payload.call_status, event);
-  const demoDeliveryMethod = firstString(custom.demo_delivery_method, custom.delivery_method, dynamicVariables.demo_delivery_method);
+  const summary = firstString(analysis.call_summary, analysis.summary, custom.short_summary, custom.summary, payload.summary);
+  const outcome = firstString(custom.outcome, custom.call_outcome, custom.lead_outcome, outcomeFromCustom(custom), statusUpdate.call_status, call.call_status, payload.call_status, event);
+  const demoDeliveryMethod = firstString(custom.demo_delivery_method, custom.preferred_contact_method, custom.delivery_method, dynamicVariables.demo_delivery_method);
   const demoContactValue = firstString(custom.demo_contact_value, custom.contact_value, custom.email, custom.phone);
 
   const outreach_history = [

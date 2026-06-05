@@ -31,14 +31,35 @@ export default function CallListPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .or('retell_call_id.not.is.null,last_called_at.not.is.null,call_summary.not.is.null,call_transcript.not.is.null,call_status.neq.New')
-        .order('last_called_at', { ascending: false, nullsFirst: false })
-        .limit(200);
-      if (error) throw error;
-      setLeads(data as Lead[]);
+      const allLeads: Lead[] = [];
+      const pageSize = 1000;
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+
+        allLeads.push(...(data as Lead[]));
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      const aiCallLeads = allLeads.filter((lead) => (
+        !!(lead.retell_call_id || lead.last_called_at || lead.call_summary || lead.call_transcript)
+        || (!!lead.call_status && lead.call_status !== 'New')
+      ));
+      aiCallLeads.sort((a, b) => {
+        const aTime = new Date(a.last_called_at || a.updated_at || a.created_at).getTime();
+        const bTime = new Date(b.last_called_at || b.updated_at || b.created_at).getTime();
+        return bTime - aTime;
+      });
+      setLeads(aiCallLeads.slice(0, 200));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to load AI calls');
     } finally {

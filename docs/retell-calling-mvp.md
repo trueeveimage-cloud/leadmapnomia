@@ -16,7 +16,7 @@ LEADMAP_DEMO_LINK=https://...
 
 `RETELL_FROM_NUMBER` and lead phone numbers must be E.164 numbers, for example `+46701234567`.
 
-`RETELL_WEBHOOK_SECRET` should be the Retell webhook API key used to verify the `X-Retell-Signature` HMAC signature. If it is not set, the function falls back to `RETELL_API_KEY`.
+`RETELL_WEBHOOK_SECRET` should be the Retell webhook API key used to verify the `X-Retell-Signature` HMAC signature. For the MVP, signature verification is skipped when this secret is not set.
 
 ## Deploy functions
 

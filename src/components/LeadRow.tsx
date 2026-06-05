@@ -4,7 +4,7 @@ import { useCRM } from '@/context/CRMContext';
 import { CallButton } from './CallButton';
 import { DemoFormModal, DemoBriefSummary } from './DemoFormModal';
 import { Button } from '@/components/ui/button';
-import { ExternalLink, Phone, Mail, Star, MapPin, Globe, Trash2, ArrowRight, FileEdit } from 'lucide-react';
+import { Bot, ExternalLink, Phone, Mail, Star, MapPin, Globe, Trash2, ArrowRight, FileEdit } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -43,6 +43,17 @@ const TRIAGE_BUTTONS: { section: LeadSection; label: string; color: string }[] =
   { section: 'both', label: 'Both', color: 'hsl(262 83% 65%)' },
   { section: 'missing', label: 'Missing', color: 'hsl(38 95% 55%)' },
 ];
+
+const AI_CALL_COLORS: Record<string, string> = {
+  Calling: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  'Demo requested': 'bg-green-500/10 text-green-400 border-green-500/20',
+  'Meeting requested': 'bg-green-500/10 text-green-400 border-green-500/20',
+  Interested: 'bg-green-500/10 text-green-400 border-green-500/20',
+  'No answer': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  'Not interested': 'bg-red-500/10 text-red-400 border-red-500/20',
+  'Do not contact': 'bg-red-500/10 text-red-400 border-red-500/20',
+  Error: 'bg-red-500/10 text-red-400 border-red-500/20',
+};
 
 interface LeadRowProps {
   lead: Lead;
@@ -106,6 +117,8 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
 
   const isGmail = lead.email?.toLowerCase().includes('@gmail.com');
   const isOverdue = lead.next_action_at && new Date(lead.next_action_at) < new Date();
+  const hasAiCall = !!(lead.retell_call_id || lead.call_status || lead.call_summary || lead.call_transcript);
+  const aiStatus = lead.call_status || (lead.retell_call_id ? 'Calling' : '');
 
   return (
     <div className={cn('lead-row px-4 py-2.5 grid gap-3 items-start', showTriage ? 'grid-cols-[20px_1fr_auto]' : 'grid-cols-[20px_1fr_auto]')}>
@@ -229,6 +242,34 @@ export function LeadRow({ lead, showTriage, onUpdate, onDelete, selected, onSele
 
         {lead.notes && lead.status !== 'demo' && (
           <div className="text-xs text-muted-foreground mt-1 italic truncate max-w-[400px]">{lead.notes}</div>
+        )}
+
+        {hasAiCall && (
+          <div className="mt-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                <Bot size={12} className="text-primary" />
+                AI call
+              </span>
+              {aiStatus && (
+                <span className={cn('status-pill text-xs', AI_CALL_COLORS[aiStatus] || 'bg-muted text-muted-foreground border-border')}>
+                  {aiStatus}
+                </span>
+              )}
+              {lead.call_outcome && lead.call_outcome !== aiStatus && (
+                <span className="text-xs text-muted-foreground">{lead.call_outcome}</span>
+              )}
+              {lead.last_called_at && (
+                <span className="text-[10px] text-muted-foreground">{format(new Date(lead.last_called_at), 'MMM d h:mma')}</span>
+              )}
+            </div>
+            {lead.call_summary && (
+              <div className="mt-1 text-xs text-muted-foreground line-clamp-2 max-w-2xl">{lead.call_summary}</div>
+            )}
+            {lead.next_step && (
+              <div className="mt-1 text-xs text-primary line-clamp-1">{lead.next_step}</div>
+            )}
+          </div>
         )}
       </div>
 
