@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
   const payloadMetadata = record(payload.metadata);
   const callId = firstString(call.call_id, payload.call_id);
   const leadId = firstString(callMetadata.lead_id, payloadMetadata.lead_id);
-  if (!callId && !leadId) return json({ error: 'missing_call_or_lead_id' }, 400);
+  if (!callId && !leadId) return json({ success: true, skipped: true, reason: 'missing_call_or_lead_id' });
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let query = supabase.from('leads').select('*').limit(1);
