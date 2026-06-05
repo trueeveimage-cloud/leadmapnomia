@@ -216,8 +216,10 @@ export default function DashboardPage() {
         SE: { runs: 0, leads: 0, spend: 0, cities: 0 },
         NO: { runs: 0, leads: 0, spend: 0, cities: 0 },
         DK: { runs: 0, leads: 0, spend: 0, cities: 0 },
+        UK: { runs: 0, leads: 0, spend: 0, cities: 0 },
+        ES: { runs: 0, leads: 0, spend: 0, cities: 0 },
       };
-      const citySets: Record<Country, Set<string>> = { SE: new Set(), NO: new Set(), DK: new Set() };
+      const citySets: Record<Country, Set<string>> = { SE: new Set(), NO: new Set(), DK: new Set(), UK: new Set(), ES: new Set() };
       for (const run of (runs || [])) {
         const city = findCity(run.city);
         const c = city?.country || 'SE';
