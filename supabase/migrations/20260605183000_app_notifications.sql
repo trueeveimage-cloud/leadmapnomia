@@ -24,3 +24,11 @@ CREATE POLICY "Authenticated access on app_notifications"
   TO authenticated
   USING (true)
   WITH CHECK (true);
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.app_notifications;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END $$;

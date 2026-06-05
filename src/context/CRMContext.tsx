@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { fetchLeadCounts } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface Counts {
   total: number;
@@ -129,7 +130,22 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     refreshNotifications();
     // Refresh notifications every 60 seconds
     const interval = setInterval(refreshNotifications, 15000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel('app-notifications-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_notifications' },
+        (payload) => {
+          const row = payload.new as any;
+          if (row?.title) toast.message(row.title, { description: row.message || undefined });
+          refreshNotifications();
+        }
+      )
+      .subscribe();
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [refreshCounts, refreshNotifications]);
 
   return (

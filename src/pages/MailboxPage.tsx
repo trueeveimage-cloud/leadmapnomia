@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Mail, Send, Search, Loader2, RefreshCw, Inbox, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import type { Lead } from '@/lib/supabase';
+import { createNotification, type Lead } from '@/lib/supabase';
 
 interface GmailMsg {
   id: string;
@@ -65,6 +65,66 @@ export default function MailboxPage() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+
+  const extractAddress = (value: string) => {
+    const match = value?.match(/<([^>]+)>/) || value?.match(/([\w.+-]+@[\w-]+\.[\w.-]+)/);
+    return (match?.[1] || value || '').trim().toLowerCase();
+  };
+
+  const syncInboundGmailReplies = async (gmailMessages: GmailMsg[], linkedLead?: Lead | null) => {
+    const inbound = gmailMessages.filter((message) => !message.labels?.includes('SENT'));
+    if (inbound.length === 0) return;
+
+    for (const message of inbound) {
+      const fromEmail = extractAddress(message.from);
+      if (!fromEmail) continue;
+
+      let targetLead = linkedLead && linkedLead.email?.toLowerCase() === fromEmail ? linkedLead : null;
+      if (!targetLead) {
+        const { data } = await supabase
+          .from('leads')
+          .select('*')
+          .ilike('email', fromEmail)
+          .limit(1)
+          .maybeSingle();
+        targetLead = data as Lead | null;
+      }
+      if (!targetLead) continue;
+
+      const providerId = message.id || `${targetLead.id}:${message.internalDate}`;
+      const { data: existing } = await supabase
+        .from('message_logs')
+        .select('id')
+        .eq('provider_message_sid', providerId)
+        .limit(1);
+      if (existing?.length) continue;
+
+      const bodyText = message.body || message.snippet || message.subject || '';
+      await supabase.from('message_logs').insert({
+        lead_id: targetLead.id,
+        direction: 'inbound',
+        channel: 'email',
+        from_number: fromEmail,
+        to_number: extractAddress(message.to),
+        body: bodyText,
+        provider: 'gmail',
+        provider_message_sid: providerId,
+        status: 'received',
+        product: (targetLead as any).product || 'leadmap',
+      } as any);
+
+      const inboundAt = message.internalDate ? new Date(message.internalDate).toISOString() : new Date().toISOString();
+      await supabase.from('leads').update({
+        has_replied: true,
+        last_inbound_at: inboundAt,
+        outreach_stage: 'replied',
+        outreach_state: 'replied',
+        last_message_preview: bodyText.slice(0, 140),
+        last_message_direction: 'inbound',
+        last_message_status: 'received',
+      } as any).eq('id', targetLead.id);
+    }
+  };
 
   // Fetch connected Gmail address once
   useEffect(() => {
@@ -125,6 +185,7 @@ export default function MailboxPage() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error(JSON.stringify((data as any).error));
       const newMsgs = (data as any).messages || [];
+      await syncInboundGmailReplies(newMsgs, lead);
       setMessages((prev) => {
         const combined = isFirstPage ? newMsgs : [...prev, ...newMsgs];
         // dedupe by id, keep newest-first sort
@@ -179,6 +240,12 @@ export default function MailboxPage() {
       const d = data as any;
       if (d?.skipped) toast.message('Skipped: ' + d.reason);
       else if (d?.success) {
+        await createNotification({
+          type: 'gmail_batch_done',
+          title: 'Manual Gmail email sent',
+          message: `Sent email to ${email}.`,
+          payload: { leadId: lead?.id || '', to: email, subject },
+        });
         toast.success('Email sent');
         setSubject(''); setBody('');
         setTimeout(() => loadThread(email), 1500);
@@ -227,7 +294,9 @@ export default function MailboxPage() {
                     const { data } = await supabase.functions.invoke('gmail-thread', {
                       body: { email: 'in:inbox', max: 25 },
                     });
-                    setInboxMsgs((data as any)?.messages || []);
+                    const messages = (data as any)?.messages || [];
+                    await syncInboundGmailReplies(messages, null);
+                    setInboxMsgs(messages);
                   } catch (e: any) {
                     toast.error('Failed to load inbox: ' + (e?.message || 'unknown'));
                   } finally { setInboxLoading(false); }

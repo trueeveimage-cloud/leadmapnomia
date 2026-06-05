@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
 import { fetchFinderRunsByBatch, fetchFinderCandidatesByBatch, stopFinderRun, candidatesToCsv, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
-import { addLead, determineSection } from '@/lib/supabase';
+import { addLead, createNotification, determineSection } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
@@ -109,7 +109,15 @@ export default function FinderBatchPage() {
       }
       refreshCounts();
       setBulkAdding(false);
-      if (added > 0) toast.success(`Auto-added ${added} leads from ${doneRuns.length} cities`);
+      if (added > 0) {
+        await createNotification({
+          type: 'lead_added',
+          title: 'Finder batch auto-added leads',
+          message: `Added ${added} leads from ${doneRuns.length} cities.`,
+          payload: { added, cities: doneRuns.length, batchId: batchId || '' },
+        });
+        toast.success(`Auto-added ${added} leads from ${doneRuns.length} cities`);
+      }
     })();
   }, [runs, candidates, addedIds, bulkAdding]);
 
@@ -142,8 +150,8 @@ export default function FinderBatchPage() {
     setScrapingEmails(true);
     setScrapeProgress({ done: 0, total: leadsWithWebsite.length, found: 0 });
     let totalFound = 0;
-    for (let i = 0; i < leadsWithWebsite.length; i += 5) {
-      const batch = leadsWithWebsite.slice(i, i + 5).map(l => ({ leadId: l.id, website: l.website! }));
+    for (let i = 0; i < leadsWithWebsite.length; i += 4) {
+      const batch = leadsWithWebsite.slice(i, i + 4).map(l => ({ leadId: l.id, website: l.website! }));
       try {
         const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
         if (!error && data?.results) {
@@ -158,11 +166,17 @@ export default function FinderBatchPage() {
           }
         }
       } catch {}
-      setScrapeProgress({ done: Math.min(i + 5, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
+      setScrapeProgress({ done: Math.min(i + 4, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
     }
     setScrapingEmails(false);
     setScrapeProgress(null);
     refreshCounts();
+    await createNotification({
+      type: 'email_scrape_done',
+      title: 'Finder batch email scrape finished',
+      message: `Found ${totalFound} emails from ${leadsWithWebsite.length} lead websites.`,
+      payload: { found: totalFound, checked: leadsWithWebsite.length, batchId: batchId || '' },
+    });
     if (totalFound > 0) toast.success(`Found ${totalFound} emails!`);
     else toast.info('No emails found');
   };
@@ -206,6 +220,12 @@ export default function FinderBatchPage() {
     }
     refreshCounts();
     setBulkAdding(false);
+    await createNotification({
+      type: 'lead_added',
+      title: 'Finder batch add finished',
+      message: `${added} leads added, ${skipped} skipped.`,
+      payload: { added, skipped, selected: targets.length, batchId: batchId || '' },
+    });
     toast.success(`Added ${added} leads to CRM${skipped > 0 ? ` (${skipped} skipped)` : ''}`);
   };
 

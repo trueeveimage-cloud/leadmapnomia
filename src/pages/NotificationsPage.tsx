@@ -13,6 +13,14 @@ const ICONS: Record<string, React.ReactNode> = {
   gmail_batch_done: <Mail className="h-4 w-4" />,
   sms_batch_done: <Send className="h-4 w-4" />,
   ai_call_done: <PhoneCall className="h-4 w-4" />,
+  ai_call_started: <PhoneCall className="h-4 w-4" />,
+  inbound_reply: <Mail className="h-4 w-4" />,
+  lead_status_changed: <Check className="h-4 w-4" />,
+  follow_up_set: <Bell className="h-4 w-4" />,
+  lead_added: <Check className="h-4 w-4" />,
+  bulk_import_done: <Check className="h-4 w-4" />,
+  settings_changed: <Check className="h-4 w-4" />,
+  outreach_skipped: <AlertCircle className="h-4 w-4" />,
   system_error: <AlertCircle className="h-4 w-4" />,
 };
 

@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { updateLead, logActivity, type Lead } from '@/lib/supabase';
+import { createNotification, updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
 import EmailOutreachModal from '@/components/EmailOutreachModal';
 import { getOutreachBlockReason } from '@/lib/outreachLock';
@@ -92,6 +92,12 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.message || data.error);
+      await createNotification({
+        type: 'ai_call_started',
+        title: 'AI call started',
+        message: `${lead.name}${data?.retell_call_id ? ` - ${data.retell_call_id}` : ''}`,
+        payload: { leadId: lead.id, leadName: lead.name, retell_call_id: data?.retell_call_id || '' },
+      });
       toast.success(data?.retell_call_id ? `AI call started: ${data.retell_call_id}` : 'AI call started');
       onUpdated?.();
     } catch (e: unknown) {

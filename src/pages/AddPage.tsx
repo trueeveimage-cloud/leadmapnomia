@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Input } from '@/components/ui/input';
 import { fetchPlaceFromUrl } from '@/lib/placesFetch';
-import { addLead, determineSection, Lead } from '@/lib/supabase';
+import { addLead, createNotification, determineSection, Lead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -65,6 +65,12 @@ export default function AddPage() {
       setLastAdded(lead!);
       setUrl('');
       refreshCounts();
+      await createNotification({
+        type: 'lead_added',
+        title: 'Lead added',
+        message: result.name,
+        payload: { leadId: lead?.id || '', name: result.name, source: 'manual_maps_link' },
+      });
       toast.success(`Added "${result.name}" to Unsorted`);
       inputRef.current?.focus();
     } finally {

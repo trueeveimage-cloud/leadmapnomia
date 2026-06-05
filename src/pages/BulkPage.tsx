@@ -2,7 +2,7 @@ import React from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { fetchPlaceFromUrl } from '@/lib/placesFetch';
-import { addLead } from '@/lib/supabase';
+import { addLead, createNotification } from '@/lib/supabase';
 import { useCRM, ImportResult } from '@/context/CRMContext';
 import { Loader2, CheckCircle, XCircle, AlertCircle, Layers, Square } from 'lucide-react';
 import { toast } from 'sonner';
@@ -85,8 +85,16 @@ export default function BulkPage() {
 
     refreshCounts();
     setBulkImport(s => ({ ...s, loading: false }));
+    const added = newResults.filter(r => r.status === 'added').length;
+    const duplicates = newResults.filter(r => r.status === 'duplicate').length;
+    const failedCount = newResults.filter(r => r.status === 'failed').length;
+    await createNotification({
+      type: 'bulk_import_done',
+      title: bulkStopRef.current ? 'Bulk import stopped' : 'Bulk import finished',
+      message: `${added} added, ${duplicates} duplicates, ${failedCount} failed.`,
+      payload: { added, duplicates, failed: failedCount, total: urls.length, stopped: bulkStopRef.current },
+    });
     if (!bulkStopRef.current) {
-      const added = newResults.filter(r => r.status === 'added').length;
       toast.success(`Import complete: ${added} added`);
     }
   };

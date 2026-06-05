@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
-import { Lead, updateLead, logActivity } from '@/lib/supabase';
+import { createNotification, Lead, updateLead, logActivity } from '@/lib/supabase';
 import { detectLeadCountry } from '@/lib/countryRouting';
 import { useCRM } from '@/context/CRMContext';
 import { Phone, Star, Clock, SkipForward, MessageSquare, Copy, Check, X, ChevronRight, User, DollarSign, Trophy, Target, Bot, Loader2 } from 'lucide-react';
@@ -297,6 +297,12 @@ export default function NextLeadPage({ mode = 'nomia' }: NextLeadPageProps = {})
         last_called_at: now,
         last_contacted_at: now,
         last_contact_method: 'AI Call',
+      });
+      await createNotification({
+        type: 'ai_call_started',
+        title: 'AI call started',
+        message: `${lead.name}${data?.retell_call_id ? ` - ${data.retell_call_id}` : ''}`,
+        payload: { leadId: lead.id, leadName: lead.name, retell_call_id: data?.retell_call_id || '' },
       });
       toast.success(`AI call started${data?.retell_call_id ? `: ${data.retell_call_id}` : ''}`);
       refreshCounts();

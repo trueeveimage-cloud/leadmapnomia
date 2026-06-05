@@ -5,6 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+async function notify(dbClient: any, input: { type: string; title: string; message: string; payload?: Record<string, unknown> }) {
+  await dbClient.from('app_notifications').insert({
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    payload: input.payload || {},
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -77,6 +86,12 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       if (!lockResult?.allowed) {
+        await notify(dbClient, {
+          type: 'outreach_skipped',
+          title: 'SMS skipped: outreach locked',
+          message: `${leadRecord?.name || toNumber} was blocked by the outreach lock.`,
+          payload: { leadId, phone: toNumber, reason: lockResult?.reason || 'outreach_locked' },
+        });
         return new Response(JSON.stringify({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     } else {
@@ -107,6 +122,12 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       if (!lockResult?.allowed) {
+        await notify(dbClient, {
+          type: 'outreach_skipped',
+          title: 'SMS skipped: outreach locked',
+          message: `${leadRecord?.name || toNumber} was blocked by the outreach lock.`,
+          payload: { leadId: resolvedLeadId || '', phone: toNumber, reason: lockResult?.reason || 'outreach_locked' },
+        });
         return new Response(JSON.stringify({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
@@ -133,6 +154,14 @@ Deno.serve(async (req) => {
 
     if (!resp.ok) {
       console.error('Twilio error:', resp.status, JSON.stringify(json));
+      if (resolvedLeadId) {
+        await notify(dbClient, {
+          type: 'system_error',
+          title: 'SMS send failed',
+          message: `${leadRecord?.name || e164}: ${json.message || 'Twilio error'}`,
+          payload: { leadId: resolvedLeadId, phone: e164, status: resp.status, code: json.code || '', error: json.message || 'Twilio error' },
+        });
+      }
       return new Response(JSON.stringify({ error: json.message || 'Twilio error', code: json.code, status: resp.status }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

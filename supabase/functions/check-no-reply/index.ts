@@ -60,6 +60,15 @@ Deno.serve(async (req) => {
       if (!upErr) updated++;
     }
 
+    if (updated > 0) {
+      await supabase.from('app_notifications').insert({
+        type: 'follow_up_set',
+        title: 'No-reply leads moved to call list',
+        message: `${updated} leads did not reply after ${callAfterHours} hours and now need a call.`,
+        payload: { updated, processed: leads?.length || 0, callAfterHours },
+      });
+    }
+
     return new Response(JSON.stringify({ success: true, processed: leads?.length || 0, updated }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

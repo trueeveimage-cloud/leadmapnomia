@@ -44,6 +44,15 @@ function jsonResp(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
+async function notify(supabase: any, input: { type: string; title: string; message: string; payload?: Record<string, unknown> }) {
+  await supabase.from('app_notifications').insert({
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    payload: input.payload || {},
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -71,6 +80,12 @@ Deno.serve(async (req) => {
     const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
     leadRecord = lead;
     if (lead?.outreach_opt_out || lead?.do_not_contact || lead?.outreach_state === 'do_not_contact') {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: do not contact',
+        message: `${lead?.name || to} is blocked from outreach.`,
+        payload: { leadId, to, reason: 'opt_out' },
+      });
       return jsonResp({ skipped: true, reason: 'opt_out' });
     }
   }
@@ -83,6 +98,12 @@ Deno.serve(async (req) => {
       .eq('lead_id', leadId).eq('channel', 'email').eq('direction', 'outbound')
       .in('status', ['sent', 'queued']).limit(1);
     if (existing && existing.length > 0) {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: lead already emailed',
+        message: `${leadRecord?.name || to} was already emailed.`,
+        payload: { leadId, to, reason: 'already_emailed' },
+      });
       return jsonResp({ skipped: true, reason: 'already_emailed' });
     }
   }
@@ -104,6 +125,12 @@ Deno.serve(async (req) => {
       .in('lead_id', matchingLeadIds)
       .limit(1);
     if (existingByEmail && existingByEmail.length > 0) {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: email already contacted',
+        message: `${to} was already contacted on another lead row.`,
+        payload: { leadId: leadId || '', to, reason: 'email_already_contacted', matchedLeadId: existingByEmail[0].lead_id },
+      });
       return jsonResp({ skipped: true, reason: 'email_already_contacted' });
     }
   }
@@ -116,6 +143,12 @@ Deno.serve(async (req) => {
     });
     if (lockError) return jsonResp({ error: 'outreach_lock_failed', details: lockError.message }, 500);
     if (!lockResult?.allowed) {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: outreach locked',
+        message: `${leadRecord?.name || to} was blocked by the outreach lock.`,
+        payload: { leadId, to, reason: lockResult?.reason || 'outreach_locked' },
+      });
       return jsonResp({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }, 409);
     }
   }
@@ -136,6 +169,12 @@ Deno.serve(async (req) => {
         error_message: `daily_cap reached (${sentToday}/${dailyCap})`,
       } as any);
     }
+    await notify(supabase, {
+      type: 'outreach_skipped',
+      title: 'Gmail skipped: daily cap reached',
+      message: `Daily cap reached (${sentToday}/${dailyCap}).`,
+      payload: { leadId: leadId || '', to, reason: 'daily_cap', sentToday: sentToday ?? 0, dailyCap },
+    });
     return jsonResp({ skipped: true, reason: 'daily_cap', sentToday, dailyCap });
   }
 
@@ -170,6 +209,12 @@ Deno.serve(async (req) => {
           error_message: JSON.stringify(data).slice(0, 500),
         } as any);
       }
+      await notify(supabase, {
+        type: 'system_error',
+        title: 'Gmail send failed',
+        message: `${to}: Gmail API returned ${resp.status}.`,
+        payload: { leadId: leadId || '', to, status: resp.status, error: JSON.stringify(data).slice(0, 300) },
+      });
       return jsonResp({ error: 'gmail_send_failed', status: resp.status, details: data }, 502);
     }
 
