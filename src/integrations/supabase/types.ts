@@ -46,6 +46,36 @@ export type Database = {
           },
         ]
       }
+      app_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          payload: Json
+          read_at: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string
+          payload?: Json
+          read_at?: string | null
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          payload?: Json
+          read_at?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       caller_sessions: {
         Row: {
           caller_id: string
