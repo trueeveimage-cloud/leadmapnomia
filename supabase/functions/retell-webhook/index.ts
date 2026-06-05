@@ -201,5 +201,20 @@ Deno.serve(async (req) => {
     payload: { event_id: eventId, event, retell_call_id: callId, outcome },
   });
 
+  if (['call_ended', 'call_analyzed', 'call_failed'].includes(event)) {
+    await supabase.from('app_notifications').insert({
+      type: 'ai_call_done',
+      title: event === 'call_failed' ? 'AI call failed' : 'AI call finished',
+      message: `${firstString(lead.name, 'Lead')} result: ${firstString(statusUpdate.call_status, outcome, 'Unknown')}.`,
+      payload: {
+        leadId: String(lead.id),
+        leadName: firstString(lead.name),
+        retell_call_id: callId,
+        event,
+        outcome,
+      },
+    });
+  }
+
   return json({ success: true });
 });

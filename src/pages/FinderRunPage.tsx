@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
 import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
-import { addLead, determineSection, updateLead } from '@/lib/supabase';
+import { addLead, createNotification, determineSection, updateLead } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
@@ -32,6 +32,7 @@ export default function FinderRunPage() {
   const [scrapeProgress, setScrapeProgress] = useState<{ done: number; total: number; found: number } | null>(null);
   const autoAddedRef = React.useRef(false);
   const autoResumeRef = React.useRef(false);
+  const notifiedRunRef = React.useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -53,6 +54,26 @@ export default function FinderRunPage() {
     }, 3000);
     return () => clearInterval(interval);
   }, [load, run?.status]);
+
+  useEffect(() => {
+    if (!run || !['done', 'stopped', 'error'].includes(run.status)) return;
+    if (notifiedRunRef.current === `${run.id}:${run.status}`) return;
+    const storageKey = `crm.notifiedFinderRun.${run.id}.${run.status}`;
+    if (localStorage.getItem(storageKey)) return;
+    notifiedRunRef.current = `${run.id}:${run.status}`;
+    createNotification({
+      type: 'lead_find_done',
+      title: run.status === 'done' ? 'Lead finder run finished' : `Lead finder run ${run.status}`,
+      message: `${run.city} finished with ${candidates.length} candidates.`,
+      payload: {
+        runId: run.id,
+        city: run.city,
+        status: run.status,
+        candidates: candidates.length,
+        batch: run.batch_label || '',
+      },
+    }).then(() => localStorage.setItem(storageKey, 'true')).catch(() => {});
+  }, [run?.id, run?.status, candidates.length]);
 
   // Auto-add qualifying candidates to CRM when run finishes
   useEffect(() => {
@@ -163,8 +184,8 @@ export default function FinderRunPage() {
     setScrapingEmails(true);
     setScrapeProgress({ done: 0, total: leadsWithWebsite.length, found: 0 });
     let totalFound = 0;
-    for (let i = 0; i < leadsWithWebsite.length; i += 5) {
-      const batch = leadsWithWebsite.slice(i, i + 5).map(l => ({ leadId: l.id, website: l.website! }));
+    for (let i = 0; i < leadsWithWebsite.length; i += 4) {
+      const batch = leadsWithWebsite.slice(i, i + 4).map(l => ({ leadId: l.id, website: l.website! }));
       try {
         const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
         if (!error && data?.results) {
@@ -181,11 +202,17 @@ export default function FinderRunPage() {
       } catch (e) {
         console.error('Scrape batch error:', e);
       }
-      setScrapeProgress({ done: Math.min(i + 5, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
+      setScrapeProgress({ done: Math.min(i + 4, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
     }
     setScrapingEmails(false);
     setScrapeProgress(null);
     refreshCounts();
+    await createNotification({
+      type: 'email_scrape_done',
+      title: 'Finder email scrape finished',
+      message: `Found ${totalFound} emails from ${leadsWithWebsite.length} lead websites.`,
+      payload: { found: totalFound, checked: leadsWithWebsite.length, runId: id || '' },
+    });
     if (totalFound > 0) toast.success(`Found ${totalFound} emails from websites!`);
     else toast.info('No emails found on any websites');
   };

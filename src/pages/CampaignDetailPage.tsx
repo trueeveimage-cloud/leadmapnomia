@@ -15,6 +15,7 @@ import type { AudienceFilter } from '@/lib/campaigns';
 import { toast } from 'sonner';
 import type { Country } from '@/lib/cities';
 import CountryFlag, { countryLabel } from '@/components/CountryFlag';
+import { createNotification } from '@/lib/supabase';
 
 const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
   { value: 'SE', label: 'Sweden' },
@@ -206,6 +207,18 @@ export default function CampaignDetailPage() {
       if (data.error) {
         toast.error(data.error);
       } else {
+        await createNotification({
+          type: 'sms_batch_done',
+          title: 'SMS campaign batch finished',
+          message: `${data.stats?.sent ?? 0} sent, ${data.stats?.scanned ?? data.stats?.attempted ?? 0} scanned.`,
+          payload: {
+            campaignId: id,
+            sent: data.stats?.sent ?? 0,
+            scanned: data.stats?.scanned ?? data.stats?.attempted ?? 0,
+            skipped_landline: data.stats?.skipped_landline ?? 0,
+            countries: selectedCountries.join(','),
+          },
+        });
         toast.success(`Sent ${data.stats?.sent ?? 0} messages (${data.stats?.scanned ?? data.stats?.attempted ?? 0} scanned, ${data.stats?.skipped_landline ?? 0} landlines skipped)`);
       }
       setCustomBatchSize('');

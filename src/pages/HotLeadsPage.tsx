@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/components/ui/card';
 import { Loader2, Flame, RefreshCcw, ChevronDown, ChevronUp, Search, Mail, Crown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchLeads, updateLead, type Lead, type LeadTier } from '@/lib/supabase';
+import { createNotification, fetchLeads, updateLead, type Lead, type LeadTier } from '@/lib/supabase';
 import { calculateScore, detectNiche, generateWhyGoodLead, NICHE_PROFILES, type NicheKey } from '@/lib/leadScoring';
 import { TierBadge, ScoreRing, MetaBadge } from '@/components/LeadScoreBadge';
 import LeadQuickActions from '@/components/LeadQuickActions';
@@ -214,6 +214,12 @@ export default function HotLeadsPage() {
         } catch (e) { console.error('scrape batch', e); }
         setScrapeProgress({ done: Math.min(i + 4, targets.length), total: targets.length, found });
       }
+      await createNotification({
+        type: 'email_scrape_done',
+        title: 'Filtered email scrape finished',
+        message: `Found emails for ${found} of ${targets.length} filtered leads.`,
+        payload: { found, checked: targets.length, view: viewMode },
+      });
       toast.success(`Found emails for ${found} / ${targets.length} leads`);
       await load();
     } finally { setScraping(false); }

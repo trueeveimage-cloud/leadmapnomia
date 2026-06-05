@@ -23,6 +23,20 @@ function personalize(t: string, lead: any) {
     .replace(/\{city\}/g, (lead.address || '').split(',').slice(-2)[0]?.trim() || '');
 }
 
+async function recordNotification(supabase: any, input: {
+  type: string;
+  title: string;
+  message: string;
+  payload?: Record<string, unknown>;
+}) {
+  await supabase.from('app_notifications').insert({
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    payload: input.payload || {},
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -49,12 +63,24 @@ Deno.serve(async (req) => {
     const bodyTpl = cfg.gmail_autosend_body || DEFAULT_BODY;
 
     if (!enabled && !force) {
+      await recordNotification(supabase, {
+        type: 'gmail_batch_done',
+        title: 'Gmail auto-send skipped',
+        message: 'Auto-send is disabled.',
+        payload: { reason: 'disabled' },
+      });
       return new Response(JSON.stringify({ skipped: true, reason: 'disabled' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Business day check (Mon=1..Fri=5, UTC) — bypass if force flag set
     const dow = new Date().getUTCDay();
     if (!force && (dow === 0 || dow === 6)) {
+      await recordNotification(supabase, {
+        type: 'gmail_batch_done',
+        title: 'Gmail auto-send skipped',
+        message: 'Auto-send does not run on weekends.',
+        payload: { reason: 'weekend' },
+      });
       return new Response(JSON.stringify({ skipped: true, reason: 'weekend' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -66,6 +92,12 @@ Deno.serve(async (req) => {
       .gte('created_at', startOfDay.toISOString());
     const remaining = Math.max(0, daily - (sentToday ?? 0));
     if (remaining === 0) {
+      await recordNotification(supabase, {
+        type: 'gmail_batch_done',
+        title: 'Gmail auto-send skipped',
+        message: 'Daily email cap was already reached.',
+        payload: { reason: 'daily_cap_reached', sentToday: sentToday ?? 0, daily },
+      });
       return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -121,6 +153,13 @@ Deno.serve(async (req) => {
     if (force) {
       await supabase.from('settings').update({ value: 'false', updated_at: new Date().toISOString() } as any).eq('key', 'gmail_autosend_force');
     }
+
+    await recordNotification(supabase, {
+      type: 'gmail_batch_done',
+      title: force ? 'Manual Gmail auto-send finished' : 'Scheduled Gmail auto-send finished',
+      message: `${sent} sent, ${skipped} skipped, ${failed} failed.`,
+      payload: { sent, skipped, failed, remaining: remaining - sent, forced: force },
+    });
 
     return new Response(JSON.stringify({
       success: true,

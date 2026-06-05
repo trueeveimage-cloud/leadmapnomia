@@ -8,7 +8,7 @@ import { Mail, Loader2, MapPin, Sparkles, Search } from 'lucide-react';
 import { createFinderRun, runFinderSearch } from '@/lib/finder';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { determineSection, updateLead } from '@/lib/supabase';
+import { createNotification, determineSection, updateLead } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 
 // Curated niches optimized for Gmail discovery:
@@ -172,6 +172,12 @@ export default function EmailFinderPage() {
       }
 
       await refreshCounts();
+      await createNotification({
+        type: 'email_scrape_done',
+        title: 'Email scrape finished',
+        message: `Found emails for ${found} of ${targets.length} eligible saved leads.`,
+        payload: { found, checked: targets.length, totalSaved, withWebsite },
+      });
       toast.success(`Found emails for ${found} of ${targets.length} eligible saved leads`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to scrape saved leads');

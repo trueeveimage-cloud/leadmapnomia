@@ -42,6 +42,7 @@ const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
 const EmailFinderPage = lazy(() => import("./pages/EmailFinderPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 
 
 const queryClient = new QueryClient();
@@ -169,6 +170,7 @@ const App = () => (
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
                       <Route path="/bulk" element={<BulkPage />} />

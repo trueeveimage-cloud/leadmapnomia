@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateOutreachMessage, detectNiche } from '@/lib/leadScoring';
 import LeadEmailHistory from '@/components/LeadEmailHistory';
-import type { Lead } from '@/lib/supabase';
+import { createNotification, type Lead } from '@/lib/supabase';
 
 interface Props {
   open: boolean;
@@ -151,6 +151,12 @@ export default function EmailOutreachModal({ open, onOpenChange, leads, onSent }
         // small delay between sends
         if (i < targets.length - 1) await new Promise((r) => setTimeout(r, 1500));
       }
+      await createNotification({
+        type: 'gmail_batch_done',
+        title: 'Manual Gmail batch finished',
+        message: `${sent} sent, ${skipped} skipped, ${failed} failed.`,
+        payload: { sent, skipped, failed, selected: targets.length, stopped: abortRef.current },
+      });
       toast.success(`Sent ${sent} • Skipped ${skipped} • Failed ${failed}`);
       onSent?.();
     } finally {

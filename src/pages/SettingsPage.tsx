@@ -3,7 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { getSetting, setSetting, updateLead, determineSection } from '@/lib/supabase';
+import { createNotification, getSetting, setSetting, updateLead, determineSection } from '@/lib/supabase';
 import { Settings, Save, Download, Check, AlertTriangle, Megaphone, Search, Mail, Zap, Sliders, Trash2 } from 'lucide-react';
 import { setScoringWeights, calculateScore, generateWhyGoodLead } from '@/lib/leadScoring';
 import { Slider } from '@/components/ui/slider';
@@ -93,6 +93,12 @@ export default function SettingsPage() {
       }
 
       refreshCounts();
+      await createNotification({
+        type: 'email_scrape_done',
+        title: 'Bulk email scrape finished',
+        message: `Found emails for ${totalFound} of ${allLeads.length} saved leads.`,
+        payload: { found: totalFound, checked: allLeads.length, stopped: scrapeStopRef.current },
+      });
       toast.success(`Done! Found emails for ${totalFound} leads out of ${allLeads.length}`);
     } catch (e: any) {
       console.error('Bulk scrape error:', e);

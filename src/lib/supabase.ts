@@ -124,6 +124,16 @@ export interface Activity {
   created_at: string;
 }
 
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  payload: Record<string, any>;
+  read_at: string | null;
+  created_at: string;
+}
+
 /** Determine section from contact info */
 export function determineSection(lead: Partial<Lead>): LeadSection {
   const hasPhone = !!(lead.phone && lead.phone.trim());
@@ -251,6 +261,46 @@ export async function fetchActivities(leadId: string): Promise<Activity[]> {
   const { data, error } = await supabase.from('activities').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
   if (error) throw error;
   return data as Activity[];
+}
+
+export async function createNotification(input: {
+  type: string;
+  title: string;
+  message?: string;
+  payload?: Record<string, any>;
+}) {
+  await (supabase as any).from('app_notifications').insert({
+    type: input.type,
+    title: input.title,
+    message: input.message || '',
+    payload: input.payload || {},
+  } as any);
+}
+
+export async function fetchNotifications(limit = 100): Promise<AppNotification[]> {
+  const { data, error } = await (supabase as any)
+    .from('app_notifications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as AppNotification[];
+}
+
+export async function markNotificationRead(id: string) {
+  const { error } = await (supabase as any)
+    .from('app_notifications')
+    .update({ read_at: new Date().toISOString() } as any)
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function markAllNotificationsRead() {
+  const { error } = await (supabase as any)
+    .from('app_notifications')
+    .update({ read_at: new Date().toISOString() } as any)
+    .is('read_at', null);
+  if (error) throw error;
 }
 
 export async function getSetting(key: string): Promise<string | null> {

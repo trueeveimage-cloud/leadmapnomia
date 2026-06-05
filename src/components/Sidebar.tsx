@@ -4,7 +4,7 @@ import { useCRM } from '@/context/CRMContext';
 import { useAuth } from '@/context/AuthContext';
 import { useProduct, type Product } from '@/context/ProductContext';
 import {
-  Bot, BriefcaseBusiness, Inbox, LayoutDashboard, LogOut, Mail, MapPin,
+  Bell, Bot, BriefcaseBusiness, Inbox, LayoutDashboard, LogOut, Mail, MapPin,
   MessageSquare, PhoneCall, Search, Settings, Target, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -78,6 +78,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const crm: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={15} /> },
     { label: 'All Leads', path: '/unsorted', icon: <Users size={15} />, badge: counts.total },
+    { label: 'Notifications', path: '/notifications', icon: <Bell size={15} />, badge: notifications.unreadHistory },
     { label: 'Inbox', path: '/inbox', icon: <Inbox size={15} />, badge: notifications.unreadInbox },
     { label: 'Callbacks', path: '/callbacks', icon: <PhoneCall size={15} />, badge: counts.callbacksDue || counts.callbacks },
     { label: 'Coverage Map', path: '/finder/coverage', icon: <MapPin size={15} /> },

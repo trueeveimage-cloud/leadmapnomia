@@ -43,6 +43,7 @@ interface BulkImportState {
 interface Notifications {
   batchReady: boolean;
   unreadInbox: number;
+  unreadHistory: number;
 }
 
 interface CRMContextValue {
@@ -76,7 +77,7 @@ const CRMContext = createContext<CRMContextValue>({
   bulkStopRef: { current: false },
   sidebarOpen: false,
   setSidebarOpen: () => {},
-  notifications: { batchReady: false, unreadInbox: 0 },
+  notifications: { batchReady: false, unreadInbox: 0, unreadHistory: 0 },
   refreshNotifications: async () => {},
 });
 
@@ -84,7 +85,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [counts, setCounts] = useState<Counts>(defaultCounts);
   const [bulkImport, setBulkImport] = useState<BulkImportState>(defaultBulkImport);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notifications>({ batchReady: false, unreadInbox: 0 });
+  const [notifications, setNotifications] = useState<Notifications>({ batchReady: false, unreadInbox: 0, unreadHistory: 0 });
   const bulkStopRef = useRef(false);
 
   const refreshCounts = useCallback(async () => {
@@ -114,7 +115,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         return new Date(l.last_inbound_at) > new Date(l.read_at);
       }).length;
 
-      setNotifications({ batchReady, unreadInbox });
+      const { count } = await (supabase as any)
+        .from('app_notifications')
+        .select('id', { count: 'exact', head: true })
+        .is('read_at', null);
+
+      setNotifications({ batchReady, unreadInbox, unreadHistory: count || 0 });
     } catch {}
   }, []);
 
