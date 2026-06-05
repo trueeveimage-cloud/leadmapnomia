@@ -62,11 +62,15 @@ export default function DashboardPage() {
     SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
     NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
     DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+    UK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+    ES: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
   });
   const [finderStats, setFinderStats] = useState<Record<Country, { runs: number; leads: number; spend: number; cities: number }>>({
     SE: { runs: 0, leads: 0, spend: 0, cities: 0 },
     NO: { runs: 0, leads: 0, spend: 0, cities: 0 },
     DK: { runs: 0, leads: 0, spend: 0, cities: 0 },
+    UK: { runs: 0, leads: 0, spend: 0, cities: 0 },
+    ES: { runs: 0, leads: 0, spend: 0, cities: 0 },
   });
   const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
   const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
