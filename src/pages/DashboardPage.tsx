@@ -179,6 +179,8 @@ export default function DashboardPage() {
         SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
         NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
         DK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+        UK: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
+        ES: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
       };
 
       for (const lead of allLeads) {
