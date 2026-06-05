@@ -68,11 +68,14 @@ Deno.serve(async (req) => {
     // Pick top-scoring eligible leads. Pull a bigger window then filter out already-emailed via message_logs.
     const { data: candidates } = await supabase
       .from('leads')
-      .select('id, name, email, address, potential_score, lead_tier, outreach_stage, outreach_opt_out')
+      .select('id, name, email, address, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact')
       .not('email', 'is', null)
       .neq('email', '')
       .eq('outreach_opt_out', false)
+      .eq('do_not_contact', false)
       .neq('outreach_stage', 'email_sent')
+      .neq('outreach_state', 'email_sent')
+      .neq('outreach_state', 'do_not_contact')
       .in('lead_tier', ['S', 'A+', 'A'])
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(remaining * 3);

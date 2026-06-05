@@ -18,6 +18,9 @@ verify_jwt = false
 [functions.send-sms]
 verify_jwt = false
 
+[functions.auto-send-gmail-daily]
+verify_jwt = false
+
 [functions.retell-start-call]
 verify_jwt = false
 
