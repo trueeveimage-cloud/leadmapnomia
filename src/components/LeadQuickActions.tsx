@@ -44,8 +44,20 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       const r = data?.results?.[0];
       const email = r?.email || r?.emails?.[0];
       if (email) {
-        await updateLead(lead.id, { email, email_source: r.source || 'homepage' });
-        await logActivity(lead.id, 'email_found', { email, source: r.source });
+        await updateLead(lead.id, {
+          email,
+          email_source: r.source || 'homepage',
+          facebook_url: r.facebook_url || lead.facebook_url,
+          instagram_url: r.instagram_url || lead.instagram_url,
+        });
+        await logActivity(lead.id, 'email_found', {
+          email,
+          source: r.source,
+          confidence: r.confidence,
+          pagesScanned: r.pagesScanned,
+          facebook_url: r.facebook_url,
+          instagram_url: r.instagram_url,
+        });
         toast.success(`Found ${email}`);
         onUpdated?.();
       } else {

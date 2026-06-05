@@ -201,7 +201,12 @@ export default function HotLeadsPage() {
             for (const r of data.results) {
               const email = r.email || r.emails?.[0];
               if (email) {
-                await supabase.from('leads').update({ email, email_source: r.source || 'homepage' } as any).eq('id', r.leadId);
+                await supabase.from('leads').update({
+                  email,
+                  email_source: r.source || 'homepage',
+                  facebook_url: r.facebook_url || null,
+                  instagram_url: r.instagram_url || null,
+                } as any).eq('id', r.leadId);
                 found++;
               }
             }

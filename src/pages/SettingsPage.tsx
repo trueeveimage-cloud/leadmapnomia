@@ -73,7 +73,13 @@ export default function SettingsPage() {
                 const lead = allLeads.find((l: any) => l.id === r.leadId);
                 if (lead) {
                   const newSection = determineSection({ phone: lead.phone, email });
-                  await updateLead(r.leadId, { email, email_source: r.source || 'homepage', section: newSection });
+                  await updateLead(r.leadId, {
+                    email,
+                    email_source: r.source || 'homepage',
+                    section: newSection,
+                    facebook_url: r.facebook_url || lead.facebook_url,
+                    instagram_url: r.instagram_url || lead.instagram_url,
+                  });
                   totalFound++;
                 }
               }
