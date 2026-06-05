@@ -73,12 +73,12 @@ export default function EmailOutreachPage() {
       return;
     }
     const body = draft.body
-      .replaceAll('{{business_name}}', 'Demo Business')
-      .replaceAll('{{city}}', 'Goteborg')
-      .replaceAll('{{niche}}', 'service')
-      .replaceAll('{{owner_name}}', 'there');
+      .split('{{business_name}}').join('Demo Business')
+      .split('{{city}}').join('Goteborg')
+      .split('{{niche}}').join('service')
+      .split('{{owner_name}}').join('there');
     const { data, error } = await supabase.functions.invoke('send-gmail', {
-      body: { to: draft.testEmail, subject: draft.subject.replaceAll('{{business_name}}', 'Demo Business'), body },
+      body: { to: draft.testEmail, subject: draft.subject.split('{{business_name}}').join('Demo Business'), body },
     });
     if (error || data?.error) {
       toast.error(data?.error || error?.message || 'Test failed');
