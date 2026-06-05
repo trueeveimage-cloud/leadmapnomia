@@ -1,7 +1,7 @@
 import React from 'react';
 import AppLayout from '@/components/AppLayout';
 import LeadList from '@/components/LeadList';
-import { LeadSection, LeadStatus } from '@/lib/supabase';
+import { LeadSection, LeadStatus, type Product } from '@/lib/supabase';
 
 interface SectionPageProps {
   section?: LeadSection;
@@ -12,9 +12,10 @@ interface SectionPageProps {
   showTriage?: boolean;
   emptyMessage?: string;
   excludeSection?: LeadSection;
+  product?: Product | 'all';
 }
 
-export default function SectionPage({ section, allSections, status, optOut, title, showTriage, emptyMessage, excludeSection }: SectionPageProps) {
+export default function SectionPage({ section, allSections, status, optOut, title, showTriage, emptyMessage, excludeSection, product }: SectionPageProps) {
   return (
     <AppLayout>
       <div className="flex flex-col h-full">
@@ -27,6 +28,7 @@ export default function SectionPage({ section, allSections, status, optOut, titl
           title={title}
           emptyMessage={emptyMessage}
           excludeSection={excludeSection}
+          product={product}
         />
       </div>
     </AppLayout>

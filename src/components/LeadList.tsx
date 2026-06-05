@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Lead, LeadSection, LeadStatus, fetchLeads, updateLead, deleteLead, determineSection, getSetting } from '@/lib/supabase';
+import { Lead, LeadSection, LeadStatus, fetchLeads, updateLead, deleteLead, determineSection, getSetting, type Product } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { LeadRow } from './LeadRow';
 import { Button } from '@/components/ui/button';
@@ -51,9 +51,10 @@ interface LeadListProps {
   emptyMessage?: string;
   /** Exclude leads from this section (e.g. 'missing' on Not Contacted page) */
   excludeSection?: LeadSection;
+  product?: Product | 'all';
 }
 
-export default function LeadList({ section, allSections, status, optOut, showTriage, title, emptyMessage, excludeSection }: LeadListProps) {
+export default function LeadList({ section, allSections, status, optOut, showTriage, title, emptyMessage, excludeSection, product }: LeadListProps) {
   const { refreshCounts } = useCRM();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +70,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
     setLoading(true);
     try {
       // If allSections, fetch all leads (no section filter)
-      let data = await fetchLeads(allSections ? { status } : { section, status });
+      let data = await fetchLeads(allSections ? { status, product } : { section, status, product });
       if (excludeSection) {
         data = data.filter(l => l.section !== excludeSection);
       }
@@ -82,7 +83,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
     } finally {
       setLoading(false);
     }
-  }, [section, allSections, status, excludeSection, optOut]);
+  }, [section, allSections, status, excludeSection, optOut, product]);
 
   useEffect(() => { load(); }, [load]);
 

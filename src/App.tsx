@@ -172,7 +172,7 @@ const App = () => (
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
                       <Route path="/bulk" element={<BulkPage />} />
-                      <Route path="/unsorted" element={<SectionPage allSections title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />
+                      <Route path="/unsorted" element={<SectionPage allSections product="all" title="All Leads" showTriage emptyMessage="No leads yet — add some!" />} />
                       <Route path="/phone" element={<SectionPage section="phone" title="Has Phone" emptyMessage="No phone leads yet" />} />
                       <Route path="/email" element={<SectionPage section="email" title="Has Email" emptyMessage="No email leads yet" />} />
                       <Route path="/gmail" element={<Navigate to="/email" replace />} />
@@ -199,8 +199,8 @@ const App = () => (
                       <Route path="/nomia/closing" element={<ClosingPage status="interested" title="Nomia Closing" />} />
                       <Route path="/cold-call" element={<NextLeadPage mode="leadline" />} />
                       <Route path="/ai-calls" element={<CallListPage />} />
-                      <Route path="/leadmap-crm" element={<SectionPage allSections title="Leadmap CRM" showTriage emptyMessage="No leads yet" />} />
-                      <Route path="/nomia-crm" element={<SectionPage allSections title="Nomia CRM" showTriage emptyMessage="No leads yet" />} />
+                      <Route path="/leadmap-crm" element={<SectionPage allSections product="leadmap" title="Leadmap CRM" showTriage emptyMessage="No Leadmap leads yet" />} />
+                      <Route path="/nomia-crm" element={<SectionPage allSections product="nomia" title="Nomia CRM" showTriage emptyMessage="No Nomia leads yet" />} />
                       <Route path="/email-finder" element={<EmailFinderPage />} />
                       <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                       <Route path="/finder/runs/:id" element={<FinderRunPage />} />

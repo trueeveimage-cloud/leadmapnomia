@@ -37,7 +37,7 @@ export default function EmailFinderPage() {
   const [targetLeads, setTargetLeads] = useState(50);
   const [running, setRunning] = useState(false);
   const [scrapingExisting, setScrapingExisting] = useState(false);
-  const [existingProgress, setExistingProgress] = useState({ done: 0, total: 0, found: 0 });
+  const [existingProgress, setExistingProgress] = useState({ done: 0, eligible: 0, found: 0, totalSaved: 0, withWebsite: 0 });
 
   const start = async () => {
     if (!city.trim()) { toast.error('Enter a city'); return; }
@@ -82,9 +82,33 @@ export default function EmailFinderPage() {
 
   const scrapeExistingLeads = async () => {
     setScrapingExisting(true);
-    setExistingProgress({ done: 0, total: 0, found: 0 });
+    setExistingProgress({ done: 0, eligible: 0, found: 0, totalSaved: 0, withWebsite: 0 });
 
     try {
+      const [totalSavedResult, withWebsiteResult, eligibleResult] = await Promise.all([
+        supabase.from('leads').select('id', { count: 'exact', head: true }),
+        supabase
+          .from('leads')
+          .select('id', { count: 'exact', head: true })
+          .not('website', 'is', null)
+          .neq('website', ''),
+        supabase
+          .from('leads')
+          .select('id', { count: 'exact', head: true })
+          .not('website', 'is', null)
+          .neq('website', '')
+          .or('email.is.null,email.eq.'),
+      ]);
+
+      if (totalSavedResult.error) throw totalSavedResult.error;
+      if (withWebsiteResult.error) throw withWebsiteResult.error;
+      if (eligibleResult.error) throw eligibleResult.error;
+
+      const totalSaved = totalSavedResult.count ?? 0;
+      const withWebsite = withWebsiteResult.count ?? 0;
+      const eligible = eligibleResult.count ?? 0;
+      setExistingProgress({ done: 0, eligible, found: 0, totalSaved, withWebsite });
+
       const targets: any[] = [];
       let from = 0;
       while (true) {
@@ -104,11 +128,11 @@ export default function EmailFinderPage() {
       }
 
       if (targets.length === 0) {
-        toast.info('All saved leads with websites already have emails');
+        toast.info('No saved leads need scraping. Leads need a website and an empty email field.');
         return;
       }
 
-      setExistingProgress({ done: 0, total: targets.length, found: 0 });
+      setExistingProgress({ done: 0, eligible: targets.length, found: 0, totalSaved, withWebsite });
       let found = 0;
 
       for (let i = 0; i < targets.length; i += 4) {
@@ -144,11 +168,11 @@ export default function EmailFinderPage() {
           console.error('Existing lead scrape batch failed:', error);
         }
 
-        setExistingProgress({ done: Math.min(i + 4, targets.length), total: targets.length, found });
+        setExistingProgress({ done: Math.min(i + 4, targets.length), eligible: targets.length, found, totalSaved, withWebsite });
       }
 
       await refreshCounts();
-      toast.success(`Found emails for ${found} of ${targets.length} saved leads`);
+      toast.success(`Found emails for ${found} of ${targets.length} eligible saved leads`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to scrape saved leads');
     } finally {
@@ -185,13 +209,16 @@ export default function EmailFinderPage() {
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Scraping saved leads</span>
                 <span className="font-medium">
-                  {existingProgress.found}/{existingProgress.done} found of {existingProgress.total}
+                  {existingProgress.found}/{existingProgress.done} found of {existingProgress.eligible} eligible
                 </span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {existingProgress.totalSaved.toLocaleString()} total saved leads · {existingProgress.withWebsite.toLocaleString()} with websites · {existingProgress.eligible.toLocaleString()} missing email
               </div>
               <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${existingProgress.total ? (existingProgress.done / existingProgress.total) * 100 : 0}%` }}
+                  style={{ width: `${existingProgress.eligible ? (existingProgress.done / existingProgress.eligible) * 100 : 0}%` }}
                 />
               </div>
             </div>
