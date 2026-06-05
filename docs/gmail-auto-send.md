@@ -1,12 +1,12 @@
 # Gmail Auto Send
 
-Gmail Auto Send now lives at:
+Gmail Auto Send lives at:
 
-`Nomia -> Email Outreach`
+`Leadmap AI -> Gmail Auto Send`
 
 Route:
 
-`/nomia/email-outreach`
+`/leadmap/email-outreach`
 
 ## Saved settings
 
