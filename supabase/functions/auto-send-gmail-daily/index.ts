@@ -26,6 +26,10 @@ function personalize(t: string, lead: any) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  const { requireCronOrService } = await import('../_shared/auth.ts');
+  const authFail = requireCronOrService(req, corsHeaders);
+  if (authFail) return authFail;
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,

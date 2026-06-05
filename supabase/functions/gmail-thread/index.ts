@@ -52,6 +52,10 @@ function header(headers: any[], name: string): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const { requireUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireUserJwt(req, corsHeaders);
+  if (authFail) return authFail;
+
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
   if (!LOVABLE_API_KEY) return jsonResp({ error: 'LOVABLE_API_KEY missing' }, 500);

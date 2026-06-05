@@ -77,8 +77,7 @@ export default function EmailOutreachPage() {
       .eq('direction', 'outbound')
       .eq('status', 'sent')
       .gte('created_at', startOfDay.toISOString())
-      .then(({ count }) => setSentToday(count ?? 0))
-      .catch(() => {});
+      .then(({ count }) => setSentToday(count ?? 0));
   }, []);
 
   useEffect(() => {

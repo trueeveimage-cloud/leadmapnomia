@@ -127,10 +127,11 @@ Deno.serve(async (req) => {
 
   const rawBody = await req.text();
   const webhookSecret = Deno.env.get('RETELL_WEBHOOK_SECRET') || Deno.env.get('RETELL_API_KEY');
-  if (webhookSecret) {
-    const valid = await verifyRetellSignature(rawBody, webhookSecret, req.headers.get('x-retell-signature'));
-    if (!valid) return json({ error: 'invalid_signature' }, 401);
+  if (!webhookSecret) {
+    return json({ error: 'webhook_secret_not_configured' }, 500);
   }
+  const valid = await verifyRetellSignature(rawBody, webhookSecret, req.headers.get('x-retell-signature'));
+  if (!valid) return json({ error: 'invalid_signature' }, 401);
 
   let payload: JsonRecord | null = null;
   try {

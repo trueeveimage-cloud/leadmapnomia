@@ -8,6 +8,10 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
+  const { requireCronOrService } = await import('../_shared/auth.ts');
+  const authFail = requireCronOrService(req, corsHeaders);
+  if (authFail) return authFail;
+
   try {
     const dbClient = createClient(
       Deno.env.get('SUPABASE_URL')!,

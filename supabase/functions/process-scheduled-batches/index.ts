@@ -34,6 +34,10 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const { requireCronOrService } = await import('../_shared/auth.ts');
+  const authFail = requireCronOrService(req, corsHeaders);
+  if (authFail) return authFail;
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
