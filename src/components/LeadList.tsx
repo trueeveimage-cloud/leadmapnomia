@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Lead, LeadSection, LeadStatus, fetchLeads, updateLead, deleteLead, determineSection, getSetting, type Product } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { LeadRow } from './LeadRow';
+import { ManualCallModal } from './ManualCallModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, SortDesc, ChevronDown, CheckSquare, Square, Zap, Trash2 } from 'lucide-react';
+import { Search, SortDesc, ChevronDown, CheckSquare, Square, Zap, Trash2, PhoneCall } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -65,6 +66,7 @@ export default function LeadList({ section, allSections, status, optOut, showTri
   const [filterStatus, setFilterStatus] = useState<LeadStatus | ''>('');
   const [filterCategory, setFilterCategory] = useState('');
   const [autoSorting, setAutoSorting] = useState(false);
+  const [manualCallOpen, setManualCallOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,7 +237,17 @@ export default function LeadList({ section, allSections, status, optOut, showTri
             <h1 className="text-base font-semibold text-foreground">{title}</h1>
             <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{filtered.length}</span>
           </div>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={load}>↻ Refresh</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 px-2.5 text-xs"
+              onClick={() => setManualCallOpen(true)}
+            >
+              <PhoneCall size={13} />
+              Manual call
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={load}>Refresh</Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -348,6 +360,15 @@ export default function LeadList({ section, allSections, status, optOut, showTri
           ))
         )}
       </div>
+
+      <ManualCallModal
+        open={manualCallOpen}
+        onOpenChange={setManualCallOpen}
+        onDone={() => {
+          load();
+          refreshCounts();
+        }}
+      />
     </div>
   );
 }
