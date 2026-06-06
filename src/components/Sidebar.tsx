@@ -57,7 +57,7 @@ function NavSection({ title, children }: { title: string; children: React.ReactN
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { counts, notifications } = useCRM();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   const leadmap: NavItem[] = [
     { label: 'Lead Finder', path: '/finder', icon: <Search size={15} />, product: 'leadmap' },
@@ -128,13 +128,15 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
       <div className="border-t border-sidebar-border p-3 space-y-1">
         <NavLink item={{ label: 'Settings', path: '/settings', icon: <Settings size={15} /> }} onNav={onClose} />
-        <button
-          onClick={signOut}
-          className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-        >
-          <LogOut size={15} />
-          <span>Sign out</span>
-        </button>
+        {user && (
+          <button
+            onClick={signOut}
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <LogOut size={15} />
+            <span>Sign out</span>
+          </button>
+        )}
       </div>
     </aside>
   );
