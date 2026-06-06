@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { Globe, MapPin, Phone, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send, Bot } from 'lucide-react';
+import { Globe, MapPin, Copy, Mail, MessageSquare, CheckCircle2, Bell, StickyNote, Search, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { createNotification, updateLead, logActivity, type Lead } from '@/lib/supabase';
+import { updateLead, logActivity, type Lead } from '@/lib/supabase';
 import { generateOutreachMessage } from '@/lib/leadScoring';
 import EmailOutreachModal from '@/components/EmailOutreachModal';
 import { getOutreachBlockReason } from '@/lib/outreachLock';
+import { CallButton } from '@/components/CallButton';
 
 interface Props {
   lead: Lead;
@@ -24,14 +25,6 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
 
   const unlockWarning = (reason: string) =>
     window.confirm(`${reason}\n\nUnlocking can contact the same business twice. Continue anyway?`);
-
-  const aiCallBlockReason = (() => {
-    if (!(lead.phone_e164 || lead.phone)) return 'This lead has no phone number.';
-    if (lead.outreach_opt_out || lead.do_not_contact) return 'This lead is marked Do not contact.';
-    if (lead.call_status === 'Calling') return 'This lead is already being called.';
-    if ((lead.call_attempts || 0) >= 2) return 'AI call limit reached for this lead.';
-    return null;
-  })();
 
   const findEmail = async () => {
     if (!lead.website) { toast.error('No website to scrape'); return; }
@@ -78,35 +71,6 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
     } finally { setBusy(false); }
   };
 
-  const startAiCall = async () => {
-    const blockReason = aiCallBlockReason || getOutreachBlockReason(lead, 'ai_call');
-    if (aiCallBlockReason) {
-      toast.error(aiCallBlockReason);
-      return;
-    }
-    if (blockReason && !unlockWarning(blockReason)) return;
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('retell-start-call', {
-        body: { leadId: lead.id, manualUnlock: !!blockReason },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.message || data.error);
-      await createNotification({
-        type: 'ai_call_started',
-        title: 'AI call started',
-        message: `${lead.name}${data?.retell_call_id ? ` - ${data.retell_call_id}` : ''}`,
-        payload: { leadId: lead.id, leadName: lead.name, retell_call_id: data?.retell_call_id || '' },
-      });
-      toast.success(data?.retell_call_id ? `AI call started: ${data.retell_call_id}` : 'AI call started');
-      onUpdated?.();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Could not start AI call');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const setFollowUp = async () => {
     const days = window.prompt('Follow up in how many days?', '3');
     if (!days) return;
@@ -148,9 +112,7 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       )}
       {lead.phone && (
         <>
-          <Button size="sm" variant="outline" asChild>
-            <a href={`tel:${lead.phone_e164 || lead.phone}`}><Phone className="h-3.5 w-3.5 mr-1" /> Call</a>
-          </Button>
+          <CallButton lead={lead} onUpdate={() => onUpdated?.()} />
           <Button size="sm" variant="ghost" onClick={() => copy(lead.phone!, 'Phone')}>
             <Copy className="h-3.5 w-3.5 mr-1" /> Phone
           </Button>
@@ -182,11 +144,6 @@ export default function LeadQuickActions({ lead, onUpdated }: Props) {
       <Button size="sm" variant="ghost" onClick={() => copy(outreach, 'Outreach message')}>
         <MessageSquare className="h-3.5 w-3.5 mr-1" /> Copy pitch
       </Button>
-      {lead.phone && (
-        <Button size="sm" variant="outline" onClick={startAiCall} disabled={busy || !!aiCallBlockReason} title={aiCallBlockReason || 'Call with AI'}>
-          <Bot className="h-3.5 w-3.5 mr-1" /> Call with AI
-        </Button>
-      )}
       <Button size="sm" variant="secondary" onClick={markContacted} disabled={busy}>
         <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Contacted
       </Button>

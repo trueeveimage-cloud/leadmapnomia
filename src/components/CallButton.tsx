@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Lead, LeadStatus, updateLead, logActivity } from '@/lib/supabase';
+import { Lead, LeadStatus, updateLead, logActivity, createNotification } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
-import { Phone, Copy, Check, X } from 'lucide-react';
+import { Bot, Check, Copy, Loader2, Phone, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { DemoFormModal } from './DemoFormModal';
+import { supabase } from '@/integrations/supabase/client';
+import { getOutreachBlockReason } from '@/lib/outreachLock';
 
 const CALL_OUTCOMES = [
   { key: 'answered', label: 'Answered', color: 'hsl(142 69% 45%)', status: 'answered' as LeadStatus },
@@ -45,7 +47,7 @@ interface CallButtonProps {
 
 export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const { refreshCounts } = useCRM();
-  const [step, setStep] = useState<'idle' | 'outcome' | 'status' | 'followup'>('idle');
+  const [step, setStep] = useState<'idle' | 'choice' | 'outcome' | 'status' | 'followup'>('idle');
   const [selectedOutcome, setSelectedOutcome] = useState<typeof CALL_OUTCOMES[0] | null>(null);
   const [copied, setCopied] = useState(false);
   const [followupDate, setFollowupDate] = useState<Date | undefined>(undefined);
@@ -53,13 +55,56 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const [followupMinute, setFollowupMinute] = useState(0);
   const [demoOpen, setDemoOpen] = useState(false);
   const [pendingLead, setPendingLead] = useState<Lead>(lead);
+  const [aiBusy, setAiBusy] = useState(false);
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+  const aiCallBlockReason = (() => {
+    if (!(lead.phone_e164 || lead.phone)) return 'This lead has no phone number.';
+    if (lead.outreach_opt_out || lead.do_not_contact) return 'This lead is marked Do not contact.';
+    if (lead.call_status === 'Calling') return 'This lead is already being called.';
+    if ((lead.call_attempts || 0) >= 2) return 'AI call limit reached for this lead.';
+    return null;
+  })();
+
+  const unlockWarning = (reason: string) =>
+    window.confirm(`${reason}\n\nUnlocking can contact the same business twice. Continue anyway?`);
 
   const handleCall = () => {
     // Always open phone app immediately
     window.location.href = `tel:${lead.phone}`;
     // Then show outcome popup
     setStep('outcome');
+  };
+
+  const startAiCall = async () => {
+    const blockReason = aiCallBlockReason || getOutreachBlockReason(lead, 'ai_call');
+    if (aiCallBlockReason) {
+      toast.error(aiCallBlockReason);
+      return;
+    }
+    if (blockReason && !unlockWarning(blockReason)) return;
+    setAiBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('retell-start-call', {
+        body: { leadId: lead.id, manualUnlock: !!blockReason },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.message || data.error);
+      await createNotification({
+        type: 'ai_call_started',
+        title: 'AI call started',
+        message: `${lead.name}${data?.retell_call_id ? ` - ${data.retell_call_id}` : ''}`,
+        payload: { leadId: lead.id, leadName: lead.name, retell_call_id: data?.retell_call_id || '' },
+      });
+      toast.success(data?.retell_call_id ? `AI call started: ${data.retell_call_id}` : 'AI call started');
+      setStep('idle');
+      refreshCounts();
+      onUpdate?.({ ...lead, call_status: 'Calling', retell_call_id: data?.retell_call_id || lead.retell_call_id });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not start AI call');
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const trackingUpdates = () => ({
@@ -188,17 +233,61 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"
-            onClick={handleCall}
+            onClick={() => setStep('choice')}
             className="bg-[hsl(142_69%_45%)] text-white hover:bg-[hsl(142_69%_40%)] font-medium gap-1.5 h-7 px-3"
           >
             <Phone size={12} />
-            {isMobile ? 'Call' : lead.phone}
+            Manual call
           </Button>
           {!isMobile && (
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={copyNumber}>
               {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
             </Button>
           )}
+        </div>
+      )}
+
+      {step === 'choice' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setStep('idle')}>
+          <div className="bg-card border border-border rounded-xl p-5 w-80 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="text-sm font-semibold text-foreground mb-1">Manual call</div>
+            <div className="text-xs text-muted-foreground mb-4 truncate">{lead.name}</div>
+            <div className="space-y-2">
+              <button
+                onClick={handleCall}
+                className="w-full text-left rounded-lg border border-border bg-muted/30 px-3 py-3 hover:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Phone size={14} className="text-green-400" />
+                  I'll call myself
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">Open the phone number and log the call outcome after.</div>
+                <div className="mt-2 font-mono text-xs text-primary">{lead.phone_e164 || lead.phone}</div>
+              </button>
+
+              <button
+                onClick={startAiCall}
+                disabled={aiBusy || !!aiCallBlockReason}
+                title={aiCallBlockReason || 'Start Retell AI call'}
+                className={cn(
+                  'w-full text-left rounded-lg border border-border bg-muted/30 px-3 py-3 transition-colors',
+                  aiBusy || aiCallBlockReason ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted'
+                )}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  {aiBusy ? <Loader2 size={14} className="animate-spin text-primary" /> : <Bot size={14} className="text-primary" />}
+                  Let AI call
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Retell calls the lead and saves the result/summary in CRM.
+                </div>
+                {aiCallBlockReason && <div className="mt-2 text-xs text-red-400">{aiCallBlockReason}</div>}
+              </button>
+            </div>
+            <Button variant="ghost" size="sm" className="w-full mt-3 text-muted-foreground" onClick={() => setStep('idle')}>
+              <X size={12} className="mr-1" /> Cancel
+            </Button>
+          </div>
         </div>
       )}
 
