@@ -40,8 +40,8 @@ async function recordNotification(supabase: any, input: {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  const { requireCronOrService } = await import('../_shared/auth.ts');
-  const authFail = requireCronOrService(req, corsHeaders);
+  const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
   const supabase = createClient(

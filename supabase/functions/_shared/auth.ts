@@ -41,3 +41,13 @@ export function requireCronOrService(req: Request, corsHeaders: Record<string, s
   }
   return null;
 }
+
+/** Allow scheduled/service calls, or a valid Supabase JWT from the CRM UI. */
+export async function requireCronServiceOrUserJwt(req: Request, corsHeaders: Record<string, string>): Promise<Response | null> {
+  const cronOrServiceFail = requireCronOrService(req, corsHeaders);
+  if (!cronOrServiceFail) return null;
+  const provided = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+  if (provided && anonKey && provided === anonKey) return null;
+  return await requireUserJwt(req, corsHeaders);
+}

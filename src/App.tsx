@@ -37,6 +37,7 @@ const NextLeadPage = lazy(() => import("./pages/NextLeadPage"));
 const GuidePage = lazy(() => import("./pages/GuidePage"));
 const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const AutomationPage = lazy(() => import("./pages/AutomationPage"));
 const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
@@ -166,6 +167,7 @@ const App = () => (
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
