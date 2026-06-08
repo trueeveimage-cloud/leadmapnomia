@@ -279,7 +279,7 @@ Deno.serve(async (req) => {
       .or('do_not_contact.is.null,do_not_contact.eq.false')
       .in('lead_tier', ['S', 'A+', 'A'])
       .order('potential_score', { ascending: false, nullsFirst: false })
-      .limit(Math.max(batchSize * 4, remaining * 2));
+      .limit(Math.max(batchSize * 50, 2000));
 
     const seenEmails = new Set<string>();
     const batch = (candidates || [])
