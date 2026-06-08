@@ -482,14 +482,18 @@ export type Database = {
         Row: {
           address: string | null
           best_contact_method: string | null
+          business_name: string | null
           call_after_at: string | null
           call_attempts: number
           call_outcome_last: string | null
+          call_status: string | null
           caller_id: string | null
           caller_name: string | null
           category: string | null
+          country: string | null
           created_at: string
           detected_niche: string | null
+          do_not_contact: boolean | null
           email: string | null
           email_source: string | null
           estimated_value: string | null
@@ -502,6 +506,7 @@ export type Database = {
           has_replied: boolean
           id: string
           instagram_url: string | null
+          last_called_at: string | null
           last_contact_method: string | null
           last_contacted_at: string | null
           last_inbound_at: string | null
@@ -517,8 +522,12 @@ export type Database = {
           niche_label: string | null
           notes: string | null
           opening_hours: string | null
+          outreach_count: number | null
+          outreach_history: Json | null
           outreach_opt_out: boolean
           outreach_stage: string
+          outreach_state: string | null
+          owner_name: string | null
           phone: string | null
           phone_e164: string | null
           pinned: boolean
@@ -527,6 +536,8 @@ export type Database = {
           product: string
           rating: number | null
           read_at: string | null
+          retell_agent_id: string | null
+          retell_call_id: string | null
           reviews_count: number | null
           section: string
           status: string
@@ -539,14 +550,18 @@ export type Database = {
         Insert: {
           address?: string | null
           best_contact_method?: string | null
+          business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
+          call_status?: string | null
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          country?: string | null
           created_at?: string
           detected_niche?: string | null
+          do_not_contact?: boolean | null
           email?: string | null
           email_source?: string | null
           estimated_value?: string | null
@@ -559,6 +574,7 @@ export type Database = {
           has_replied?: boolean
           id?: string
           instagram_url?: string | null
+          last_called_at?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
           last_inbound_at?: string | null
@@ -574,8 +590,12 @@ export type Database = {
           niche_label?: string | null
           notes?: string | null
           opening_hours?: string | null
+          outreach_count?: number | null
+          outreach_history?: Json | null
           outreach_opt_out?: boolean
           outreach_stage?: string
+          outreach_state?: string | null
+          owner_name?: string | null
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
@@ -584,6 +604,8 @@ export type Database = {
           product?: string
           rating?: number | null
           read_at?: string | null
+          retell_agent_id?: string | null
+          retell_call_id?: string | null
           reviews_count?: number | null
           section?: string
           status?: string
@@ -596,14 +618,18 @@ export type Database = {
         Update: {
           address?: string | null
           best_contact_method?: string | null
+          business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_outcome_last?: string | null
+          call_status?: string | null
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          country?: string | null
           created_at?: string
           detected_niche?: string | null
+          do_not_contact?: boolean | null
           email?: string | null
           email_source?: string | null
           estimated_value?: string | null
@@ -616,6 +642,7 @@ export type Database = {
           has_replied?: boolean
           id?: string
           instagram_url?: string | null
+          last_called_at?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
           last_inbound_at?: string | null
@@ -631,8 +658,12 @@ export type Database = {
           niche_label?: string | null
           notes?: string | null
           opening_hours?: string | null
+          outreach_count?: number | null
+          outreach_history?: Json | null
           outreach_opt_out?: boolean
           outreach_stage?: string
+          outreach_state?: string | null
+          owner_name?: string | null
           phone?: string | null
           phone_e164?: string | null
           pinned?: boolean
@@ -641,6 +672,8 @@ export type Database = {
           product?: string
           rating?: number | null
           read_at?: string | null
+          retell_agent_id?: string | null
+          retell_call_id?: string | null
           reviews_count?: number | null
           section?: string
           status?: string
