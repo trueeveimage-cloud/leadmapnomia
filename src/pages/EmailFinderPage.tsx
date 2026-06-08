@@ -27,52 +27,93 @@ import { useCRM } from '@/context/CRMContext';
 import { createFinderRun, fetchFinderRuns, FinderRun, runFinderSearch } from '@/lib/finder';
 import { COUNTRY_LABELS, Country, CityProfile, findCity, getCitiesByCountry } from '@/lib/cities';
 import { createNotification, determineSection, Lead, updateLead } from '@/lib/supabase';
+import { calculateScore, generateWhyGoodLead, NicheKey } from '@/lib/leadScoring';
 
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
 
+const LEADMAP_CORE_NICHES = new Set<NicheKey>([
+  'plumber',
+  'roofer',
+  'electrician',
+  'hvac',
+  'locksmith',
+  'water_damage',
+  'dental',
+  'healthcare',
+  'car_repair',
+  'towing',
+  'car_detailer',
+  'cleaning',
+  'moving',
+  'construction',
+]);
+
+const LEADMAP_EXCLUSION_KEYWORDS = [
+  'restaurant',
+  'pizzeria',
+  'cafe',
+  'barber',
+  'nail',
+  'pub',
+  'kiosk',
+  'supermarket',
+  'grocery',
+  'hotel',
+  'mall',
+  'school',
+  'municipality',
+];
+
+const LEADMAP_SIGNAL_CARDS = [
+  { label: 'Phone-first', value: 'must answer fast', detail: 'public phone + service category' },
+  { label: 'Urgent value', value: 'one call matters', detail: 'emergency, clinic, trade, auto' },
+  { label: 'Traction', value: '30+ reviews', detail: 'reviews imply inbound demand' },
+  { label: 'Reception gap', value: 'weak booking', detail: 'no booking or no receptionist' },
+];
+
 const PRESETS = [
   {
-    label: 'Leadmap best fit',
-    description: 'Service businesses that usually publish emails and can buy websites or funnels.',
+    label: 'Missed-call money',
+    description: 'Phone-first businesses where one missed call can become a lost booking.',
     niches: {
-      SE: ['advokat', 'redovisningsbyra', 'maklare', 'tandlakare', 'marknadsbyra', 'webbyra', 'byggforetag'],
-      NO: ['advokat', 'regnskapsforer', 'eiendomsmegler', 'tannlege', 'markedsbyra', 'webbyra', 'byggfirma'],
-      DK: ['advokat', 'revisor', 'ejendomsmaegler', 'tandlaege', 'marketing bureau', 'webbureau', 'byggefirma'],
-      UK: ['solicitor', 'accountant', 'estate agent', 'dental clinic', 'marketing agency', 'web design agency', 'builder'],
-      ES: ['abogado', 'asesoria', 'inmobiliaria', 'clinica dental', 'agencia marketing', 'diseno web', 'constructora'],
+      SE: ['rormokare', 'vvs jour', 'taklaggare', 'elektriker jour', 'tandlakare', 'bilrekond', 'bargning', 'lasjour'],
+      NO: ['rorlegger', 'rorlegger vakt', 'taktekker', 'elektriker vakt', 'tannlege', 'bilpleie', 'bilberging', 'lasvakt'],
+      DK: ['vvs', 'vvs vagt', 'tagdaekker', 'elektriker vagt', 'tandlaege', 'bilpleje', 'autohjaelp', 'lasvagt'],
+      UK: ['plumber emergency', 'roofer', 'electrician emergency', 'dental clinic', 'car detailer', 'towing', 'locksmith', 'water damage restoration'],
+      ES: ['fontanero urgencias', 'reparacion tejados', 'electricista urgencias', 'clinica dental', 'detailing coches', 'grua', 'cerrajero', 'danos por agua'],
     },
   },
   {
-    label: 'Professional services',
-    description: 'Law, finance, consulting, agencies, and B2B firms.',
+    label: 'Emergency trades',
+    description: 'After-hours and urgent-call niches that need 24/7 pickup.',
     niches: {
-      SE: ['advokat', 'jurist', 'redovisningsbyra', 'revisor', 'konsult', 'arkitekt', 'ingenjor'],
-      NO: ['advokat', 'jurist', 'regnskapsforer', 'revisor', 'konsulent', 'arkitekt', 'ingenior'],
-      DK: ['advokat', 'jurist', 'revisor', 'bogholder', 'konsulent', 'arkitekt', 'ingenior'],
-      UK: ['solicitor', 'law firm', 'accountant', 'consultant', 'architect', 'engineering consultant'],
-      ES: ['abogado', 'asesoria fiscal', 'consultor', 'arquitecto', 'ingenieria', 'gestoria'],
+      SE: ['vvs jour', 'rormokare jour', 'lasjour', 'elektriker jour', 'bargning', 'vattenskada', 'skadedjur', 'akut taklaggare'],
+      NO: ['rorlegger vakt', 'lasvakt', 'elektriker vakt', 'bilberging', 'vannskade', 'skadedyr', 'akutt taktekker'],
+      DK: ['vvs vagt', 'lasvagt', 'elektriker vagt', 'autohjaelp', 'vandskade', 'skadedyr', 'akut tagdaekker'],
+      UK: ['emergency plumber', 'emergency locksmith', 'emergency electrician', 'tow truck', 'water damage restoration', 'pest control', 'emergency roofer'],
+      ES: ['fontanero 24 horas', 'cerrajero 24 horas', 'electricista 24 horas', 'grua 24 horas', 'reparacion humedades', 'control plagas'],
     },
   },
   {
-    label: 'Health and beauty',
-    description: 'Clinics with high inbound volume and strong booking value.',
+    label: 'Clinics and appointments',
+    description: 'Appointment businesses where reception overload loses booked revenue.',
     niches: {
-      SE: ['tandlakare', 'klinik', 'fysioterapi', 'kiropraktor', 'frisor', 'hudvard'],
-      NO: ['tannlege', 'klinikk', 'fysioterapi', 'kiropraktor', 'frisor', 'hudpleie'],
-      DK: ['tandlaege', 'klinik', 'fysioterapi', 'kiropraktor', 'frisor', 'hudpleje'],
-      UK: ['dental clinic', 'physiotherapy', 'chiropractor', 'beauty salon', 'skin clinic'],
-      ES: ['clinica dental', 'fisioterapia', 'quiropractico', 'peluqueria', 'clinica estetica'],
+      SE: ['tandlakare', 'privatklinik', 'fysioterapi', 'kiropraktor', 'veterinar', 'hudklinik', 'optiker'],
+      NO: ['tannlege', 'privatklinikk', 'fysioterapi', 'kiropraktor', 'veterinaer', 'hudklinikk', 'optiker'],
+      DK: ['tandlaege', 'privatklinik', 'fysioterapi', 'kiropraktor', 'dyrlaege', 'hudklinik', 'optiker'],
+      UK: ['dental clinic', 'private clinic', 'physiotherapy', 'chiropractor', 'veterinary clinic', 'skin clinic', 'optician'],
+      ES: ['clinica dental', 'clinica privada', 'fisioterapia', 'quiropractico', 'veterinario', 'clinica estetica', 'optica'],
     },
   },
   {
-    label: 'Property and trades',
-    description: 'Businesses where local demand and web visibility matter.',
+    label: 'Auto and local services',
+    description: 'Mobile/local operators that get calls while working away from the desk.',
     niches: {
-      SE: ['maklare', 'fastighetsbyra', 'byggforetag', 'rorlaggare', 'elektriker', 'malare'],
-      NO: ['eiendomsmegler', 'byggfirma', 'rorlegger', 'elektriker', 'maler', 'taktekker'],
-      DK: ['ejendomsmaegler', 'byggefirma', 'vvs', 'elektriker', 'maler', 'tagdaekker'],
-      UK: ['estate agent', 'builder', 'plumber', 'electrician', 'painter', 'roofer'],
-      ES: ['inmobiliaria', 'constructora', 'fontanero', 'electricista', 'pintor', 'reformas'],
+      SE: ['bilrekond', 'bilverkstad', 'dackverkstad', 'flyttfirma', 'stadfirma', 'byggfirma', 'malare', 'tradgardsskotsel'],
+      NO: ['bilpleie', 'bilverksted', 'dekkverksted', 'flyttebyra', 'renhold', 'byggfirma', 'maler', 'hagearbeid'],
+      DK: ['bilpleje', 'autovaerksted', 'daekcenter', 'flyttefirma', 'rengoring', 'byggefirma', 'maler', 'haveservice'],
+      UK: ['car detailer', 'auto repair', 'tyre shop', 'moving company', 'cleaning company', 'builder', 'painter decorator', 'garden services'],
+      ES: ['detailing coches', 'taller mecanico', 'neumaticos', 'mudanzas', 'empresa limpieza', 'constructora', 'pintor', 'jardineria'],
     },
   },
 ] satisfies Array<{
@@ -86,7 +127,29 @@ type SavedCountryFilter = Country | 'all';
 
 type ScrapeLead = Pick<
   Lead,
-  'id' | 'name' | 'website' | 'phone' | 'email' | 'section' | 'facebook_url' | 'instagram_url' | 'country' | 'city' | 'address'
+  | 'id'
+  | 'name'
+  | 'website'
+  | 'phone'
+  | 'email'
+  | 'section'
+  | 'facebook_url'
+  | 'instagram_url'
+  | 'country'
+  | 'city'
+  | 'address'
+  | 'category'
+  | 'niche_label'
+  | 'rating'
+  | 'reviews_count'
+  | 'has_booking'
+  | 'has_receptionist'
+  | 'has_emergency'
+  | 'potential_score'
+  | 'lead_tier'
+  | 'estimated_value'
+  | 'website_quality'
+  | 'why_good_lead'
 > & {
   product?: string | null;
 };
@@ -96,6 +159,9 @@ type SavedStats = {
   withWebsite: number;
   missingEmail: number;
   eligible: number;
+  hotEligible: number;
+  avgScore: number;
+  topNiches: Array<{ label: string; count: number }>;
   countryCounts: Record<Country, number>;
 };
 
@@ -134,6 +200,38 @@ function missingEmail(lead: ScrapeLead) {
   return !lead.email?.trim();
 }
 
+function getLeadmapFit(lead: ScrapeLead) {
+  const scored = calculateScore(lead as Lead);
+  let score = scored.score;
+  const badges = [...scored.badges];
+
+  if (LEADMAP_CORE_NICHES.has(scored.niche)) score += 12;
+  if (scored.hasEmergency) score += 10;
+  if (lead.phone?.trim()) score += 8;
+  if ((lead.reviews_count ?? 0) >= 30) score += 6;
+  if (lead.has_booking === false || lead.has_receptionist === false || scored.websiteQuality === 'weak' || scored.websiteQuality === 'none') score += 8;
+  if (!lead.phone?.trim()) score -= 25;
+  if (scored.niche === 'low_value') score -= 30;
+  if (LEADMAP_EXCLUSION_KEYWORDS.some(word => `${lead.name} ${lead.category} ${lead.niche_label}`.toLowerCase().includes(word))) score -= 20;
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+  const fitTier = finalScore >= 85 ? 'S' : finalScore >= 72 ? 'A+' : finalScore >= 60 ? 'A' : finalScore >= 45 ? 'B' : finalScore >= 30 ? 'C' : 'D';
+
+  if (LEADMAP_CORE_NICHES.has(scored.niche)) badges.unshift('Leadmap ICP');
+  if (finalScore >= 72) badges.unshift('Scrape first');
+
+  return {
+    score: finalScore,
+    tier: fitTier,
+    niche: scored.niche,
+    nicheLabel: scored.nicheLabel,
+    estimatedValue: scored.estimatedValue,
+    websiteQuality: scored.websiteQuality,
+    why: generateWhyGoodLead(lead as Lead, scored),
+    badges: uniqueList(badges).slice(0, 5),
+  };
+}
+
 function detectLeadMarket(lead: ScrapeLead): Country | null {
   const explicit = (lead.country || '').toUpperCase();
   if (COUNTRIES.includes(explicit as Country)) return explicit as Country;
@@ -152,9 +250,10 @@ function detectLeadMarket(lead: ScrapeLead): Country | null {
   return null;
 }
 
-function matchesSavedFilters(lead: ScrapeLead, country: SavedCountryFilter, city: string) {
+function matchesSavedFilters(lead: ScrapeLead, country: SavedCountryFilter, city: string, minScore = 0) {
   if (!hasWebsite(lead) || !missingEmail(lead)) return false;
   if (country !== 'all' && detectLeadMarket(lead) !== country) return false;
+  if (getLeadmapFit(lead).score < minScore) return false;
   const cityNeedle = city.trim().toLowerCase();
   if (!cityNeedle) return true;
   return `${lead.city || ''} ${lead.address || ''}`.toLowerCase().includes(cityNeedle);
@@ -168,7 +267,7 @@ async function fetchSavedLeadPool(product: SavedProductFilter): Promise<ScrapeLe
   while (true) {
     let query = supabase
       .from('leads')
-      .select('id, name, website, phone, email, section, facebook_url, instagram_url, country, city, address, product')
+      .select('id, name, website, phone, email, section, facebook_url, instagram_url, country, city, address, category, niche_label, rating, reviews_count, has_booking, has_receptionist, has_emergency, potential_score, lead_tier, estimated_value, website_quality, why_good_lead, product')
       .order('created_at', { ascending: false });
 
     if (product !== 'all') query = query.eq('product', product);
@@ -212,7 +311,17 @@ export default function EmailFinderPage() {
   const [savedCountry, setSavedCountry] = useState<SavedCountryFilter>('SE');
   const [savedCity, setSavedCity] = useState('');
   const [savedLimit, setSavedLimit] = useState(100);
-  const [savedStats, setSavedStats] = useState<SavedStats>({ totalSaved: 0, withWebsite: 0, missingEmail: 0, eligible: 0, countryCounts: { SE: 0, NO: 0, DK: 0, UK: 0, ES: 0 } });
+  const [savedMinScore, setSavedMinScore] = useState(55);
+  const [savedStats, setSavedStats] = useState<SavedStats>({
+    totalSaved: 0,
+    withWebsite: 0,
+    missingEmail: 0,
+    eligible: 0,
+    hotEligible: 0,
+    avgScore: 0,
+    topNiches: [],
+    countryCounts: { SE: 0, NO: 0, DK: 0, UK: 0, ES: 0 },
+  });
   const [loadingSavedStats, setLoadingSavedStats] = useState(false);
   const [scrapingExisting, setScrapingExisting] = useState(false);
   const [existingProgress, setExistingProgress] = useState<ScrapeProgress>({ done: 0, eligible: 0, found: 0, failed: 0, totalSaved: 0, withWebsite: 0, current: '' });
@@ -313,11 +422,26 @@ export default function EmailFinderPage() {
         if (market) countryCounts[market]++;
       }
 
+      const eligibleLeads = missing.filter(lead => matchesSavedFilters(lead, savedCountry, savedCity, savedMinScore));
+      const scoredEligible = eligibleLeads.map(lead => ({ lead, fit: getLeadmapFit(lead) }));
+      const nicheCounts = new Map<string, number>();
+      for (const item of scoredEligible) {
+        nicheCounts.set(item.fit.nicheLabel, (nicheCounts.get(item.fit.nicheLabel) || 0) + 1);
+      }
+
       setSavedStats({
         totalSaved: leads.length,
         withWebsite: withWebsite.length,
         missingEmail: missing.length,
-        eligible: missing.filter(lead => matchesSavedFilters(lead, savedCountry, savedCity)).length,
+        eligible: eligibleLeads.length,
+        hotEligible: scoredEligible.filter(item => item.fit.score >= 72).length,
+        avgScore: scoredEligible.length
+          ? Math.round(scoredEligible.reduce((sum, item) => sum + item.fit.score, 0) / scoredEligible.length)
+          : 0,
+        topNiches: Array.from(nicheCounts.entries())
+          .map(([label, count]) => ({ label, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3),
         countryCounts,
       });
     } catch (error: any) {
@@ -329,7 +453,7 @@ export default function EmailFinderPage() {
 
   useEffect(() => {
     loadSavedStats();
-  }, [savedProduct, savedCountry, savedCity]);
+  }, [savedProduct, savedCountry, savedCity, savedMinScore]);
 
   const startFinder = async () => {
     if (keywords.length === 0) {
@@ -404,14 +528,23 @@ export default function EmailFinderPage() {
     try {
       const leads = await fetchSavedLeadPool(savedProduct);
       const targets = leads
-        .filter(lead => matchesSavedFilters(lead, savedCountry, savedCity))
+        .filter(lead => matchesSavedFilters(lead, savedCountry, savedCity, savedMinScore))
+        .sort((a, b) => getLeadmapFit(b).score - getLeadmapFit(a).score)
         .slice(0, savedLimit);
 
       const withWebsite = leads.filter(hasWebsite).length;
       const missing = leads.filter(lead => hasWebsite(lead) && missingEmail(lead)).length;
 
       setExistingProgress({ done: 0, eligible: targets.length, found: 0, failed: 0, totalSaved: leads.length, withWebsite, current: '' });
-      setSavedStats(prev => ({ ...prev, totalSaved: leads.length, withWebsite, missingEmail: missing, eligible: targets.length }));
+      setSavedStats(prev => ({
+        ...prev,
+        totalSaved: leads.length,
+        withWebsite,
+        missingEmail: missing,
+        eligible: targets.length,
+        hotEligible: targets.filter(lead => getLeadmapFit(lead).score >= 72).length,
+        avgScore: targets.length ? Math.round(targets.reduce((sum, lead) => sum + getLeadmapFit(lead).score, 0) / targets.length) : 0,
+      }));
 
       if (targets.length === 0) {
         toast.info('No saved leads match those scrape filters');
@@ -450,12 +583,21 @@ export default function EmailFinderPage() {
               continue;
             }
 
+            const leadForScore = { ...lead, email } as Lead;
+            const fit = getLeadmapFit(leadForScore);
+
             await updateLead(lead.id, {
               email,
               email_source: result.source || 'website_scrape',
               section: determineSection({ phone: lead.phone, email }),
               facebook_url: result.facebook_url || lead.facebook_url,
               instagram_url: result.instagram_url || lead.instagram_url,
+              potential_score: fit.score,
+              lead_tier: fit.tier as any,
+              detected_niche: fit.niche,
+              estimated_value: fit.estimatedValue,
+              website_quality: fit.websiteQuality,
+              why_good_lead: fit.why,
             });
             found++;
           }
@@ -496,7 +638,7 @@ export default function EmailFinderPage() {
               <Badge variant="outline" className="text-[10px] uppercase tracking-wide">Gmail-first</Badge>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Choose markets, scan cities, scrape saved websites, and keep coverage visible while building Leadmap lists.
+              Finds service businesses that lose money when calls go unanswered, then prioritizes the best Leadmap prospects first.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -514,6 +656,29 @@ export default function EmailFinderPage() {
             </Button>
           </div>
         </div>
+
+        <Card className="p-4 sm:p-5 border-primary/25 bg-primary/5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.4fr)]">
+            <div>
+              <h2 className="text-base font-semibold flex items-center gap-2">
+                <Target className="h-4 w-4 text-primary" />
+                Leadmap customer target
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Prioritize plumbers, roofers, dentists, detailers, emergency trades, clinics, auto services, and local operators that get calls while busy.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              {LEADMAP_SIGNAL_CARDS.map(signal => (
+                <div key={signal.label} className="rounded-md border border-primary/20 bg-background/70 p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{signal.label}</div>
+                  <div className="text-sm font-semibold mt-1">{signal.value}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">{signal.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)] gap-5">
           <div className="space-y-5">
@@ -614,7 +779,7 @@ export default function EmailFinderPage() {
                   <Target className="h-4 w-4 text-primary" />
                   Finder run setup
                 </h2>
-                <p className="text-sm text-muted-foreground">Runs Google Places discovery, saves candidates, then lets the scraper pull emails from websites.</p>
+                <p className="text-sm text-muted-foreground">Runs Google Places discovery for Leadmap-fit service businesses, then pulls emails from their websites.</p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
@@ -760,7 +925,7 @@ export default function EmailFinderPage() {
                     <Layers className="h-4 w-4 text-primary" />
                     Scrape saved CRM leads
                   </h2>
-                  <p className="text-sm text-muted-foreground">Scan saved Leadmap websites that still have no email.</p>
+                  <p className="text-sm text-muted-foreground">Scores saved leads for Leadmap fit, then scrapes the strongest websites first.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={loadSavedStats} disabled={loadingSavedStats}>
                   {loadingSavedStats ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
@@ -796,6 +961,10 @@ export default function EmailFinderPage() {
                   <Input value={savedCity} onChange={event => setSavedCity(event.target.value)} placeholder="Optional" />
                 </label>
                 <label className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Min Leadmap score</span>
+                  <Input type="number" min={0} max={100} value={savedMinScore} onChange={event => setSavedMinScore(Number(event.target.value) || 0)} />
+                </label>
+                <label className="space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Max to scrape now</span>
                   <Input type="number" min={4} max={1000} value={savedLimit} onChange={event => setSavedLimit(Number(event.target.value) || 100)} />
                 </label>
@@ -818,7 +987,28 @@ export default function EmailFinderPage() {
                   <div className="text-[11px] text-muted-foreground">Eligible now</div>
                   <div className="font-bold">{savedStats.eligible.toLocaleString()}</div>
                 </div>
+                <div className="rounded-md border border-green/30 bg-green/10 p-3">
+                  <div className="text-[11px] text-muted-foreground">Hot prospects</div>
+                  <div className="font-bold">{savedStats.hotEligible.toLocaleString()}</div>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-[11px] text-muted-foreground">Avg score</div>
+                  <div className="font-bold">{savedStats.avgScore || 0}</div>
+                </div>
               </div>
+
+              {savedStats.topNiches.length > 0 && (
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Top eligible niches</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {savedStats.topNiches.map(niche => (
+                      <Badge key={niche.label} variant="outline" className="text-[11px]">
+                        {niche.label} {niche.count}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {scrapingExisting && (
                 <div className="rounded-md border border-border p-3 text-sm">
@@ -857,9 +1047,9 @@ export default function EmailFinderPage() {
                 Fast workflow
               </h2>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="rounded-md border border-border p-3">1. Pick country and uncovered cities.</div>
-                <div className="rounded-md border border-border p-3">2. Use Leadmap best fit or edit the keyword list.</div>
-                <div className="rounded-md border border-border p-3">3. Run finder, then scrape saved leads with country filters.</div>
+                <div className="rounded-md border border-border p-3">1. Pick country and uncovered cities with real service density.</div>
+                <div className="rounded-md border border-border p-3">2. Use missed-call niches: trades, clinics, emergency, auto, and local services.</div>
+                <div className="rounded-md border border-border p-3">3. Scrape saved leads with a Leadmap score floor, then contact the hot ones first.</div>
               </div>
             </Card>
           </div>
