@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useProduct, type Product } from '@/context/ProductContext';
 import {
   Bell, Bot, BriefcaseBusiness, Inbox, LayoutDashboard, LogOut, Mail, MapPin,
-  MessageSquare, PhoneCall, Search, Settings, Target, Users, X,
+  MessageSquare, PhoneCall, Settings, Target, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,9 @@ interface NavItem {
 function NavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) {
   const { pathname } = useLocation();
   const { setProduct } = useProduct();
-  const active = pathname === item.path || pathname.startsWith(`${item.path}/`);
+  const active = pathname === item.path
+    || pathname.startsWith(`${item.path}/`)
+    || (item.path === '/email-finder' && (pathname.startsWith('/finder/runs/') || pathname.startsWith('/finder/batch/')));
 
   return (
     <Link
@@ -60,7 +62,6 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const { user, signOut } = useAuth();
 
   const leadmap: NavItem[] = [
-    { label: 'Lead Finder', path: '/finder', icon: <Search size={15} />, product: 'leadmap' },
     { label: 'Automation', path: '/automation', icon: <Bot size={15} />, product: 'leadmap' },
     { label: 'Email Scraper', path: '/email-finder', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Gmail Auto Send', path: '/leadmap/email-outreach', icon: <Mail size={15} />, product: 'leadmap' },

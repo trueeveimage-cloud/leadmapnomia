@@ -2,9 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import InfoTip from '@/components/InfoTip';
-import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, FinderRun, FinderCandidate } from '@/lib/finder';
-import { addLead, createNotification, determineSection, updateLead } from '@/lib/supabase';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchFinderRun, fetchFinderCandidates, stopFinderRun, candidatesToCsv, refetchFailedCandidates, resumeFinderRun, scrapeFinderCandidateEmails, FinderRun, FinderCandidate } from '@/lib/finder';
+import { addLead, createNotification, determineSection } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -63,7 +62,7 @@ export default function FinderRunPage() {
     notifiedRunRef.current = `${run.id}:${run.status}`;
     createNotification({
       type: 'lead_find_done',
-      title: run.status === 'done' ? 'Lead finder run finished' : `Lead finder run ${run.status}`,
+      title: run.status === 'done' ? 'Email scraper run finished' : `Email scraper run ${run.status}`,
       message: `${run.city} finished with ${candidates.length} candidates.`,
       payload: {
         runId: run.id,
@@ -175,46 +174,35 @@ export default function FinderRunPage() {
 
   // Scrape emails from leads that have websites but no email
   const handleScrapeEmails = async () => {
-    const { data: leads } = await supabase.from('leads').select('id, website, email').not('website', 'is', null);
-    const leadsWithWebsite = (leads || []).filter(l => l.website && !l.email);
-    if (leadsWithWebsite.length === 0) {
-      toast.info('No leads with websites missing emails');
+    if (!id) return;
+    const targets = candidates.filter(candidate => candidate.website && !candidate.email);
+    if (targets.length === 0) {
+      toast.info('No discovered websites in this run need email scraping');
       return;
     }
     setScrapingEmails(true);
-    setScrapeProgress({ done: 0, total: leadsWithWebsite.length, found: 0 });
-    let totalFound = 0;
-    for (let i = 0; i < leadsWithWebsite.length; i += 4) {
-      const batch = leadsWithWebsite.slice(i, i + 4).map(l => ({ leadId: l.id, website: l.website! }));
-      try {
-        const { data, error } = await supabase.functions.invoke('scrape-emails', { body: { urls: batch } });
-        if (!error && data?.results) {
-          for (const r of data.results) {
-            if (r.emails && r.emails.length > 0) {
-              const email = r.emails[0];
-              const { data: lead } = await supabase.from('leads').select('phone, email').eq('id', r.leadId).single();
-              const newSection = determineSection({ ...lead, email } as any);
-              await supabase.from('leads').update({ email, section: newSection }).eq('id', r.leadId);
-              totalFound++;
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Scrape batch error:', e);
-      }
-      setScrapeProgress({ done: Math.min(i + 4, leadsWithWebsite.length), total: leadsWithWebsite.length, found: totalFound });
+    setScrapeProgress({ done: 0, total: targets.length, found: 0 });
+    try {
+      const result = await scrapeFinderCandidateEmails({
+        runIds: [id],
+        onProgress: progress => setScrapeProgress({ done: progress.done, total: progress.total, found: progress.found }),
+      });
+      refreshCounts();
+      await load();
+      await createNotification({
+        type: 'email_scrape_done',
+        title: 'Email scraper finished',
+        message: `Found ${result.found} emails from ${result.checked} discovered business websites.`,
+        payload: { ...result, runId: id || '' },
+      });
+      if (result.found > 0) toast.success(`Found ${result.found} emails and saved ${result.added + result.updated} leads`);
+      else toast.info('No emails found on this run');
+    } catch (error: any) {
+      toast.error(error?.message || 'Email scrape failed');
+    } finally {
+      setScrapingEmails(false);
+      setScrapeProgress(null);
     }
-    setScrapingEmails(false);
-    setScrapeProgress(null);
-    refreshCounts();
-    await createNotification({
-      type: 'email_scrape_done',
-      title: 'Finder email scrape finished',
-      message: `Found ${totalFound} emails from ${leadsWithWebsite.length} lead websites.`,
-      payload: { found: totalFound, checked: leadsWithWebsite.length, runId: id || '' },
-    });
-    if (totalFound > 0) toast.success(`Found ${totalFound} emails from websites!`);
-    else toast.info('No emails found on any websites');
   };
 
   const addToCrm = async (candidate: FinderCandidate) => {
@@ -347,12 +335,12 @@ export default function FinderRunPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 pb-10">
         {/* Header */}
         <div className="flex items-start gap-3 mb-5">
-          <Link to="/finder" className="mt-1">
+          <Link to="/email-finder" className="mt-1">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><ArrowLeft size={14} /></Button>
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-foreground truncate flex items-center gap-1.5">
-              {run.city} — Finder Run
+              {run.city} — Email Scraper Run
               <InfoTip text="Results organized by outcome. Social media profiles (Facebook, Instagram, TikTok) are NOT counted as real websites." />
             </h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
@@ -460,7 +448,7 @@ export default function FinderRunPage() {
         <div className="flex gap-2 mb-4 flex-wrap">
           <Button size="sm" variant="outline" onClick={handleScrapeEmails} disabled={scrapingEmails} className="gap-1.5">
             {scrapingEmails ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-            {scrapingEmails ? `Scraping emails… ${scrapeProgress?.found || 0} found` : 'Scrape Emails from Websites'}
+            {scrapingEmails ? `Scraping emails… ${scrapeProgress?.found || 0} found` : 'Scrape emails from this run'}
           </Button>
           {scrapeProgress && (
             <span className="text-xs text-muted-foreground self-center">

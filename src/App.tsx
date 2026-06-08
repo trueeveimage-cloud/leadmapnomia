@@ -23,7 +23,6 @@ const EmailOutreachPage = lazy(() => import("./pages/EmailOutreachPage"));
 const SmsOutreachPage = lazy(() => import("./pages/SmsOutreachPage"));
 const CallbacksPage = lazy(() => import("./pages/CallbacksPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const FinderPage = lazy(() => import("./pages/FinderPage"));
 const FinderRunPage = lazy(() => import("./pages/FinderRunPage"));
 const FinderBatchPage = lazy(() => import("./pages/FinderBatchPage"));
 const FinderCoveragePage = lazy(() => import("./pages/FinderCoveragePage"));
@@ -191,7 +190,7 @@ const App = () => (
                       <Route path="/status/making-demo" element={<ClosingPage status="making_demo" title="Making Demo" />} />
                       <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
                       <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
-                      <Route path="/finder" element={<FinderPage />} />
+                      <Route path="/finder" element={<Navigate to="/email-finder" replace />} />
                       <Route path="/leadmap/closing" element={<LeadmapClosingPage />} />
                       <Route path="/leadmap/email-outreach" element={<EmailOutreachPage />} />
                       <Route path="/nomia/email-outreach" element={<EmailOutreachPage />} />

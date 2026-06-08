@@ -134,7 +134,7 @@ export default function SettingsPage() {
   // Reset outreach stats
   const [resetting, setResetting] = useState(false);
 
-  // Finder defaults
+  // Email scraper defaults
   const [finderDefaultCity, setFinderDefaultCity] = useState('');
   const [finderDefaultLeadsTarget, setFinderDefaultLeadsTarget] = useState('50');
   const [finderDefaultKeywords, setFinderDefaultKeywords] = useState('');
@@ -579,11 +579,11 @@ export default function SettingsPage() {
             {saved ? 'Saved!' : 'Save All Settings'}
           </Button>
 
-          {/* Finder Defaults */}
+          {/* Email Scraper Defaults */}
           <div className="bg-card border border-border rounded-lg p-5">
             <h2 className="font-semibold text-foreground mb-1 flex items-center gap-2">
-              <Search size={15} /> Finder Defaults
-              <InfoTip text="Default values used when opening the Business Finder. These are also saved automatically when you run a search." />
+              <Search size={15} /> Email Scraper Defaults
+              <InfoTip text="Default values used by the Email Scraper. These are also saved automatically when you run a search." />
             </h2>
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div>

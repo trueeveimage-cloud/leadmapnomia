@@ -27,7 +27,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
-import { createFinderRun, fetchFinderRuns, FinderRun, runFinderSearch } from '@/lib/finder';
+import { createFinderRun, fetchFinderRuns, FinderRun, runFinderSearch, scrapeFinderCandidateEmails } from '@/lib/finder';
 import { COUNTRY_LABELS, Country, CityProfile, findCity, getCitiesByCountry } from '@/lib/cities';
 import { createNotification, determineSection, Lead, updateLead } from '@/lib/supabase';
 import { calculateScore, generateWhyGoodLead, NicheKey } from '@/lib/leadScoring';
@@ -514,7 +514,7 @@ export default function EmailFinderPage() {
     try {
       const cappedDetails = Math.max(maxDetails, targetLeads);
       const batchId = selectedCities.length > 1 ? makeBatchId() : null;
-      const batchLabel = `Leadmap Email Finder - ${COUNTRY_LABELS[country]} - ${selectedCities.length} cities`;
+      const batchLabel = `Leadmap Email Scraper - ${COUNTRY_LABELS[country]} - ${selectedCities.length} cities`;
       const createdRuns: FinderRun[] = [];
 
       for (const city of selectedCities) {
@@ -531,13 +531,13 @@ export default function EmailFinderPage() {
           requirePhone,
           findGmailOnly: true,
           batchId,
-          batchLabel: batchId ? batchLabel : `Leadmap Email Finder - ${city.name}`,
+          batchLabel: batchId ? batchLabel : `Leadmap Email Scraper - ${city.name}`,
         });
         createdRuns.push(run);
       }
 
-      for (const run of createdRuns) {
-        runFinderSearch(run.id, {
+      void Promise.all(createdRuns.map(async run => {
+        await runFinderSearch(run.id, {
           city: run.city,
           keywords,
           radius,
@@ -548,10 +548,45 @@ export default function EmailFinderPage() {
           minReviews,
           requirePhone,
           findGmailOnly: true,
-        }).catch(error => console.error('finder-search', run.id, error));
-      }
+        });
+        return scrapeFinderCandidateEmails({ runIds: [run.id] });
+      })).then(async results => {
+        const totals = results.reduce((acc, item) => ({
+          checked: acc.checked + item.checked,
+          found: acc.found + item.found,
+          added: acc.added + item.added,
+          updated: acc.updated + item.updated,
+        }), { checked: 0, found: 0, added: 0, updated: 0 });
+        await refreshCounts();
+        await createNotification({
+          type: 'email_scrape_done',
+          title: 'Leadmap email discovery finished',
+          message: `Found ${totals.found} emails from ${totals.checked} discovered business websites.`,
+          payload: {
+            checked: totals.checked,
+            found: totals.found,
+            added: totals.added,
+            updated: totals.updated,
+            runIds: createdRuns.map(run => run.id),
+            batchId: batchId || '',
+          },
+        });
+        if (totals.found > 0) {
+          toast.success(`Email scraper found ${totals.found} emails and saved ${totals.added + totals.updated} leads`);
+        } else {
+          toast.info('Email scraper finished discovery; no website emails found yet');
+        }
+      }).catch(error => {
+        console.error('email finder automation', error);
+        createNotification({
+          type: 'email_scrape_done',
+          title: 'Leadmap email discovery needs attention',
+          message: error?.message || 'Discovery or email scraping failed.',
+          payload: { error: error?.message || String(error), runIds: createdRuns.map(run => run.id), batchId: batchId || '' },
+        }).catch(() => {});
+      });
 
-      toast.success(`Started ${createdRuns.length} Leadmap email finder run${createdRuns.length === 1 ? '' : 's'}`);
+      toast.success(`Started ${createdRuns.length} Leadmap email scraper run${createdRuns.length === 1 ? '' : 's'}; emails will scrape automatically`);
       navigate(batchId ? `/finder/batch/${batchId}` : `/finder/runs/${createdRuns[0].id}`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to start finder');
@@ -983,7 +1018,7 @@ export default function EmailFinderPage() {
 
                 <Button onClick={startFinder} disabled={running} className="w-full" size="lg">
                   {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
-                  Start Leadmap email run
+                  Find businesses + scrape emails
                 </Button>
               </div>
             </Card>
@@ -1008,7 +1043,7 @@ export default function EmailFinderPage() {
                   <div className="text-xl font-bold">{coverageStats.covered.length}/{availableCities.length}</div>
                 </div>
                 <div className="rounded-md border border-border p-3">
-                  <div className="text-[11px] text-muted-foreground">Finder runs</div>
+                  <div className="text-[11px] text-muted-foreground">Scraper runs</div>
                   <div className="text-xl font-bold">{countryRuns.length}</div>
                 </div>
                 <div className="rounded-md border border-border p-3">

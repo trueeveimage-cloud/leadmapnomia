@@ -102,9 +102,9 @@ export default function GuidePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-4 rounded-lg bg-secondary/30 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">Phase 1 · Find</p>
-              <FlowStep step={1} title="Finder Search" desc="Search Google Maps for businesses by city + niche" active />
-              <FlowStep step={2} title="Auto-Add" desc="Leads auto-import with phone, email, website" />
-              <FlowStep step={3} title="Email Scrape" desc="Bulk scrape emails from lead websites" />
+              <FlowStep step={1} title="Email Scraper Search" desc="Find potential Leadmap customers by country, city and niche" active />
+              <FlowStep step={2} title="Auto Email Scrape" desc="Website emails are scraped automatically after discovery" />
+              <FlowStep step={3} title="Save Hot Leads" desc="Qualified businesses land in the CRM with phone, email and website" />
             </div>
             <div className="space-y-4 rounded-lg bg-secondary/30 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-amber">Phase 2 · Reach</p>
@@ -161,16 +161,16 @@ export default function GuidePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <FeatureCard
               icon={<Search className="h-5 w-5" />}
-              title="Finder"
-              description="Search Google Maps for businesses by city, keywords and niche. Run batch searches across multiple cities."
+              title="Email Scraper"
+              description="Find potential Leadmap customers from Google Maps, then automatically scrape emails from their websites."
               features={[
                 "Search by city + keywords (e.g. 'Frisör Stockholm')",
                 "Batch mode: run across 10+ cities simultaneously",
                 "Auto-filters: min rating, min reviews, require phone",
                 "Coverage map shows which cities you've searched",
-                "Auto-adds leads to your CRM when search completes",
+                "Automatically scrapes emails when discovery completes",
               ]}
-              path="/finder"
+              path="/email-finder"
               accent="cyan"
             />
 
@@ -292,7 +292,7 @@ export default function GuidePage() {
               description="Configure defaults, run bulk operations, and export your data."
               features={[
                 "Outreach defaults: caps, cooldown, call-after hours",
-                "Finder defaults: city, keywords, leads target",
+                "Email scraper defaults: city, keywords, leads target",
                 "Bulk email scrape from websites",
                 "Export all leads to CSV",
               ]}

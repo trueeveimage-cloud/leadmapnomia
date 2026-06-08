@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { addLead, determineSection, updateLead } from "@/lib/supabase";
 
 export interface FinderRun {
   id: string;
@@ -165,6 +166,96 @@ export async function resumeFinderRun(runId: string): Promise<any> {
   });
   if (error) throw error;
   return data;
+}
+
+export async function scrapeFinderCandidateEmails(params: {
+  runIds: string[];
+  onProgress?: (progress: { done: number; total: number; found: number; added: number; updated: number }) => void;
+}) {
+  const runIds = params.runIds.filter(Boolean);
+  if (runIds.length === 0) return { checked: 0, found: 0, added: 0, updated: 0 };
+
+  const { data, error } = await supabase
+    .from('finder_candidates')
+    .select('*')
+    .in('run_id', runIds)
+    .not('website', 'is', null)
+    .is('email', null);
+
+  if (error) throw error;
+
+  const candidates = ((data || []) as unknown as FinderCandidate[])
+    .filter(candidate => candidate.website && !candidate.email);
+
+  let checked = 0;
+  let found = 0;
+  let added = 0;
+  let updated = 0;
+
+  params.onProgress?.({ done: checked, total: candidates.length, found, added, updated });
+
+  for (let i = 0; i < candidates.length; i += 4) {
+    const slice = candidates.slice(i, i + 4);
+    const urls = slice.map(candidate => ({
+      leadId: candidate.id,
+      website: candidate.website!,
+      businessName: candidate.name,
+    }));
+
+    const { data: scrapeData, error: scrapeError } = await supabase.functions.invoke('scrape-emails', { body: { urls } });
+    if (scrapeError) throw scrapeError;
+
+    const results = scrapeData?.results || [];
+    for (const result of results) {
+      const candidate = slice.find(item => item.id === result.leadId);
+      const email = result?.email || result?.emails?.[0];
+      if (!candidate || !email) continue;
+
+      found++;
+      await supabase
+        .from('finder_candidates')
+        .update({ email } as any)
+        .eq('id', candidate.id);
+
+      const leadData = {
+        place_id: candidate.place_id,
+        maps_url: candidate.maps_url,
+        name: candidate.name,
+        category: candidate.category,
+        niche_label: candidate.category?.split(',')[0]?.trim() || null,
+        rating: candidate.rating,
+        reviews_count: candidate.reviews_count,
+        phone: candidate.phone,
+        email,
+        address: candidate.address,
+        website: candidate.website,
+        section: determineSection({ phone: candidate.phone, email }),
+        status: 'not_contacted' as const,
+        email_source: result.source || 'website_scrape',
+        product: 'leadmap' as const,
+      };
+
+      const { duplicate, error: addError } = await addLead(leadData);
+      if (addError) continue;
+      if (duplicate) {
+        if (!duplicate.email) {
+          await updateLead(duplicate.id, {
+            email,
+            email_source: result.source || 'website_scrape',
+            section: determineSection({ ...duplicate, email }),
+          });
+          updated++;
+        }
+      } else {
+        added++;
+      }
+    }
+
+    checked = Math.min(i + 4, candidates.length);
+    params.onProgress?.({ done: checked, total: candidates.length, found, added, updated });
+  }
+
+  return { checked, found, added, updated };
 }
 
 export function candidatesToCsv(candidates: FinderCandidate[]): string {
