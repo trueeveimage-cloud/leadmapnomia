@@ -18,6 +18,7 @@ import {
   Mail,
   MapPin,
   Radar,
+  Rocket,
   Search,
   SlidersHorizontal,
   StopCircle,
@@ -328,6 +329,7 @@ export default function EmailFinderPage() {
   const [minReviews, setMinReviews] = useState(5);
   const [requirePhone, setRequirePhone] = useState(false);
   const [runPlan, setRunPlan] = useState<RunPlanId>('balanced');
+  const [showCityPicker, setShowCityPicker] = useState(false);
   const [showAdvancedRunSettings, setShowAdvancedRunSettings] = useState(false);
   const [running, setRunning] = useState(false);
 
@@ -411,6 +413,8 @@ export default function EmailFinderPage() {
   }, [availableCities, citySearch]);
 
   const keywords = useMemo(() => parseKeywords(keywordsText), [keywordsText]);
+  const selectedPreset = PRESETS[presetIndex];
+  const selectedRunPlan = RUN_PLANS.find(plan => plan.id === runPlan) ?? RUN_PLANS[1];
 
   const estimatedSearches = Math.max(1, keywords.length) * selectedCities.length * maxPages;
   const estimatedDetails = selectedCities.length * maxDetails;
@@ -715,9 +719,30 @@ export default function EmailFinderPage() {
           </div>
         </Card>
 
+        <Card className="p-3 sm:p-4">
+          <div className="grid gap-2 md:grid-cols-4">
+            {[
+              { label: 'Market', value: COUNTRY_LABELS[country], sub: `${selectedCities.length} cities selected`, href: '#market' },
+              { label: 'Customer type', value: selectedPreset.label, sub: `${keywords.length} keywords`, href: '#search' },
+              { label: 'Run size', value: selectedRunPlan.label, sub: `~${targetLeads} target leads`, href: '#search' },
+              { label: 'Saved scrape', value: `${savedStats.hotEligible} hot`, sub: `${savedStats.eligible} eligible`, href: '#saved-leads' },
+            ].map(item => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="rounded-md border border-border bg-background px-3 py-2 hover:bg-accent transition-colors"
+              >
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                <div className="mt-0.5 text-sm font-semibold truncate">{item.value}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{item.sub}</div>
+              </a>
+            ))}
+          </div>
+        </Card>
+
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)] gap-5">
           <div className="space-y-5">
-            <Card className="p-4 sm:p-5 space-y-4">
+            <Card id="market" className="p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
@@ -748,67 +773,93 @@ export default function EmailFinderPage() {
                 })}
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1fr)]">
-                <div className="space-y-3">
-                  <Input
-                    value={citySearch}
-                    onChange={event => setCitySearch(event.target.value)}
-                    placeholder="Search city..."
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" onClick={() => selectTopCities(5)} type="button">Top 5</Button>
-                    <Button variant="outline" onClick={() => selectTopCities(12)} type="button">Top 12</Button>
-                    <Button variant="outline" onClick={selectUncoveredCities} type="button">Uncovered</Button>
-                    <Button variant="outline" onClick={() => setSelectedCityNames([])} type="button">Clear</Button>
-                  </div>
-                  <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
-                    <div className="font-medium text-foreground mb-1">Recommended next</div>
-                    {coverageStats.nextCities.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {coverageStats.nextCities.slice(0, 5).map(city => (
-                          <button
-                            key={city.name}
-                            onClick={() => toggleCity(city)}
-                            className="rounded-full border border-border px-2 py-1 hover:bg-accent"
-                          >
-                            {city.name}
-                          </button>
-                        ))}
-                      </div>
+              <div className="space-y-3">
+                <div className="rounded-md border border-border bg-background p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedCities.length > 0 ? (
+                      selectedCities.slice(0, 10).map(city => (
+                        <Badge key={city.name} variant="outline" className="text-[11px]">
+                          {city.name}
+                        </Badge>
+                      ))
                     ) : (
-                      <span>Every tracked city has coverage.</span>
+                      <span className="text-sm text-muted-foreground">No cities selected yet.</span>
+                    )}
+                    {selectedCities.length > 10 && (
+                      <Badge variant="secondary" className="text-[11px]">+{selectedCities.length - 10} more</Badge>
                     )}
                   </div>
                 </div>
 
-                <div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {filteredCities.map(city => {
-                      const isSelected = selectedCityNames.some(name => getCityKey(name) === getCityKey(city.name));
-                      const runsCount = cityRunCounts.get(getCityKey(city.name)) || 0;
-                      return (
-                        <button
-                          key={city.name}
-                          onClick={() => toggleCity(city)}
-                          className={`min-h-[66px] rounded-md border px-3 py-2 text-left transition-colors ${
-                            isSelected ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-accent'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium truncate">{city.name}</span>
-                            {isSelected && <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground mt-1">{city.type} - {city.population.toLocaleString()}</div>
-                          <div className="text-[10px] text-muted-foreground">{runsCount ? `${runsCount} previous runs` : 'not scanned'}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <Button variant="outline" onClick={() => selectTopCities(5)} type="button">Top 5</Button>
+                  <Button variant="outline" onClick={() => selectTopCities(12)} type="button">Top 12</Button>
+                  <Button variant="outline" onClick={selectUncoveredCities} type="button">Uncovered</Button>
+                  <Button variant="outline" onClick={() => setSelectedCityNames([])} type="button">Clear</Button>
+                  <Button variant="outline" onClick={() => setShowCityPicker(value => !value)} type="button" className="justify-between">
+                    Edit cities
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showCityPicker ? 'rotate-180' : ''}`} />
+                  </Button>
                 </div>
+
+                <Collapsible open={showCityPicker} onOpenChange={setShowCityPicker}>
+                  <CollapsibleContent className="space-y-3">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1fr)]">
+                      <div className="space-y-3">
+                        <Input
+                          value={citySearch}
+                          onChange={event => setCitySearch(event.target.value)}
+                          placeholder="Search city..."
+                        />
+                        <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                          <div className="font-medium text-foreground mb-1">Recommended next</div>
+                          {coverageStats.nextCities.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {coverageStats.nextCities.slice(0, 5).map(city => (
+                                <button
+                                  key={city.name}
+                                  onClick={() => toggleCity(city)}
+                                  className="rounded-full border border-border px-2 py-1 hover:bg-accent"
+                                >
+                                  {city.name}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span>Every tracked city has coverage.</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {filteredCities.map(city => {
+                          const isSelected = selectedCityNames.some(name => getCityKey(name) === getCityKey(city.name));
+                          const runsCount = cityRunCounts.get(getCityKey(city.name)) || 0;
+                          return (
+                            <button
+                              key={city.name}
+                              onClick={() => toggleCity(city)}
+                              className={`min-h-[66px] rounded-md border px-3 py-2 text-left transition-colors ${
+                                isSelected ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-accent'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-medium truncate">{city.name}</span>
+                                {isSelected && <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground mt-1">{city.type} - {city.population.toLocaleString()}</div>
+                              <div className="text-[10px] text-muted-foreground">{runsCount ? `${runsCount} previous runs` : 'not scanned'}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
             </Card>
 
-            <Card className="p-4 sm:p-5 space-y-4">
+            <Card id="search" className="p-4 sm:p-5 space-y-4">
               <div>
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Target className="h-4 w-4 text-primary" />
@@ -931,7 +982,7 @@ export default function EmailFinderPage() {
                 </Collapsible>
 
                 <Button onClick={startFinder} disabled={running} className="w-full" size="lg">
-                  {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+                  {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
                   Start Leadmap email run
                 </Button>
               </div>
@@ -939,7 +990,7 @@ export default function EmailFinderPage() {
           </div>
 
           <div className="space-y-5">
-            <Card className="p-4 sm:p-5 space-y-4">
+            <Card id="coverage" className="p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
@@ -990,7 +1041,7 @@ export default function EmailFinderPage() {
               </Button>
             </Card>
 
-            <Card className="p-4 sm:p-5 space-y-4">
+            <Card id="saved-leads" className="p-4 sm:p-5 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
