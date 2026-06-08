@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
-import { getSetting, setSetting } from '@/lib/supabase';
+import { fetchNotifications, getSetting, setSetting, type AppNotification } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { Bot, Clock, Loader2, Mail, Play, RefreshCw, Save, ShieldCheck, SlidersHorizontal, Zap } from 'lucide-react';
+import { Bot, CalendarDays, Clock, Loader2, Mail, Play, RefreshCw, Save, ShieldCheck, SlidersHorizontal, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 type AutomationSettings = {
@@ -111,6 +111,26 @@ function detectCountry(lead: any) {
   return 'SE';
 }
 
+function formatShortDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatShortTime(value: string) {
+  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function isAiAutomationNotification(item: AppNotification) {
+  const payload = (item.payload || {}) as Record<string, any>;
+  return item.type === 'ai_call_batch_done'
+    || payload.automation === 'ai_calls'
+    || item.title.toLowerCase().includes('ai call batch')
+    || item.title.toLowerCase().includes('ai call automation');
+}
+
+function isGmailAutomationNotification(item: AppNotification) {
+  return item.type === 'gmail_batch_done';
+}
+
 export default function AutomationPage() {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULTS);
   const [stats, setStats] = useState<Stats>({ callsToday: 0, emailsToday: 0, callEligible: 0, emailEligible: 0 });
@@ -120,6 +140,7 @@ export default function AutomationPage() {
   const [runningAi, setRunningAi] = useState(false);
   const [runningGmail, setRunningGmail] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [history, setHistory] = useState<AppNotification[]>([]);
 
   const callPercent = useMemo(() => {
     const cap = Number(settings.aiDaily) || 1;
@@ -130,6 +151,38 @@ export default function AutomationPage() {
     const cap = Number(settings.gmailDaily) || 1;
     return Math.min(100, Math.round((stats.emailsToday / cap) * 100));
   }, [settings.gmailDaily, stats.emailsToday]);
+
+  const aiRunsToday = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return history.filter(item => isAiAutomationNotification(item) && new Date(item.created_at) >= start).length;
+  }, [history]);
+
+  const aiStartedFromHistoryToday = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return history
+      .filter(item => isAiAutomationNotification(item) && new Date(item.created_at) >= start)
+      .reduce((sum, item) => sum + Number((item.payload as any)?.started || 0), 0);
+  }, [history]);
+
+  const scheduleDaysText = useMemo(() => {
+    const selected = WEEKDAYS.filter(([value]) => settings.aiDays.includes(value)).map(([, label]) => label);
+    return selected.length === 5 && selected.every(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(day))
+      ? 'Mon-Fri'
+      : selected.join(', ') || 'No days selected';
+  }, [settings.aiDays]);
+
+  const maxRunsPerDay = useMemo(() => {
+    const windowHours = Math.max(0, Number(settings.aiEndHour || 0) - Number(settings.aiStartHour || 0));
+    return windowHours;
+  }, [settings.aiStartHour, settings.aiEndHour]);
+
+  const neededRunsText = useMemo(() => {
+    const daily = Math.max(1, Number(settings.aiDaily || 1));
+    const perRun = Math.max(1, Number(settings.aiPerRun || 1));
+    return String(Math.ceil(daily / perRun));
+  }, [settings.aiDaily, settings.aiPerRun]);
 
   const loadSettings = async () => {
     const keys = [
@@ -224,11 +277,16 @@ export default function AutomationPage() {
     });
   };
 
+  const loadHistory = async () => {
+    const rows = await fetchNotifications(250);
+    setHistory(rows.filter(item => isAiAutomationNotification(item) || isGmailAutomationNotification(item)).slice(0, 80));
+  };
+
   const refresh = async () => {
     setLoading(true);
     try {
       const next = await loadSettings();
-      await loadStats(next);
+      await Promise.all([loadStats(next), loadHistory()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load automation');
     } finally {
@@ -266,6 +324,7 @@ export default function AutomationPage() {
       ]);
       toast.success('Automation saved');
       await loadStats(next);
+      await loadHistory();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Save failed');
     } finally {
@@ -304,6 +363,7 @@ export default function AutomationPage() {
       toast.success(`AI calls: ${data?.started || 0} started, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
       await loadStats(next);
       await previewCalls(next);
+      await loadHistory();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'AI batch failed');
     } finally {
@@ -324,6 +384,7 @@ export default function AutomationPage() {
       if (data?.skipped && data?.reason) toast.message(`Gmail skipped: ${data.reason}`);
       else toast.success(`Gmail: ${data?.sent || 0} sent, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
       await loadStats(next);
+      await loadHistory();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gmail batch failed');
     } finally {
@@ -358,7 +419,7 @@ export default function AutomationPage() {
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.9fr_0.8fr]">
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div className="flex items-center gap-2">
@@ -498,9 +559,78 @@ export default function AutomationPage() {
               <StatusTile icon={<ShieldCheck size={15} />} label="Safety" value="Opt-out + dedupe locks" />
             </div>
           </section>
+
+          <section className="rounded-lg border border-border bg-card p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <CalendarDays size={17} className="text-primary" />
+              <h2 className="font-semibold text-foreground">Daily AI history</h2>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <StatusTile icon={<Clock size={15} />} label="Runs today" value={String(aiRunsToday)} />
+              <StatusTile icon={<PhoneHistoryIcon />} label="Started today" value={`${aiStartedFromHistoryToday} calls`} />
+              <StatusTile icon={<CalendarDays size={15} />} label="Schedule" value={`${scheduleDaysText}, ${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
+              <StatusTile icon={<Zap size={15} />} label="Daily cadence" value={`${settings.aiPerRun}/run, ${neededRunsText} runs to hit ${settings.aiDaily}`} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-border bg-background/40">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <div className="text-sm font-medium text-foreground">Recent automation runs</div>
+                <div className="text-xs text-muted-foreground">max {maxRunsPerDay}/day</div>
+              </div>
+              <div className="max-h-[34rem] overflow-y-auto">
+                {history.filter(isAiAutomationNotification).length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No AI automation history yet.</div>
+                ) : (
+                  history.filter(isAiAutomationNotification).slice(0, 30).map(item => {
+                    const payload = (item.payload || {}) as Record<string, any>;
+                    return (
+                      <div key={item.id} className="border-b border-border/60 px-3 py-3 last:border-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-foreground">{item.title}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">{formatShortDate(item.created_at)} at {formatShortTime(item.created_at)}</div>
+                          </div>
+                          <Badge variant={payload.forced ? 'secondary' : 'outline'}>{payload.forced ? 'Manual' : 'Auto'}</Badge>
+                        </div>
+                        {item.message && <div className="mt-2 text-xs text-muted-foreground">{item.message}</div>}
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                          <MiniStat label="Started" value={payload.started ?? 0} />
+                          <MiniStat label="Skipped" value={payload.skipped ?? 0} />
+                          <MiniStat label="Failed" value={payload.failed ?? 0} />
+                        </div>
+                        {payload.remainingToday !== undefined && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            Remaining today: <span className="text-foreground">{payload.remainingToday}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
+              The scheduler checks once per hour during the call window. It starts up to the per-run limit until the daily cap is reached, then stops for the day.
+            </div>
+          </section>
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+function PhoneHistoryIcon() {
+  return <Bot size={15} />;
+}
+
+function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded border border-border bg-card px-2 py-1.5">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="mt-0.5 font-semibold text-foreground">{value}</div>
+    </div>
   );
 }
 

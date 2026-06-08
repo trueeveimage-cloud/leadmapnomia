@@ -77,12 +77,13 @@ function detectCountry(lead: any) {
 }
 
 async function recordNotification(supabase: any, input: {
+  type?: string;
   title: string;
   message: string;
   payload?: Record<string, unknown>;
 }) {
   await supabase.from('app_notifications').insert({
-    type: 'ai_call_started',
+    type: input.type || 'ai_call_batch_done',
     title: input.title,
     message: input.message,
     payload: input.payload || {},
@@ -151,9 +152,10 @@ Deno.serve(async (req) => {
     const remainingToday = Math.max(0, dailyCap - (callsToday || 0));
     if (!preview && remainingToday <= 0) {
       await recordNotification(supabase, {
+        type: 'ai_call_batch_done',
         title: 'AI call automation skipped',
         message: `Daily AI call cap reached (${callsToday || 0}/${dailyCap}).`,
-        payload: { reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap },
+        payload: { automation: 'ai_calls', reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap },
       });
       return json({ skipped: true, reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap });
     }
@@ -241,9 +243,20 @@ Deno.serve(async (req) => {
     }
 
     await recordNotification(supabase, {
+      type: 'ai_call_batch_done',
       title: force ? 'Manual AI call batch finished' : 'Scheduled AI call batch finished',
       message: `${started} started, ${skipped} skipped, ${failed} failed.`,
-      payload: { started, skipped, failed, dailyCap, callsToday: callsToday || 0, forced: force },
+      payload: {
+        automation: 'ai_calls',
+        started,
+        skipped,
+        failed,
+        dailyCap,
+        callsTodayBeforeRun: callsToday || 0,
+        remainingToday: Math.max(0, remainingToday - started),
+        forced: force,
+        scheduled: !force,
+      },
     });
 
     return json({
