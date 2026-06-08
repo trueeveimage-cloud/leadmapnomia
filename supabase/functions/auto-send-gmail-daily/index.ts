@@ -270,17 +270,16 @@ Deno.serve(async (req) => {
     const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
     const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
 
-    let q = supabase
+    const { data: candidates } = await supabase
       .from('leads')
       .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
       .in('lead_tier', ['S', 'A+', 'A'])
-      .neq('outreach_stage', 'email_sent')
+      .or('outreach_stage.is.null,outreach_stage.neq.email_sent')
       .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(1000);
-    const { data: candidates } = await q;
 
     const seenEmails = new Set<string>();
     const batch = (candidates || [])
