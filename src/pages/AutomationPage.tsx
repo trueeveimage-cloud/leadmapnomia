@@ -70,7 +70,7 @@ const DEFAULTS: AutomationSettings = {
   aiMinScore: '0',
   aiProduct: 'leadmap',
   gmailEnabled: true,
-  gmailDaily: '40',
+  gmailDaily: '100',
   gmailBatchSize: '10',
   gmailDelaySeconds: '120',
   gmailSubject: 'Quick question about missed calls at {{business_name}}',
@@ -152,6 +152,16 @@ function isAiAutomationNotification(item: AppNotification) {
 
 function isGmailAutomationNotification(item: AppNotification) {
   return item.type === 'gmail_batch_done' || item.title.toLowerCase().includes('gmail');
+}
+
+function sumHistory(
+  items: AppNotification[],
+  key: 'started' | 'sent' | 'skipped' | 'failed',
+  predicate?: (item: AppNotification) => boolean,
+) {
+  return items
+    .filter(item => (predicate ? predicate(item) : true))
+    .reduce((sum, item) => sum + Number(((item.payload || {}) as Record<string, any>)[key] || 0), 0);
 }
 
 function getScheduleDaysText(days: string[]) {
@@ -254,7 +264,7 @@ export default function AutomationPage() {
   const smartSummary = useMemo(() => {
     const callsPerRun = clampNumber(settings.aiPerRun, 3, 1, 10);
     const callDaily = clampNumber(settings.aiDaily, 15, 1, 100);
-    const emailDaily = clampNumber(settings.gmailDaily, 40, 1, 100);
+    const emailDaily = clampNumber(settings.gmailDaily, 100, 1, 100);
     const emailBatch = clampNumber(settings.gmailBatchSize, 10, 1, 20);
     const delay = clampNumber(settings.gmailDelaySeconds, 120, 0, 900);
     return {
@@ -263,7 +273,7 @@ export default function AutomationPage() {
       emailDaily,
       emailBatch,
       delay,
-      safeEmail: emailDaily <= 80 && emailBatch <= 20 && delay >= 60,
+      safeEmail: emailDaily <= 100 && emailBatch <= 20 && delay >= 60,
     };
   }, [settings.aiDaily, settings.aiPerRun, settings.gmailDaily, settings.gmailBatchSize, settings.gmailDelaySeconds]);
 
@@ -310,7 +320,7 @@ export default function AutomationPage() {
   };
 
   const loadStats = async (nextSettings = settings) => {
-    const [{ count: emailsToday }, { count: callsToday }, emailEligibleRes, callRowsRes] = await Promise.all([
+    const [{ count: emailsToday }, { count: callsToday }, emailRowsRes, callRowsRes] = await Promise.all([
       supabase
         .from('message_logs')
         .select('id', { count: 'exact', head: true })
@@ -325,14 +335,15 @@ export default function AutomationPage() {
         .gte('created_at', startOfTodayIso()),
       supabase
         .from('leads')
-        .select('id', { count: 'exact', head: true })
+        .select('id, outreach_state, last_called_at, last_contact_method, call_attempts')
         .not('email', 'is', null)
         .neq('email', '')
         .eq('outreach_opt_out', false)
         .or('do_not_contact.is.null,do_not_contact.eq.false')
         .neq('outreach_stage', 'email_sent')
         .neq('outreach_state', 'email_sent')
-        .in('lead_tier', ['S', 'A+', 'A']),
+        .in('lead_tier', ['S', 'A+', 'A'])
+        .limit(5000),
       supabase
         .from('leads')
         .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
@@ -352,12 +363,19 @@ export default function AutomationPage() {
       if (EXCLUDED_CALL_STATUSES.includes(String(lead.status || ''))) return false;
       return !!normalizePhone(lead.phone_e164 || lead.phone);
     }).length;
+    const emailEligible = (emailRowsRes.data || []).filter((lead: any) => {
+      if (lead.last_called_at) return false;
+      if ((lead.call_attempts || 0) > 0) return false;
+      if (lead.outreach_state === 'called') return false;
+      if (lead.last_contact_method === 'AI Call') return false;
+      return true;
+    }).length;
 
     setStats({
       callsToday: callsToday || 0,
       emailsToday: emailsToday || 0,
       callEligible,
-      emailEligible: emailEligibleRes.count || 0,
+      emailEligible,
     });
   };
 
@@ -428,7 +446,7 @@ export default function AutomationPage() {
       aiDays: ['1', '2', '3', '4', '5'],
       aiCountries: settings.aiCountries.length ? settings.aiCountries : ['SE'],
       gmailEnabled: true,
-      gmailDaily: '40',
+      gmailDaily: '100',
       gmailBatchSize: '10',
       gmailDelaySeconds: '120',
     };
@@ -532,7 +550,7 @@ export default function AutomationPage() {
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every hour in the work window. AI calls start in small batches until the daily cap is hit; Gmail sends small batches with delay, dedupe, opt-out and suppression checks.
+                Cron checks every hour in the work window. AI calls start in small batches until the daily cap is hit; Gmail sends small batches with delay, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
@@ -546,7 +564,7 @@ export default function AutomationPage() {
                 Smart safety
               </div>
               <div className="mt-1 text-sm font-medium text-foreground">
-                {smartSummary.safeEmail ? 'Gmail pacing is safe' : 'Gmail settings are aggressive'}
+                {smartSummary.safeEmail ? 'Gmail pacing is ready for 100/day' : 'Gmail settings need review'}
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-muted">
                 <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${dayProgress}%` }} />
@@ -618,7 +636,7 @@ export default function AutomationPage() {
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <StatusTile icon={<Clock size={15} />} label="Cadence" value={`${settings.aiPerRun}/hour, ${smartSummary.callRunsNeeded} checks to hit ${settings.aiDaily}`} />
-              <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="Dedupe, opt-out, max attempts" />
+              <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="Dedupe, opt-out, email exclusion" />
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40">
@@ -697,7 +715,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
-              Smart setup keeps Gmail out of blast mode: daily cap max 100, per-run batch max 20, email validation, duplicate prevention, opt-out checks, suppression list, and unsubscribe footer.
+              Smart setup keeps Gmail controlled at 100/day: per-run batch max 20, email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
             </div>
 
             <details className="mt-4 rounded-md border border-border bg-background/40 p-3">
@@ -720,6 +738,13 @@ export default function AutomationPage() {
               <StatusTile icon={<Mail size={15} />} label="Gmail checks today" value={String(gmailRunsToday)} />
               <StatusTile icon={<Clock size={15} />} label="Window" value={`${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
               <StatusTile icon={<Zap size={15} />} label="Active mode" value={settings.aiEnabled || settings.gmailEnabled ? 'Automatic' : 'Paused'} />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <MiniStat label="Total AI started" value={sumHistory(history, 'started', isAiAutomationNotification)} />
+              <MiniStat label="Total emails sent" value={sumHistory(history, 'sent', isGmailAutomationNotification)} />
+              <MiniStat label="Total skipped" value={sumHistory(history, 'skipped')} />
+              <MiniStat label="Total failed" value={sumHistory(history, 'failed')} />
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40">

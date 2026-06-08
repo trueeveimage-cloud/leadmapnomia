@@ -29,7 +29,7 @@ const DEFAULT_DRAFT: Draft = {
   subject: 'Quick question about missed calls at {{business_name}}',
   body: 'Hi {{owner_name}},\n\nI noticed {{business_name}} serves customers in {{city}}. Leadmap helps service businesses answer and summarize calls when the team is busy or closed.\n\nWould it make sense to show you a 5 minute example?\n\nBest,\nMaged\n\nIf this is not relevant, reply unsubscribe and I will not contact you again.',
   senderName: 'Maged',
-  dailyLimit: '40',
+  dailyLimit: '100',
   delaySeconds: '120',
   batchSize: '10',
   suppressionList: '',
@@ -98,7 +98,7 @@ export default function EmailOutreachPage() {
   const dailyLimitNumber = Number(draft.dailyLimit) || 0;
   const delayNumber = Number(draft.delaySeconds) || 0;
   const batchSizeNumber = Number(draft.batchSize) || 0;
-  const needsSafetyAttention = dailyLimitNumber > 80 || delayNumber < 60 || batchSizeNumber > 20;
+  const needsSafetyAttention = dailyLimitNumber > 100 || delayNumber < 60 || batchSizeNumber > 20;
 
   const persistDraft = async (next: Draft) => {
     await Promise.all([
@@ -220,14 +220,14 @@ export default function EmailOutreachPage() {
               </div>
               <div className="rounded-lg border border-border bg-background/40 p-3 text-xs leading-relaxed text-muted-foreground">
                 <div className="font-medium text-foreground">Recommended</div>
-                Start with 20-40 per day, 120+ seconds between emails, and a batch size of 10 while warming up the sender.
+                The automation target is 100/day. Keep 120+ seconds between emails and a batch size of 10 while warming up the sender.
               </div>
             </div>
 
             {needsSafetyAttention && (
               <div className="rounded-lg border border-amber/30 bg-amber/10 p-3 text-xs text-muted-foreground flex gap-2">
                 <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber" />
-                <span>These settings are aggressive. Lower the daily limit, use at least 60 seconds between emails, and keep batches small to protect sender reputation.</span>
+                <span>These settings are aggressive. Keep the daily limit at 100 or lower, use at least 60 seconds between emails, and keep batches small to protect sender reputation.</span>
               </div>
             )}
 

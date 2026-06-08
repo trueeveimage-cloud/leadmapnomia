@@ -76,6 +76,13 @@ function isSuppressed(to: string, entries: string[]) {
   });
 }
 
+function hasCallContact(lead: any) {
+  return !!lead?.last_called_at
+    || lead?.last_contact_method === 'AI Call'
+    || lead?.outreach_state === 'called'
+    || (Number(lead?.call_attempts || 0) > 0);
+}
+
 async function notify(supabase: any, input: { type: string; title: string; message: string; payload?: Record<string, unknown> }) {
   await supabase.from('app_notifications').insert({
     type: input.type,
@@ -133,6 +140,15 @@ Deno.serve(async (req) => {
       });
       return jsonResp({ skipped: true, reason: 'opt_out' });
     }
+    if (hasCallContact(lead)) {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: lead already called',
+        message: `${lead?.name || to} is already in the AI-call lane.`,
+        payload: { leadId, to, reason: 'already_called' },
+      });
+      return jsonResp({ skipped: true, reason: 'already_called' });
+    }
   }
 
   // 2) Dedupe: already emailed this lead successfully
@@ -157,10 +173,21 @@ Deno.serve(async (req) => {
   const normalizedTo = to;
   const { data: matchingLeads } = await supabase
     .from('leads')
-    .select('id')
+    .select('id, name, last_called_at, last_contact_method, outreach_state, call_attempts')
     .ilike('email', normalizedTo);
   const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
   if (matchingLeadIds.length > 0) {
+    const calledMatch = (matchingLeads || []).find((lead: any) => hasCallContact(lead));
+    if (calledMatch) {
+      await notify(supabase, {
+        type: 'outreach_skipped',
+        title: 'Gmail skipped: matching lead already called',
+        message: `${to} matches a business already contacted by AI call.`,
+        payload: { leadId: leadId || '', to, reason: 'matching_lead_already_called', matchedLeadId: calledMatch.id },
+      });
+      return jsonResp({ skipped: true, reason: 'matching_lead_already_called' });
+    }
+
     const { data: existingByEmail } = await supabase
       .from('message_logs')
       .select('id, lead_id')

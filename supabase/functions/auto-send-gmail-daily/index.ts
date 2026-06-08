@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const DEFAULT_DAILY = 40;
+const DEFAULT_DAILY = 100;
 const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
@@ -37,6 +37,13 @@ function personalize(template: string, lead: any) {
 
 function validEmail(email: string | null | undefined) {
   return !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
+}
+
+function hasCallContact(lead: any) {
+  return !!lead?.last_called_at
+    || lead?.last_contact_method === 'AI Call'
+    || lead?.outreach_state === 'called'
+    || (Number(lead?.call_attempts || 0) > 0);
 }
 
 function sleep(ms: number) {
@@ -180,13 +187,14 @@ Deno.serve(async (req) => {
 
     const { data: candidates } = await supabase
       .from('leads')
-      .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact')
+      .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
       .eq('outreach_opt_out', false)
       .eq('do_not_contact', false)
       .neq('outreach_stage', 'email_sent')
       .neq('outreach_state', 'email_sent')
+      .neq('outreach_state', 'called')
       .neq('outreach_state', 'do_not_contact')
       .in('lead_tier', ['S', 'A+', 'A'])
       .order('potential_score', { ascending: false, nullsFirst: false })
@@ -197,6 +205,7 @@ Deno.serve(async (req) => {
       .filter((lead: any) => {
         const email = String(lead.email || '').trim().toLowerCase();
         if (!validEmail(email) || seenEmails.has(email)) return false;
+        if (hasCallContact(lead)) return false;
         seenEmails.add(email);
         lead.email = email;
         return true;
