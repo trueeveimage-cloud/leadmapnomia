@@ -147,7 +147,7 @@ async function getCallEligibilityDiagnostics(
 ) {
   const { data: leads } = await supabase
     .from('leads')
-    .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+    .select('id, name, phone, phone_e164, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
     .or('phone.not.is.null,phone_e164.not.is.null')
     .limit(2000);
 
@@ -224,7 +224,7 @@ Deno.serve(async (req) => {
 
     const enabled = settings.ai_calls_enabled === 'true';
     const dailyCap = intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100);
-    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 1);
+    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 50);
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const startMinute = intSetting(settings, 'ai_calls_start_minute', 0, 0, 59);
     const endHour = intSetting(settings, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
@@ -272,7 +272,7 @@ Deno.serve(async (req) => {
       return json({ skipped: true, reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap });
     }
 
-    if (!preview) {
+    if (!preview && !force) {
       const activeSince = new Date(Date.now() - activeGuardMinutes * 60 * 1000).toISOString();
       const { data: activeCall } = await supabase
         .from('leads')
@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('call_attempts.is.null,call_attempts.lt.2')

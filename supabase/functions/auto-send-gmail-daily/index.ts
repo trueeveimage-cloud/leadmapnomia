@@ -293,11 +293,11 @@ Deno.serve(async (req) => {
       .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
-      .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
-      .or('do_not_contact.is.null,do_not_contact.eq.false')
       .in('lead_tier', ['S', 'A+', 'A'])
+      .or('outreach_stage.is.null,outreach_stage.neq.email_sent')
+      .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
-      .limit(Math.max(batchSize * 4, remaining * 2));
+      .limit(1000);
 
     const seenEmails = new Set<string>();
     const batch = (candidates || [])
