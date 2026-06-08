@@ -112,7 +112,7 @@ export default function FinderBatchPage() {
       if (added > 0) {
         await createNotification({
           type: 'lead_added',
-          title: 'Email scraper batch auto-added leads',
+          title: 'Lead Finder batch auto-added leads',
           message: `Added ${added} leads from ${doneRuns.length} cities.`,
           payload: { added, cities: doneRuns.length, batchId: batchId || '' },
         });
@@ -158,7 +158,7 @@ export default function FinderBatchPage() {
       await load();
       await createNotification({
         type: 'email_scrape_done',
-        title: 'Email scraper batch finished',
+        title: 'Lead Finder batch finished',
         message: `Found ${result.found} emails from ${result.checked} discovered business websites.`,
         payload: { ...result, batchId: batchId || '' },
       });
@@ -213,7 +213,7 @@ export default function FinderBatchPage() {
     setBulkAdding(false);
     await createNotification({
       type: 'lead_added',
-      title: 'Email scraper batch add finished',
+      title: 'Lead Finder batch add finished',
       message: `${added} leads added, ${skipped} skipped.`,
       payload: { added, skipped, selected: targets.length, batchId: batchId || '' },
     });
@@ -277,7 +277,7 @@ export default function FinderBatchPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 pb-10">
         {/* Header */}
         <div className="flex items-start gap-3 mb-5">
-          <Link to="/email-finder" className="mt-1">
+          <Link to="/lead-finder" className="mt-1">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><ArrowLeft size={14} /></Button>
           </Link>
           <div className="flex-1 min-w-0">

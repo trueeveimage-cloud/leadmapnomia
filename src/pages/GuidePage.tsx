@@ -102,7 +102,7 @@ export default function GuidePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-4 rounded-lg bg-secondary/30 p-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-primary">Phase 1 · Find</p>
-              <FlowStep step={1} title="Email Scraper Search" desc="Find potential Leadmap customers by country, city and niche" active />
+              <FlowStep step={1} title="Lead Finder Search" desc="Find potential Leadmap customers by country, city and niche" active />
               <FlowStep step={2} title="Auto Email Scrape" desc="Website emails are scraped automatically after discovery" />
               <FlowStep step={3} title="Save Hot Leads" desc="Qualified businesses land in the CRM with phone, email and website" />
             </div>
@@ -161,7 +161,7 @@ export default function GuidePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <FeatureCard
               icon={<Search className="h-5 w-5" />}
-              title="Email Scraper"
+              title="Lead Finder"
               description="Find potential Leadmap customers from Google Maps, then automatically scrape emails from their websites."
               features={[
                 "Search by city + keywords (e.g. 'Frisör Stockholm')",
@@ -170,7 +170,7 @@ export default function GuidePage() {
                 "Coverage map shows which cities you've searched",
                 "Automatically scrapes emails when discovery completes",
               ]}
-              path="/email-finder"
+              path="/lead-finder"
               accent="cyan"
             />
 
@@ -292,7 +292,7 @@ export default function GuidePage() {
               description="Configure defaults, run bulk operations, and export your data."
               features={[
                 "Outreach defaults: caps, cooldown, call-after hours",
-                "Email scraper defaults: city, keywords, leads target",
+                "Lead Finder defaults: city, keywords, leads target",
                 "Bulk email scrape from websites",
                 "Export all leads to CSV",
               ]}

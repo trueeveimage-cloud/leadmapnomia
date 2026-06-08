@@ -514,7 +514,7 @@ export default function EmailFinderPage() {
     try {
       const cappedDetails = Math.max(maxDetails, targetLeads);
       const batchId = selectedCities.length > 1 ? makeBatchId() : null;
-      const batchLabel = `Leadmap Email Scraper - ${COUNTRY_LABELS[country]} - ${selectedCities.length} cities`;
+      const batchLabel = `Leadmap Lead Finder - ${COUNTRY_LABELS[country]} - ${selectedCities.length} cities`;
       const createdRuns: FinderRun[] = [];
 
       for (const city of selectedCities) {
@@ -531,7 +531,7 @@ export default function EmailFinderPage() {
           requirePhone,
           findGmailOnly: true,
           batchId,
-          batchLabel: batchId ? batchLabel : `Leadmap Email Scraper - ${city.name}`,
+          batchLabel: batchId ? batchLabel : `Leadmap Lead Finder - ${city.name}`,
         });
         createdRuns.push(run);
       }
@@ -572,9 +572,9 @@ export default function EmailFinderPage() {
           },
         });
         if (totals.found > 0) {
-          toast.success(`Email scraper found ${totals.found} emails and saved ${totals.added + totals.updated} leads`);
+          toast.success(`Lead Finder found ${totals.found} emails and saved ${totals.added + totals.updated} leads`);
         } else {
-          toast.info('Email scraper finished discovery; no website emails found yet');
+          toast.info('Lead Finder finished discovery; no website emails found yet');
         }
       }).catch(error => {
         console.error('email finder automation', error);
@@ -586,7 +586,7 @@ export default function EmailFinderPage() {
         }).catch(() => {});
       });
 
-      toast.success(`Started ${createdRuns.length} Leadmap email scraper run${createdRuns.length === 1 ? '' : 's'}; emails will scrape automatically`);
+      toast.success(`Started ${createdRuns.length} Lead Finder run${createdRuns.length === 1 ? '' : 's'}; emails will scrape automatically`);
       navigate(batchId ? `/finder/batch/${batchId}` : `/finder/runs/${createdRuns[0].id}`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to start finder');
@@ -714,11 +714,11 @@ export default function EmailFinderPage() {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Mail className="h-6 w-6 text-primary" />
-              Leadmap Email Scraper
-              <Badge variant="outline" className="text-[10px] uppercase tracking-wide">Gmail-first</Badge>
+              Lead Finder
+              <Badge variant="outline" className="text-[10px] uppercase tracking-wide">Leadmap-ready</Badge>
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Finds service businesses that lose money when calls go unanswered, then prioritizes the best Leadmap prospects first.
+              Find Leadmap-fit businesses by country, then enrich saved leads with validated public website emails and source context.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -739,7 +739,7 @@ export default function EmailFinderPage() {
                 Leadmap customer target
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Prioritize plumbers, roofers, dentists, detailers, emergency trades, clinics, auto services, and local operators that get calls while busy.
+                Prioritize phone-first businesses where missed calls cost money: trades, clinics, emergency services, auto, and local operators.
               </p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -900,7 +900,7 @@ export default function EmailFinderPage() {
                   <Target className="h-4 w-4 text-primary" />
                   Choose what to search
                 </h2>
-                <p className="text-sm text-muted-foreground">Runs Google Places discovery for Leadmap-fit service businesses, then pulls emails from their websites.</p>
+                  <p className="text-sm text-muted-foreground">Runs public business discovery for Leadmap-fit service companies, then pulls contact emails from their websites.</p>
               </div>
 
               <div className="space-y-4">
@@ -1081,9 +1081,9 @@ export default function EmailFinderPage() {
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
                     <Layers className="h-4 w-4 text-primary" />
-                    Scrape saved CRM leads
+                    Manual email discovery
                   </h2>
-                  <p className="text-sm text-muted-foreground">Scores saved leads for Leadmap fit, then scrapes the strongest websites first.</p>
+                  <p className="text-sm text-muted-foreground">Choose a country and scrape public contact emails from saved leads that already have websites.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={loadSavedStats} disabled={loadingSavedStats}>
                   {loadingSavedStats ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
@@ -1123,7 +1123,7 @@ export default function EmailFinderPage() {
                   <Input type="number" min={0} max={100} value={savedMinScore} onChange={event => setSavedMinScore(Number(event.target.value) || 0)} />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Max to scrape now</span>
+                  <span className="text-xs font-medium text-muted-foreground">Max leads now</span>
                   <Input type="number" min={4} max={1000} value={savedLimit} onChange={event => setSavedLimit(Number(event.target.value) || 100)} />
                 </label>
               </div>
@@ -1155,6 +1155,10 @@ export default function EmailFinderPage() {
                 </div>
               </div>
 
+              <div className="rounded-md border border-amber/30 bg-amber/10 p-3 text-xs leading-relaxed text-muted-foreground">
+                Only use public business contact pages and verified CRM leads. Duplicate emails are skipped, opt-outs stay blocked, and each discovered email keeps its website source in the lead record.
+              </div>
+
               {savedStats.topNiches.length > 0 && (
                 <div className="rounded-md border border-border p-3">
                   <div className="text-xs font-medium text-muted-foreground mb-2">Top eligible niches</div>
@@ -1171,7 +1175,7 @@ export default function EmailFinderPage() {
               {scrapingExisting && (
                 <div className="rounded-md border border-border p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground truncate">{existingProgress.current || 'Scraping saved leads'}</span>
+                    <span className="text-muted-foreground truncate">{existingProgress.current || 'Scraping saved lead websites'}</span>
                     <span className="font-medium">{existingProgress.found}/{existingProgress.done} found</span>
                   </div>
                   <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
@@ -1189,7 +1193,7 @@ export default function EmailFinderPage() {
               <div className="flex gap-2">
                 <Button onClick={scrapeExistingLeads} disabled={scrapingExisting} className="flex-1" size="lg">
                   {scrapingExisting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-                  {scrapingExisting ? 'Scraping...' : 'Scrape saved leads'}
+                  {scrapingExisting ? 'Scraping...' : 'Scrape saved lead emails'}
                 </Button>
                 {scrapingExisting && (
                   <Button onClick={stopScrapingExisting} variant="outline" size="lg">
@@ -1207,7 +1211,7 @@ export default function EmailFinderPage() {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div className="rounded-md border border-border p-3">1. Pick country and uncovered cities with real service density.</div>
                 <div className="rounded-md border border-border p-3">2. Use missed-call niches: trades, clinics, emergency, auto, and local services.</div>
-                <div className="rounded-md border border-border p-3">3. Scrape saved leads with a Leadmap score floor, then contact the hot ones first.</div>
+                <div className="rounded-md border border-border p-3">3. Scrape public emails from saved leads with a Leadmap score floor, then contact the hot ones first.</div>
               </div>
             </Card>
           </div>

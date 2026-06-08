@@ -9,7 +9,8 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
-const DEFAULT_DAILY_CAP = 200;
+const DEFAULT_DAILY_CAP = 100;
+const UNSUBSCRIBE_MAILBOX = 'leadmapai.se@gmail.com';
 
 const BodySchema = z.object({
   leadId: z.string().uuid().optional(),
@@ -17,6 +18,7 @@ const BodySchema = z.object({
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(20000),
   manualUnlock: z.boolean().optional(),
+  skipCooldown: z.boolean().optional(),
 });
 
 function b64url(s: string): string {
@@ -32,6 +34,7 @@ function buildRaw(to: string, subject: string, body: string, from?: string): str
     ...(from ? [`From: ${from}`] : []),
     `To: ${to}`,
     `Subject: ${encSubject}`,
+    `List-Unsubscribe: <mailto:${UNSUBSCRIBE_MAILBOX}?subject=unsubscribe>`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',
@@ -42,6 +45,35 @@ function buildRaw(to: string, subject: string, body: string, from?: string): str
 
 function jsonResp(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function hasUnsubscribeLine(body: string) {
+  return /unsubscribe|do not contact|stop contacting/i.test(body);
+}
+
+function withComplianceFooter(body: string) {
+  if (hasUnsubscribeLine(body)) return body;
+  return `${body.trim()}\n\nIf this is not relevant, reply unsubscribe and I will not contact you again.`;
+}
+
+function parseSuppressionList(value: string | null | undefined) {
+  return String(value || '')
+    .split(/[\n,;]/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isSuppressed(to: string, entries: string[]) {
+  const email = normalizeEmail(to);
+  const domain = email.split('@')[1] || '';
+  return entries.some((entry) => {
+    const clean = entry.replace(/^@/, '');
+    return clean === email || clean === domain || email.endsWith(`@${clean}`);
+  });
 }
 
 async function notify(supabase: any, input: { type: string; title: string; message: string; payload?: Record<string, unknown> }) {
@@ -70,10 +102,23 @@ Deno.serve(async (req) => {
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
-  const { leadId, to, subject, body, manualUnlock } = parsed.data;
+  const { leadId, subject, manualUnlock, skipCooldown } = parsed.data;
+  const to = normalizeEmail(parsed.data.to);
+  const body = withComplianceFooter(parsed.data.body);
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let leadRecord: any = null;
+
+  const { data: suppressionSetting } = await supabase.from('settings').select('value').eq('key', 'email_suppression_list').maybeSingle();
+  if (isSuppressed(to, parseSuppressionList(suppressionSetting?.value))) {
+    await notify(supabase, {
+      type: 'outreach_skipped',
+      title: 'Gmail skipped: suppression list',
+      message: `${to} is on the suppression list.`,
+      payload: { leadId: leadId || '', to, reason: 'suppressed' },
+    });
+    return jsonResp({ skipped: true, reason: 'suppressed' });
+  }
 
   // 1) Opt-out check
   if (leadId) {
@@ -109,7 +154,7 @@ Deno.serve(async (req) => {
   }
 
   // 2b) Dedupe across duplicate lead rows by recipient email.
-  const normalizedTo = to.trim().toLowerCase();
+  const normalizedTo = to;
   const { data: matchingLeads } = await supabase
     .from('leads')
     .select('id')
@@ -154,8 +199,12 @@ Deno.serve(async (req) => {
   }
 
   // 3) Daily cap check (UTC day)
-  const { data: capSetting } = await supabase.from('settings').select('value').eq('key', 'gmail_daily_cap').maybeSingle();
-  const dailyCap = Math.max(0, parseInt(capSetting?.value || '') || DEFAULT_DAILY_CAP);
+  const [{ data: capSetting }, { data: delaySetting }] = await Promise.all([
+    supabase.from('settings').select('value').eq('key', 'gmail_daily_cap').maybeSingle(),
+    supabase.from('settings').select('value').eq('key', 'gmail_autosend_delay_seconds').maybeSingle(),
+  ]);
+  const dailyCap = Math.max(0, Math.min(100, parseInt(capSetting?.value || '') || DEFAULT_DAILY_CAP));
+  const delaySeconds = Math.max(0, Math.min(900, parseInt(delaySetting?.value || '') || 0));
   const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
   const { count: sentToday } = await supabase
     .from('message_logs').select('id', { count: 'exact', head: true })
@@ -176,6 +225,23 @@ Deno.serve(async (req) => {
       payload: { leadId: leadId || '', to, reason: 'daily_cap', sentToday: sentToday ?? 0, dailyCap },
     });
     return jsonResp({ skipped: true, reason: 'daily_cap', sentToday, dailyCap });
+  }
+
+  if (delaySeconds > 0 && !skipCooldown) {
+    const { data: lastSent } = await supabase
+      .from('message_logs')
+      .select('created_at')
+      .eq('channel', 'email')
+      .eq('direction', 'outbound')
+      .eq('status', 'sent')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const lastAt = lastSent?.created_at ? new Date(lastSent.created_at).getTime() : 0;
+    const elapsedSeconds = lastAt ? Math.floor((Date.now() - lastAt) / 1000) : delaySeconds;
+    if (elapsedSeconds < delaySeconds) {
+      return jsonResp({ skipped: true, reason: 'send_cooldown', waitSeconds: delaySeconds - elapsedSeconds });
+    }
   }
 
   try {
@@ -203,11 +269,19 @@ Deno.serve(async (req) => {
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       if (leadId) {
+        const errorText = JSON.stringify(data).slice(0, 500);
         await supabase.from('message_logs').insert({
           lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
           to_number: to, body: `${subject}\n\n${body}`, status: 'failed',
-          error_message: JSON.stringify(data).slice(0, 500),
+          error_message: errorText,
         } as any);
+        if (/bounce|invalid|rejected|does not exist|550/i.test(errorText)) {
+          await supabase.from('leads').update({
+            do_not_contact: true,
+            outreach_opt_out: true,
+            outreach_state: 'do_not_contact',
+          } as any).eq('id', leadId);
+        }
       }
       await notify(supabase, {
         type: 'system_error',

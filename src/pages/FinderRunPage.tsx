@@ -62,7 +62,7 @@ export default function FinderRunPage() {
     notifiedRunRef.current = `${run.id}:${run.status}`;
     createNotification({
       type: 'lead_find_done',
-      title: run.status === 'done' ? 'Email scraper run finished' : `Email scraper run ${run.status}`,
+      title: run.status === 'done' ? 'Lead Finder run finished' : `Lead Finder run ${run.status}`,
       message: `${run.city} finished with ${candidates.length} candidates.`,
       payload: {
         runId: run.id,
@@ -191,7 +191,7 @@ export default function FinderRunPage() {
       await load();
       await createNotification({
         type: 'email_scrape_done',
-        title: 'Email scraper finished',
+        title: 'Lead Finder finished',
         message: `Found ${result.found} emails from ${result.checked} discovered business websites.`,
         payload: { ...result, runId: id || '' },
       });
@@ -335,12 +335,12 @@ export default function FinderRunPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 pb-10">
         {/* Header */}
         <div className="flex items-start gap-3 mb-5">
-          <Link to="/email-finder" className="mt-1">
+          <Link to="/lead-finder" className="mt-1">
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><ArrowLeft size={14} /></Button>
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-foreground truncate flex items-center gap-1.5">
-              {run.city} — Email Scraper Run
+              {run.city} - Lead Finder Run
               <InfoTip text="Results organized by outcome. Social media profiles (Facebook, Instagram, TikTok) are NOT counted as real websites." />
             </h1>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">

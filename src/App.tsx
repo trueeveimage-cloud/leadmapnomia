@@ -190,7 +190,7 @@ const App = () => (
                       <Route path="/status/making-demo" element={<ClosingPage status="making_demo" title="Making Demo" />} />
                       <Route path="/status/closed-won" element={<ClosingPage status="closed_won" title="Closed Won" />} />
                       <Route path="/status/closed-lost" element={<ClosingPage status="closed_lost" title="Closed Lost" />} />
-                      <Route path="/finder" element={<Navigate to="/email-finder" replace />} />
+                      <Route path="/finder" element={<Navigate to="/lead-finder" replace />} />
                       <Route path="/leadmap/closing" element={<LeadmapClosingPage />} />
                       <Route path="/leadmap/email-outreach" element={<EmailOutreachPage />} />
                       <Route path="/nomia/email-outreach" element={<EmailOutreachPage />} />
@@ -200,7 +200,8 @@ const App = () => (
                       <Route path="/ai-calls" element={<CallListPage />} />
                       <Route path="/leadmap-crm" element={<SectionPage allSections product="leadmap" title="Leadmap CRM" showTriage emptyMessage="No Leadmap leads yet" />} />
                       <Route path="/nomia-crm" element={<SectionPage allSections product="nomia" title="Nomia CRM" showTriage emptyMessage="No Nomia leads yet" />} />
-                      <Route path="/email-finder" element={<EmailFinderPage />} />
+                      <Route path="/email-finder" element={<Navigate to="/lead-finder" replace />} />
+                      <Route path="/lead-finder" element={<EmailFinderPage />} />
                       <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                       <Route path="/finder/runs/:id" element={<FinderRunPage />} />
                       <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />

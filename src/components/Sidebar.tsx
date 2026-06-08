@@ -22,7 +22,7 @@ function NavLink({ item, onNav }: { item: NavItem; onNav?: () => void }) {
   const { setProduct } = useProduct();
   const active = pathname === item.path
     || pathname.startsWith(`${item.path}/`)
-    || (item.path === '/email-finder' && (pathname.startsWith('/finder/runs/') || pathname.startsWith('/finder/batch/')));
+    || (item.path === '/lead-finder' && (pathname === '/email-finder' || pathname.startsWith('/finder/runs/') || pathname.startsWith('/finder/batch/')));
 
   return (
     <Link
@@ -63,7 +63,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
   const leadmap: NavItem[] = [
     { label: 'Automation', path: '/automation', icon: <Bot size={15} />, product: 'leadmap' },
-    { label: 'Email Scraper', path: '/email-finder', icon: <Mail size={15} />, product: 'leadmap' },
+    { label: 'Lead Finder', path: '/lead-finder', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Gmail Auto Send', path: '/leadmap/email-outreach', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Cold Call', path: '/cold-call', icon: <PhoneCall size={15} />, product: 'leadmap' },
     { label: 'AI Calls', path: '/ai-calls', icon: <Bot size={15} />, product: 'leadmap' },
