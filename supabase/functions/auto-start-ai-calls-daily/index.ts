@@ -242,7 +242,7 @@ Deno.serve(async (req) => {
       return json({ skipped: true, reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap });
     }
 
-    if (!preview) {
+    if (!preview && !force) {
       const activeSince = new Date(Date.now() - activeGuardMinutes * 60 * 1000).toISOString();
       const { data: activeCall } = await supabase
         .from('leads')
