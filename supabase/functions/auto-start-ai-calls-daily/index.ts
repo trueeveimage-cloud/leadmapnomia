@@ -283,7 +283,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('call_attempts.is.null,call_attempts.lt.2')
