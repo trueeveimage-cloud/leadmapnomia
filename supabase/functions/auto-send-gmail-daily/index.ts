@@ -277,6 +277,9 @@ Deno.serve(async (req) => {
       .neq('email', '')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('do_not_contact.is.null,do_not_contact.eq.false')
+      .or('outreach_stage.is.null,outreach_stage.neq.email_sent')
+      .or('outreach_state.is.null,outreach_state.neq.email_sent')
+      .or('last_called_at.is.null')
       .in('lead_tier', ['S', 'A+', 'A'])
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(Math.max(batchSize * 50, 2000));
