@@ -12,6 +12,7 @@ const DEFAULT_END_HOUR = 16;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 
 type Settings = Record<string, string>;
+type ReasonSummary = Record<string, number>;
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -76,6 +77,82 @@ function detectCountry(lead: any) {
   if (phone.startsWith('+44') || address.includes('united kingdom') || address.includes(' uk')) return 'UK';
   if (phone.startsWith('+34') || address.includes('spain') || address.includes('espana') || address.includes('espa')) return 'ES';
   return 'SE';
+}
+
+function addReason(summary: ReasonSummary, reason: string) {
+  summary[reason] = (summary[reason] || 0) + 1;
+}
+
+function labelReason(reason: string) {
+  const labels: Record<string, string> = {
+    no_phone_leads: 'no saved leads with phone numbers',
+    wrong_product: 'wrong product',
+    low_score: 'below minimum score',
+    wrong_country: 'outside selected countries',
+    opt_out: 'opted out',
+    do_not_contact: 'do not contact',
+    do_not_contact_state: 'do not contact state',
+    currently_calling: 'already in a call',
+    already_contacted: 'already contacted',
+    excluded_status: 'final status',
+    bad_phone: 'invalid phone',
+    attempt_limit: 'call attempt limit',
+  };
+  return labels[reason] || reason.replace(/_/g, ' ');
+}
+
+function summarizeReasons(summary: ReasonSummary) {
+  return Object.entries(summary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([reason, count]) => `${labelReason(reason)} (${count})`);
+}
+
+function callRejectionReasons(lead: any, input: { product: string; minScore: number; countries: string[] }) {
+  const reasons: string[] = [];
+  if (input.product !== 'all' && lead.product !== input.product) reasons.push('wrong_product');
+  if (input.minScore > 0 && (lead.potential_score || 0) < input.minScore) reasons.push('low_score');
+  if (!input.countries.includes(detectCountry(lead))) reasons.push('wrong_country');
+  if (lead.outreach_opt_out) reasons.push('opt_out');
+  if (lead.do_not_contact === true) reasons.push('do_not_contact');
+  if (lead.outreach_state === 'do_not_contact') reasons.push('do_not_contact_state');
+  if (lead.call_status === 'Calling') reasons.push('currently_calling');
+  if (lead.last_contacted_at || lead.outreach_state === 'called') reasons.push('already_contacted');
+  if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) reasons.push('excluded_status');
+  if (!normalizeE164(lead.phone_e164 || lead.phone)) reasons.push('bad_phone');
+  if (Number(lead.call_attempts || 0) >= 2) reasons.push('attempt_limit');
+  return reasons;
+}
+
+async function getCallEligibilityDiagnostics(
+  supabase: any,
+  input: { product: string; minScore: number; countries: string[] },
+) {
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+    .or('phone.not.is.null,phone_e164.not.is.null')
+    .limit(2000);
+
+  const summary: ReasonSummary = {};
+  let eligible = 0;
+  for (const lead of leads || []) {
+    const reasons = callRejectionReasons(lead, input);
+    if (reasons.length === 0) eligible += 1;
+    reasons.forEach((reason) => addReason(summary, reason));
+  }
+
+  if (!leads?.length) addReason(summary, 'no_phone_leads');
+  const topReasons = summarizeReasons(summary);
+  return {
+    checked: leads?.length || 0,
+    eligible,
+    rejectionSummary: summary,
+    topReasons,
+    message: topReasons.length
+      ? `No eligible AI-call leads. Top blockers: ${topReasons.join(', ')}.`
+      : 'No eligible AI-call leads found.',
+  };
 }
 
 async function recordNotification(supabase: any, input: {
@@ -203,8 +280,8 @@ Deno.serve(async (req) => {
       .from('leads')
       .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
-      .eq('outreach_opt_out', false)
-      .lt('call_attempts', 2)
+      .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
+      .or('call_attempts.is.null,call_attempts.lt.2')
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(Math.max(50, perRun * 20));
     if (product !== 'all') query = query.eq('product', product);
@@ -213,15 +290,10 @@ Deno.serve(async (req) => {
     const { data: rawCandidates, error: leadsError } = await query;
     if (leadsError) throw leadsError;
 
-    const candidates = (rawCandidates || []).filter((lead: any) => {
-      if (lead.do_not_contact === true) return false;
-      if (lead.call_status === 'Calling') return false;
-      if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) return false;
-      if (lead.outreach_state === 'do_not_contact') return false;
-      if (lead.outreach_state === 'called' || lead.last_contacted_at) return false;
-      if (!countries.includes(detectCountry(lead))) return false;
-      return !!normalizeE164(lead.phone_e164 || lead.phone);
-    });
+    const candidates = (rawCandidates || []).filter((lead: any) => callRejectionReasons(lead, { product, minScore, countries }).length === 0);
+    const diagnostics = candidates.length === 0
+      ? await getCallEligibilityDiagnostics(supabase, { product, minScore, countries })
+      : null;
 
     if (preview) {
       return json({
@@ -231,6 +303,7 @@ Deno.serve(async (req) => {
         dailyCap,
         remainingToday,
         eligible: candidates.length,
+        diagnostics,
         leads: candidates.slice(0, 15).map((lead: any) => ({
           id: lead.id,
           name: lead.name,
@@ -284,12 +357,17 @@ Deno.serve(async (req) => {
     await recordNotification(supabase, {
       type: 'ai_call_batch_done',
       title: force ? 'Manual AI call batch finished' : 'Scheduled AI call batch finished',
-      message: `${started} started, ${skipped} skipped, ${failed} failed.`,
+      message: diagnostics?.message || `${started} started, ${skipped} skipped, ${failed} failed.`,
       payload: {
         automation: 'ai_calls',
+        reason: candidates.length === 0 ? 'no_candidates' : undefined,
         started,
         skipped,
         failed,
+        eligible: candidates.length,
+        checked: diagnostics?.checked,
+        rejectionSummary: diagnostics?.rejectionSummary,
+        topReasons: diagnostics?.topReasons,
         dailyCap,
         callsTodayBeforeRun: callsToday || 0,
         remainingToday: Math.max(0, remainingToday - started),
@@ -307,6 +385,7 @@ Deno.serve(async (req) => {
       dailyCap,
       remainingToday: Math.max(0, remainingToday - started),
       eligible: candidates.length,
+      diagnostics,
       details: details.slice(0, 20),
       timestamp: new Date().toISOString(),
     });

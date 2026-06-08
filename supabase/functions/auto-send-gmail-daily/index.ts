@@ -23,6 +23,8 @@ Maged
 
 If this is not relevant, reply unsubscribe and I will not contact you again.`;
 
+type ReasonSummary = Record<string, number>;
+
 function personalize(template: string, lead: any) {
   const city = (lead.city || (lead.address || '').split(',').slice(-2)[0]?.trim() || '').trim();
   return template
@@ -44,6 +46,77 @@ function hasCallContact(lead: any) {
     || lead?.last_contact_method === 'AI Call'
     || lead?.outreach_state === 'called'
     || (Number(lead?.call_attempts || 0) > 0);
+}
+
+function addReason(summary: ReasonSummary, reason: string) {
+  summary[reason] = (summary[reason] || 0) + 1;
+}
+
+function labelReason(reason: string) {
+  const labels: Record<string, string> = {
+    no_saved_email_leads: 'no saved leads with emails',
+    invalid_email: 'invalid email',
+    duplicate_email: 'duplicate email',
+    opt_out: 'opted out',
+    do_not_contact: 'do not contact',
+    already_emailed: 'already emailed',
+    already_called: 'already called',
+    do_not_contact_state: 'do not contact state',
+    lower_tier: 'not S/A+/A tier',
+  };
+  return labels[reason] || reason.replace(/_/g, ' ');
+}
+
+function summarizeReasons(summary: ReasonSummary) {
+  return Object.entries(summary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([reason, count]) => `${labelReason(reason)} (${count})`);
+}
+
+function emailRejectionReasons(lead: any, seenEmails: Set<string>) {
+  const reasons: string[] = [];
+  const email = String(lead.email || '').trim().toLowerCase();
+  if (!validEmail(email)) reasons.push('invalid_email');
+  if (seenEmails.has(email)) reasons.push('duplicate_email');
+  seenEmails.add(email);
+  if (lead.outreach_opt_out) reasons.push('opt_out');
+  if (lead.do_not_contact === true) reasons.push('do_not_contact');
+  if (lead.outreach_stage === 'email_sent' || lead.outreach_state === 'email_sent') reasons.push('already_emailed');
+  if (lead.outreach_state === 'called' || hasCallContact(lead)) reasons.push('already_called');
+  if (lead.outreach_state === 'do_not_contact') reasons.push('do_not_contact_state');
+  if (!['S', 'A+', 'A'].includes(String(lead.lead_tier || ''))) reasons.push('lower_tier');
+  return reasons;
+}
+
+async function getEmailEligibilityDiagnostics(supabase: any) {
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('id, name, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
+    .not('email', 'is', null)
+    .neq('email', '')
+    .limit(5000);
+
+  const summary: ReasonSummary = {};
+  const seenEmails = new Set<string>();
+  let eligible = 0;
+  for (const lead of leads || []) {
+    const reasons = emailRejectionReasons(lead, seenEmails);
+    if (reasons.length === 0) eligible += 1;
+    reasons.forEach((reason) => addReason(summary, reason));
+  }
+
+  if (!leads?.length) addReason(summary, 'no_saved_email_leads');
+  const topReasons = summarizeReasons(summary);
+  return {
+    checked: leads?.length || 0,
+    eligible,
+    rejectionSummary: summary,
+    topReasons,
+    message: topReasons.length
+      ? `No eligible Gmail leads. Top blockers: ${topReasons.join(', ')}.`
+      : 'No eligible Gmail leads found.',
+  };
 }
 
 function sleep(ms: number) {
@@ -190,12 +263,8 @@ Deno.serve(async (req) => {
       .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
-      .eq('outreach_opt_out', false)
-      .eq('do_not_contact', false)
-      .neq('outreach_stage', 'email_sent')
-      .neq('outreach_state', 'email_sent')
-      .neq('outreach_state', 'called')
-      .neq('outreach_state', 'do_not_contact')
+      .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
+      .or('do_not_contact.is.null,do_not_contact.eq.false')
       .in('lead_tier', ['S', 'A+', 'A'])
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(Math.max(batchSize * 4, remaining * 2));
@@ -204,13 +273,12 @@ Deno.serve(async (req) => {
     const batch = (candidates || [])
       .filter((lead: any) => {
         const email = String(lead.email || '').trim().toLowerCase();
-        if (!validEmail(email) || seenEmails.has(email)) return false;
-        if (hasCallContact(lead)) return false;
-        seenEmails.add(email);
+        if (emailRejectionReasons(lead, seenEmails).length > 0) return false;
         lead.email = email;
         return true;
       })
       .slice(0, Math.min(remaining, batchSize));
+    const diagnostics = batch.length === 0 ? await getEmailEligibilityDiagnostics(supabase) : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -265,8 +333,25 @@ Deno.serve(async (req) => {
     await recordNotification(supabase, {
       type: 'gmail_batch_done',
       title: force ? 'Manual Gmail auto-send finished' : 'Scheduled Gmail auto-send finished',
-      message: `${sent} sent, ${skipped} skipped, ${failed} failed.`,
-      payload: { sent, skipped, failed, batchSize, delaySeconds, remaining: remaining - sent, forced: force, scheduled: !force, startHour, endHour, timeZone },
+      message: diagnostics?.message || `${sent} sent, ${skipped} skipped, ${failed} failed.`,
+      payload: {
+        reason: batch.length === 0 ? 'no_candidates' : undefined,
+        sent,
+        skipped,
+        failed,
+        eligible: batch.length,
+        checked: diagnostics?.checked,
+        rejectionSummary: diagnostics?.rejectionSummary,
+        topReasons: diagnostics?.topReasons,
+        batchSize,
+        delaySeconds,
+        remaining: remaining - sent,
+        forced: force,
+        scheduled: !force,
+        startHour,
+        endHour,
+        timeZone,
+      },
     });
 
     return new Response(JSON.stringify({
@@ -276,6 +361,8 @@ Deno.serve(async (req) => {
       failed,
       sentToday: (sentToday ?? 0) + sent,
       remaining: remaining - sent,
+      eligible: batch.length,
+      diagnostics,
       batchSize,
       delaySeconds,
       timestamp: new Date().toISOString(),

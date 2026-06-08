@@ -60,6 +60,14 @@ type PreviewLead = {
   country?: string | null;
 };
 
+type QueueDiagnostics = {
+  checked?: number;
+  eligible?: number;
+  message?: string;
+  topReasons?: string[];
+  rejectionSummary?: Record<string, number>;
+};
+
 const DEFAULTS: AutomationSettings = {
   aiEnabled: true,
   aiDaily: '15',
@@ -116,6 +124,10 @@ function normalizePhone(value?: string | null) {
   if (compact.startsWith('0')) return `+46${compact.slice(1)}`;
   if (compact.startsWith('46')) return `+${compact}`;
   return '';
+}
+
+function validEmail(value?: string | null) {
+  return !!value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 }
 
 function detectCountry(lead: any) {
@@ -260,10 +272,21 @@ function lastRunText(items: AppNotification[], predicate: (item: AppNotification
   return `${formatShortTime(item.created_at)}: ${count} started/sent${suffix}`;
 }
 
+function latestPayload(items: AppNotification[], predicate: (item: AppNotification) => boolean) {
+  const item = items.find(predicate);
+  return (item?.payload || {}) as Record<string, any>;
+}
+
+function blockerList(payload?: Record<string, any>, diagnostics?: QueueDiagnostics | null) {
+  const reasons = diagnostics?.topReasons?.length ? diagnostics.topReasons : payload?.topReasons;
+  return Array.isArray(reasons) ? reasons.filter(Boolean).slice(0, 4) : [];
+}
+
 export default function AutomationPage() {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULTS);
   const [stats, setStats] = useState<Stats>({ callsToday: 0, emailsToday: 0, callEligible: 0, emailEligible: 0, activeCalls: 0 });
   const [preview, setPreview] = useState<PreviewLead[]>([]);
+  const [previewDiagnostics, setPreviewDiagnostics] = useState<QueueDiagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [runningAi, setRunningAi] = useState(false);
@@ -286,6 +309,10 @@ export default function AutomationPage() {
   const nextGmailCheck = useMemo(() => settings.gmailEnabled ? nextCheckTime(settings, 20) : null, [settings]);
   const isWindowOpen = activeNow(settings);
   const dayProgress = windowProgress(settings);
+  const latestAi = useMemo(() => latestPayload(history, isAiAutomationNotification), [history]);
+  const latestGmail = useMemo(() => latestPayload(history, isGmailAutomationNotification), [history]);
+  const aiBlockers = useMemo(() => blockerList(latestAi, previewDiagnostics), [latestAi, previewDiagnostics]);
+  const gmailBlockers = useMemo(() => blockerList(latestGmail), [latestGmail]);
 
   const aiRunsToday = useMemo(() => {
     const start = new Date(startOfTodayIso());
@@ -377,35 +404,40 @@ export default function AutomationPage() {
         .gte('last_called_at', activeSince),
       supabase
         .from('leads')
-        .select('id, outreach_state, last_called_at, last_contact_method, call_attempts')
+        .select('id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
         .not('email', 'is', null)
         .neq('email', '')
-        .eq('outreach_opt_out', false)
-        .or('do_not_contact.is.null,do_not_contact.eq.false')
-        .neq('outreach_stage', 'email_sent')
-        .neq('outreach_state', 'email_sent')
-        .in('lead_tier', ['S', 'A+', 'A'])
         .limit(5000),
       supabase
         .from('leads')
         .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
         .or('phone.not.is.null,phone_e164.not.is.null')
-        .eq('outreach_opt_out', false)
-        .lt('call_attempts', 2)
         .limit(2000),
     ]);
 
     const callEligible = (callRowsRes.data || []).filter((lead: any) => {
+      if (lead.outreach_opt_out) return false;
+      if (Number(lead.call_attempts || 0) >= 2) return false;
       if (nextSettings.aiProduct !== 'all' && lead.product !== nextSettings.aiProduct) return false;
       if (Number(nextSettings.aiMinScore || 0) > 0 && (lead.potential_score || 0) < Number(nextSettings.aiMinScore)) return false;
       if (!nextSettings.aiCountries.includes(detectCountry(lead))) return false;
       if (lead.do_not_contact === true) return false;
       if (lead.call_status === 'Calling') return false;
       if (lead.last_contacted_at || lead.outreach_state === 'called') return false;
+      if (lead.outreach_state === 'do_not_contact') return false;
       if (EXCLUDED_CALL_STATUSES.includes(String(lead.status || ''))) return false;
       return !!normalizePhone(lead.phone_e164 || lead.phone);
     }).length;
+    const seenEmails = new Set<string>();
     const emailEligible = (emailRowsRes.data || []).filter((lead: any) => {
+      const email = String(lead.email || '').trim().toLowerCase();
+      if (!validEmail(email) || seenEmails.has(email)) return false;
+      seenEmails.add(email);
+      if (lead.outreach_opt_out) return false;
+      if (lead.do_not_contact === true) return false;
+      if (lead.outreach_stage === 'email_sent' || lead.outreach_state === 'email_sent') return false;
+      if (lead.outreach_state === 'do_not_contact') return false;
+      if (!['S', 'A+', 'A'].includes(String(lead.lead_tier || ''))) return false;
       if (lead.last_called_at) return false;
       if ((lead.call_attempts || 0) > 0) return false;
       if (lead.outreach_state === 'called') return false;
@@ -506,7 +538,9 @@ export default function AutomationPage() {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Preview failed');
       setPreview(data?.leads || []);
-      toast.success(`${data?.eligible || 0} AI-call leads eligible`);
+      setPreviewDiagnostics(data?.diagnostics || null);
+      if ((data?.eligible || 0) === 0 && data?.diagnostics?.message) toast.message(data.diagnostics.message);
+      else toast.success(`${data?.eligible || 0} AI-call leads eligible`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Preview failed');
     } finally {
@@ -525,7 +559,8 @@ export default function AutomationPage() {
         body: { force: true },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'AI batch failed');
-      toast.success(`AI calls: ${data?.started || 0} started, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
+      if ((data?.started || 0) === 0 && data?.diagnostics?.message) toast.message(data.diagnostics.message);
+      else toast.success(`AI calls: ${data?.started || 0} started, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
       await Promise.all([loadStats(next), previewCalls(next), loadHistory()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'AI batch failed');
@@ -544,7 +579,8 @@ export default function AutomationPage() {
       await setSetting('gmail_autosend_force', 'true');
       const { data, error } = await supabase.functions.invoke('auto-send-gmail-daily', { body: {} });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Gmail batch failed');
-      if (data?.skipped && data?.reason) toast.message(`Gmail skipped: ${data.reason}`);
+      if ((data?.sent || 0) === 0 && data?.diagnostics?.message) toast.message(data.diagnostics.message);
+      else if (data?.skipped && data?.reason) toast.message(`Gmail skipped: ${data.reason}`);
       else toast.success(`Gmail: ${data?.sent || 0} sent, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
       await Promise.all([loadStats(next), loadHistory()]);
     } catch (error) {
@@ -632,6 +668,29 @@ export default function AutomationPage() {
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
 
+        {(stats.callEligible === 0 || stats.emailEligible === 0) && (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {stats.callEligible === 0 && (
+              <QueueBlocker
+                icon={<Bot size={15} />}
+                title="Why no AI calls started"
+                message={previewDiagnostics?.message || (latestAi.reason === 'no_candidates' ? 'No eligible AI-call leads in the current queue.' : 'No eligible AI-call leads are available right now.')}
+                reasons={aiBlockers}
+                checked={previewDiagnostics?.checked ?? latestAi.checked}
+              />
+            )}
+            {stats.emailEligible === 0 && (
+              <QueueBlocker
+                icon={<Mail size={15} />}
+                title="Why no Gmail was sent"
+                message={latestGmail.reason === 'no_candidates' ? 'No eligible Gmail leads in the current queue.' : 'No saved leads with usable emails are available right now.'}
+                reasons={gmailBlockers}
+                checked={latestGmail.checked}
+              />
+            )}
+          </div>
+        )}
+
         <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_1fr_0.9fr]">
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
@@ -700,7 +759,9 @@ export default function AutomationPage() {
               </div>
               <div className="max-h-72 overflow-y-auto">
                 {preview.length === 0 ? (
-                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No preview loaded</div>
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    {previewDiagnostics?.message || 'No preview loaded'}
+                  </div>
                 ) : (
                   preview.map(lead => (
                     <div key={lead.id} className="flex items-center gap-3 border-b border-border/60 px-3 py-2 last:border-0">
@@ -820,14 +881,23 @@ export default function AutomationPage() {
                           <Badge variant={payload.forced ? 'secondary' : 'outline'}>{isGmail ? 'Gmail' : 'Calls'}</Badge>
                         </div>
                         {item.message && <div className="mt-2 text-xs text-muted-foreground">{item.message}</div>}
+                        {Array.isArray(payload.topReasons) && payload.topReasons.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {payload.topReasons.slice(0, 4).map((reason: string) => (
+                              <Badge key={reason} variant="secondary" className="text-[10px]">{reason}</Badge>
+                            ))}
+                          </div>
+                        )}
                         <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                           <MiniStat label={isGmail ? 'Sent' : 'Started'} value={isGmail ? payload.sent ?? 0 : payload.started ?? 0} />
                           <MiniStat label="Skipped" value={payload.skipped ?? 0} />
                           <MiniStat label="Failed" value={payload.failed ?? 0} />
                         </div>
-                        {payload.remainingToday !== undefined && (
+                        {(payload.remainingToday !== undefined || payload.remaining !== undefined || payload.checked !== undefined) && (
                           <div className="mt-2 text-xs text-muted-foreground">
-                            Remaining today: <span className="text-foreground">{payload.remainingToday}</span>
+                            {payload.remainingToday !== undefined && <>Remaining today: <span className="text-foreground">{payload.remainingToday}</span></>}
+                            {payload.remaining !== undefined && <>Remaining email cap: <span className="text-foreground">{payload.remaining}</span></>}
+                            {payload.checked !== undefined && <> · Checked: <span className="text-foreground">{payload.checked}</span></>}
                           </div>
                         )}
                       </div>
@@ -857,6 +927,42 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+function QueueBlocker({
+  icon,
+  title,
+  message,
+  reasons,
+  checked,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  message: string;
+  reasons: string[];
+  checked?: number;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        {icon}
+        {title}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{message}</p>
+      {reasons.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {reasons.map(reason => (
+            <Badge key={reason} variant="secondary" className="text-[10px]">{reason}</Badge>
+          ))}
+        </div>
+      )}
+      {checked !== undefined && (
+        <div className="mt-2 text-[11px] text-muted-foreground">
+          Checked <span className="font-medium text-foreground">{checked}</span> saved leads against the filters.
+        </div>
+      )}
     </div>
   );
 }
