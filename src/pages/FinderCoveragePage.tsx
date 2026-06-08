@@ -198,15 +198,15 @@ export default function FinderCoveragePage() {
         <div className="px-4 sm:px-6 pt-6 pb-4">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
             <MapPin size={20} className="text-primary" /> Coverage Map
-            <InfoTip text="Visualize where you've scanned for businesses across Scandinavia." />
+            <InfoTip text="Visualize where you've scanned for businesses across Leadmap markets." />
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Track coverage across Sweden, Norway, and Denmark.</p>
+          <p className="text-sm text-muted-foreground mt-1">Track coverage across supported Leadmap countries and spot the next cities to scan.</p>
         </div>
 
         {/* Country tabs */}
         <div className="px-4 sm:px-6 pb-4">
           <div className="flex gap-2">
-            {(['SE', 'NO', 'DK'] as Country[]).map(c => {
+            {(['SE', 'NO', 'DK', 'UK', 'ES'] as Country[]).map(c => {
               const cs = perCountryStats[c];
               const isActive = country === c;
               return (

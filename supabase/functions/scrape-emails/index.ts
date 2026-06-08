@@ -276,8 +276,8 @@ async function scrapeOne(item: ScrapeInput) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  const { requireUserJwt } = await import('../_shared/auth.ts');
-  const authFail = await requireUserJwt(req, corsHeaders);
+  const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
   try {
