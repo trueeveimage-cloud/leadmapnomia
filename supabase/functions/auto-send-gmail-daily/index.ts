@@ -9,6 +9,8 @@ const corsHeaders = {
 
 const DEFAULT_DAILY = 40;
 const DEFAULT_BATCH_SIZE = 10;
+const DEFAULT_START_HOUR = 10;
+const DEFAULT_END_HOUR = 16;
 const DEFAULT_SUBJECT = 'Quick question about missed calls at {{business_name}}';
 const DEFAULT_BODY = `Hi {{owner_name}},
 
@@ -39,6 +41,33 @@ function validEmail(email: string | null | undefined) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function csvSetting(value: string | undefined, fallback: string[]) {
+  const parts = String(value || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length ? parts : fallback;
+}
+
+function intSetting(settings: Record<string, string>, key: string, fallback: number, min: number, max: number) {
+  const value = Number.parseInt(settings[key] || '', 10);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function localParts(timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const weekday = parts.find((part) => part.type === 'weekday')?.value || 'Mon';
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || '0');
+  const dayIndex: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour };
 }
 
 async function recordNotification(supabase: any, input: {
@@ -76,6 +105,10 @@ Deno.serve(async (req) => {
       'gmail_autosend_force',
       'gmail_autosend_delay_seconds',
       'gmail_autosend_batch_size',
+      'ai_calls_start_hour',
+      'ai_calls_end_hour',
+      'ai_calls_days',
+      'ai_calls_timezone',
     ];
     const { data: rows } = await supabase.from('settings').select('key, value').in('key', keys);
     const cfg: Record<string, string> = {};
@@ -86,6 +119,11 @@ Deno.serve(async (req) => {
     const daily = Math.max(1, Math.min(100, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
     const batchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
+    const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
+    const endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
+    const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
+    const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
+    const nowLocal = localParts(timeZone);
     const subjectTpl = cfg.gmail_autosend_subject || DEFAULT_SUBJECT;
     const bodyTpl = cfg.gmail_autosend_body || DEFAULT_BODY;
 
@@ -99,15 +137,24 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'disabled' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const dow = new Date().getUTCDay();
-    if (!force && (dow === 0 || dow === 6)) {
+    if (!force && !days.includes(nowLocal.day)) {
       await recordNotification(supabase, {
         type: 'gmail_batch_done',
         title: 'Gmail auto-send skipped',
-        message: 'Auto-send does not run on weekends.',
-        payload: { reason: 'weekend' },
+        message: 'Auto-send is outside the selected days.',
+        payload: { reason: 'day_blocked', day: nowLocal.day },
       });
-      return new Response(JSON.stringify({ skipped: true, reason: 'weekend' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ skipped: true, reason: 'day_blocked', day: nowLocal.day }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (!force && (nowLocal.hour < startHour || nowLocal.hour >= endHour)) {
+      await recordNotification(supabase, {
+        type: 'gmail_batch_done',
+        title: 'Gmail auto-send skipped',
+        message: `Auto-send is outside the ${startHour}:00-${endHour}:00 ${timeZone} window.`,
+        payload: { reason: 'outside_send_window', hour: nowLocal.hour, startHour, endHour, timeZone },
+      });
+      return new Response(JSON.stringify({ skipped: true, reason: 'outside_send_window', hour: nowLocal.hour, startHour, endHour }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const startOfDay = new Date();
@@ -210,7 +257,7 @@ Deno.serve(async (req) => {
       type: 'gmail_batch_done',
       title: force ? 'Manual Gmail auto-send finished' : 'Scheduled Gmail auto-send finished',
       message: `${sent} sent, ${skipped} skipped, ${failed} failed.`,
-      payload: { sent, skipped, failed, batchSize, delaySeconds, remaining: remaining - sent, forced: force },
+      payload: { sent, skipped, failed, batchSize, delaySeconds, remaining: remaining - sent, forced: force, scheduled: !force, startHour, endHour, timeZone },
     });
 
     return new Response(JSON.stringify({

@@ -9,7 +9,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchNotifications, getSetting, setSetting, type AppNotification } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { Bot, CalendarDays, Clock, Loader2, Mail, Play, RefreshCw, Save, ShieldCheck, SlidersHorizontal, Zap } from 'lucide-react';
+import {
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Mail,
+  Play,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  SlidersHorizontal,
+  Zap,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 type AutomationSettings = {
@@ -24,6 +37,8 @@ type AutomationSettings = {
   aiProduct: string;
   gmailEnabled: boolean;
   gmailDaily: string;
+  gmailBatchSize: string;
+  gmailDelaySeconds: string;
   gmailSubject: string;
   gmailBody: string;
 };
@@ -45,19 +60,22 @@ type PreviewLead = {
 };
 
 const DEFAULTS: AutomationSettings = {
-  aiEnabled: false,
+  aiEnabled: true,
   aiDaily: '15',
   aiPerRun: '3',
-  aiStartHour: '9',
-  aiEndHour: '17',
+  aiStartHour: '10',
+  aiEndHour: '16',
   aiDays: ['1', '2', '3', '4', '5'],
   aiCountries: ['SE'],
   aiMinScore: '0',
   aiProduct: 'leadmap',
-  gmailEnabled: false,
-  gmailDaily: '100',
-  gmailSubject: 'En snabb fraga om era inkommande samtal',
-  gmailBody: 'Hej {name}!\n\nVi bygger en AI-receptionist som svarar i telefon dygnet runt sa ni inte missar samtal fran nya kunder.\n\nVill du hora hur det fungerar? Tar 5 minuter.\n\n/Maged',
+  gmailEnabled: true,
+  gmailDaily: '40',
+  gmailBatchSize: '10',
+  gmailDelaySeconds: '120',
+  gmailSubject: 'Quick question about missed calls at {{business_name}}',
+  gmailBody:
+    'Hi {{owner_name}},\n\nI noticed {{business_name}} serves customers in {{city}}. Leadmap helps service businesses answer and summarize calls when the team is busy or closed.\n\nWould it make sense to show you a 5 minute example?\n\nBest,\nMaged\n\nIf this is not relevant, reply unsubscribe and I will not contact you again.',
 };
 
 const WEEKDAYS = [
@@ -115,20 +133,86 @@ function formatShortDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function formatShortTime(value: string) {
+function formatShortTime(value: string | Date) {
   return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function startOfTodayIso() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return start.toISOString();
 }
 
 function isAiAutomationNotification(item: AppNotification) {
   const payload = (item.payload || {}) as Record<string, any>;
   return item.type === 'ai_call_batch_done'
     || payload.automation === 'ai_calls'
-    || item.title.toLowerCase().includes('ai call batch')
-    || item.title.toLowerCase().includes('ai call automation');
+    || item.title.toLowerCase().includes('ai call');
 }
 
 function isGmailAutomationNotification(item: AppNotification) {
-  return item.type === 'gmail_batch_done';
+  return item.type === 'gmail_batch_done' || item.title.toLowerCase().includes('gmail');
+}
+
+function getScheduleDaysText(days: string[]) {
+  const selected = WEEKDAYS.filter(([value]) => days.includes(value)).map(([, label]) => label);
+  return selected.length === 5 && selected.every(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(day))
+    ? 'Mon-Fri'
+    : selected.join(', ') || 'No days selected';
+}
+
+function activeNow(settings: AutomationSettings) {
+  const now = new Date();
+  const day = String(now.getDay());
+  const hour = now.getHours();
+  return settings.aiDays.includes(day)
+    && hour >= Number(settings.aiStartHour || 0)
+    && hour < Number(settings.aiEndHour || 0);
+}
+
+function nextCheckTime(settings: AutomationSettings) {
+  const now = new Date();
+  const startHour = Number(settings.aiStartHour || 10);
+  const endHour = Number(settings.aiEndHour || 16);
+  const days = settings.aiDays.length ? settings.aiDays : DEFAULTS.aiDays;
+
+  for (let offset = 0; offset < 14; offset++) {
+    const candidate = new Date(now);
+    candidate.setDate(now.getDate() + offset);
+    const day = String(candidate.getDay());
+    if (!days.includes(day)) continue;
+
+    if (offset === 0) {
+      const next = new Date(now);
+      next.setMinutes(0, 0, 0);
+      if (now.getMinutes() > 0 || now.getSeconds() > 0) next.setHours(next.getHours() + 1);
+      if (next.getHours() >= startHour && next.getHours() < endHour) return next;
+      if (now.getHours() < startHour) {
+        candidate.setHours(startHour, 0, 0, 0);
+        return candidate;
+      }
+    } else {
+      candidate.setHours(startHour, 0, 0, 0);
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function windowProgress(settings: AutomationSettings) {
+  if (!activeNow(settings)) return 0;
+  const now = new Date();
+  const startHour = Number(settings.aiStartHour || 10);
+  const endHour = Number(settings.aiEndHour || 16);
+  const minutesTotal = Math.max(1, (endHour - startHour) * 60);
+  const minutesDone = Math.max(0, ((now.getHours() - startHour) * 60) + now.getMinutes());
+  return Math.min(100, Math.round((minutesDone / minutesTotal) * 100));
+}
+
+function clampNumber(value: string, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
 }
 
 export default function AutomationPage() {
@@ -152,37 +236,36 @@ export default function AutomationPage() {
     return Math.min(100, Math.round((stats.emailsToday / cap) * 100));
   }, [settings.gmailDaily, stats.emailsToday]);
 
+  const scheduleDaysText = useMemo(() => getScheduleDaysText(settings.aiDays), [settings.aiDays]);
+  const nextCheck = useMemo(() => nextCheckTime(settings), [settings]);
+  const isWindowOpen = activeNow(settings);
+  const dayProgress = windowProgress(settings);
+
   const aiRunsToday = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+    const start = new Date(startOfTodayIso());
     return history.filter(item => isAiAutomationNotification(item) && new Date(item.created_at) >= start).length;
   }, [history]);
 
-  const aiStartedFromHistoryToday = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    return history
-      .filter(item => isAiAutomationNotification(item) && new Date(item.created_at) >= start)
-      .reduce((sum, item) => sum + Number((item.payload as any)?.started || 0), 0);
+  const gmailRunsToday = useMemo(() => {
+    const start = new Date(startOfTodayIso());
+    return history.filter(item => isGmailAutomationNotification(item) && new Date(item.created_at) >= start).length;
   }, [history]);
 
-  const scheduleDaysText = useMemo(() => {
-    const selected = WEEKDAYS.filter(([value]) => settings.aiDays.includes(value)).map(([, label]) => label);
-    return selected.length === 5 && selected.every(day => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(day))
-      ? 'Mon-Fri'
-      : selected.join(', ') || 'No days selected';
-  }, [settings.aiDays]);
-
-  const maxRunsPerDay = useMemo(() => {
-    const windowHours = Math.max(0, Number(settings.aiEndHour || 0) - Number(settings.aiStartHour || 0));
-    return windowHours;
-  }, [settings.aiStartHour, settings.aiEndHour]);
-
-  const neededRunsText = useMemo(() => {
-    const daily = Math.max(1, Number(settings.aiDaily || 1));
-    const perRun = Math.max(1, Number(settings.aiPerRun || 1));
-    return String(Math.ceil(daily / perRun));
-  }, [settings.aiDaily, settings.aiPerRun]);
+  const smartSummary = useMemo(() => {
+    const callsPerRun = clampNumber(settings.aiPerRun, 3, 1, 10);
+    const callDaily = clampNumber(settings.aiDaily, 15, 1, 100);
+    const emailDaily = clampNumber(settings.gmailDaily, 40, 1, 100);
+    const emailBatch = clampNumber(settings.gmailBatchSize, 10, 1, 20);
+    const delay = clampNumber(settings.gmailDelaySeconds, 120, 0, 900);
+    return {
+      callsPerRun,
+      callRunsNeeded: Math.ceil(callDaily / callsPerRun),
+      emailDaily,
+      emailBatch,
+      delay,
+      safeEmail: emailDaily <= 80 && emailBatch <= 20 && delay >= 60,
+    };
+  }, [settings.aiDaily, settings.aiPerRun, settings.gmailDaily, settings.gmailBatchSize, settings.gmailDelaySeconds]);
 
   const loadSettings = async () => {
     const keys = [
@@ -197,14 +280,16 @@ export default function AutomationPage() {
       'ai_calls_product',
       'gmail_autosend_enabled',
       'gmail_autosend_daily',
+      'gmail_autosend_delay_seconds',
+      'gmail_autosend_batch_size',
       'gmail_autosend_subject',
       'gmail_autosend_body',
     ];
     const values = await Promise.all(keys.map(key => getSetting(key)));
     const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
-    const next = {
+    const next: AutomationSettings = {
       ...DEFAULTS,
-      aiEnabled: cfg.ai_calls_enabled === 'true',
+      aiEnabled: cfg.ai_calls_enabled === null ? DEFAULTS.aiEnabled : cfg.ai_calls_enabled === 'true',
       aiDaily: cfg.ai_calls_daily || DEFAULTS.aiDaily,
       aiPerRun: cfg.ai_calls_per_run || DEFAULTS.aiPerRun,
       aiStartHour: cfg.ai_calls_start_hour || DEFAULTS.aiStartHour,
@@ -213,8 +298,10 @@ export default function AutomationPage() {
       aiCountries: parseCsv(cfg.ai_calls_countries, DEFAULTS.aiCountries),
       aiMinScore: cfg.ai_calls_min_score || DEFAULTS.aiMinScore,
       aiProduct: cfg.ai_calls_product || DEFAULTS.aiProduct,
-      gmailEnabled: cfg.gmail_autosend_enabled === 'true',
+      gmailEnabled: cfg.gmail_autosend_enabled === null ? DEFAULTS.gmailEnabled : cfg.gmail_autosend_enabled === 'true',
       gmailDaily: cfg.gmail_autosend_daily || DEFAULTS.gmailDaily,
+      gmailBatchSize: cfg.gmail_autosend_batch_size || DEFAULTS.gmailBatchSize,
+      gmailDelaySeconds: cfg.gmail_autosend_delay_seconds || DEFAULTS.gmailDelaySeconds,
       gmailSubject: cfg.gmail_autosend_subject || DEFAULTS.gmailSubject,
       gmailBody: cfg.gmail_autosend_body || DEFAULTS.gmailBody,
     };
@@ -223,9 +310,6 @@ export default function AutomationPage() {
   };
 
   const loadStats = async (nextSettings = settings) => {
-    const startOfDay = new Date();
-    startOfDay.setUTCHours(0, 0, 0, 0);
-
     const [{ count: emailsToday }, { count: callsToday }, emailEligibleRes, callRowsRes] = await Promise.all([
       supabase
         .from('message_logs')
@@ -233,12 +317,12 @@ export default function AutomationPage() {
         .eq('channel', 'email')
         .eq('direction', 'outbound')
         .eq('status', 'sent')
-        .gte('created_at', startOfDay.toISOString()),
+        .gte('created_at', startOfTodayIso()),
       supabase
         .from('activities')
         .select('id', { count: 'exact', head: true })
         .eq('type', 'ai_call_started')
-        .gte('created_at', startOfDay.toISOString()),
+        .gte('created_at', startOfTodayIso()),
       supabase
         .from('leads')
         .select('id', { count: 'exact', head: true })
@@ -279,7 +363,7 @@ export default function AutomationPage() {
 
   const loadHistory = async () => {
     const rows = await fetchNotifications(250);
-    setHistory(rows.filter(item => isAiAutomationNotification(item) || isGmailAutomationNotification(item)).slice(0, 80));
+    setHistory(rows.filter(item => isAiAutomationNotification(item) || isGmailAutomationNotification(item)).slice(0, 100));
   };
 
   const refresh = async () => {
@@ -319,17 +403,37 @@ export default function AutomationPage() {
         setSetting('gmail_autosend_enabled', next.gmailEnabled ? 'true' : 'false'),
         setSetting('gmail_autosend_daily', next.gmailDaily),
         setSetting('gmail_daily_cap', next.gmailDaily),
+        setSetting('gmail_autosend_delay_seconds', next.gmailDelaySeconds),
+        setSetting('gmail_autosend_batch_size', next.gmailBatchSize),
         setSetting('gmail_autosend_subject', next.gmailSubject),
         setSetting('gmail_autosend_body', next.gmailBody),
       ]);
       toast.success('Automation saved');
-      await loadStats(next);
-      await loadHistory();
+      await Promise.all([loadStats(next), loadHistory()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Save failed');
     } finally {
       setSaving(false);
     }
+  };
+
+  const applySmartDefaults = async () => {
+    const next: AutomationSettings = {
+      ...settings,
+      aiEnabled: true,
+      aiDaily: '15',
+      aiPerRun: '3',
+      aiStartHour: '10',
+      aiEndHour: '16',
+      aiDays: ['1', '2', '3', '4', '5'],
+      aiCountries: settings.aiCountries.length ? settings.aiCountries : ['SE'],
+      gmailEnabled: true,
+      gmailDaily: '40',
+      gmailBatchSize: '10',
+      gmailDelaySeconds: '120',
+    };
+    setSettings(next);
+    await save(next);
   };
 
   const previewCalls = async (next = settings) => {
@@ -350,7 +454,7 @@ export default function AutomationPage() {
   };
 
   const runAiNow = async () => {
-    if (!window.confirm(`Start up to ${settings.aiPerRun} real AI calls now?`)) return;
+    if (!window.confirm(`Manual override: start up to ${settings.aiPerRun} real AI calls now?`)) return;
     setRunningAi(true);
     try {
       const next = { ...settings, aiEnabled: true };
@@ -361,9 +465,7 @@ export default function AutomationPage() {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'AI batch failed');
       toast.success(`AI calls: ${data?.started || 0} started, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
-      await loadStats(next);
-      await previewCalls(next);
-      await loadHistory();
+      await Promise.all([loadStats(next), previewCalls(next), loadHistory()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'AI batch failed');
     } finally {
@@ -372,7 +474,7 @@ export default function AutomationPage() {
   };
 
   const runGmailNow = async () => {
-    if (!window.confirm(`Send up to ${settings.gmailDaily} real Gmail emails now?`)) return;
+    if (!window.confirm(`Manual override: run one Gmail batch of up to ${settings.gmailBatchSize} emails now?`)) return;
     setRunningGmail(true);
     try {
       const next = { ...settings, gmailEnabled: true };
@@ -383,8 +485,7 @@ export default function AutomationPage() {
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Gmail batch failed');
       if (data?.skipped && data?.reason) toast.message(`Gmail skipped: ${data.reason}`);
       else toast.success(`Gmail: ${data?.sent || 0} sent, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
-      await loadStats(next);
-      await loadHistory();
+      await Promise.all([loadStats(next), loadHistory()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gmail batch failed');
     } finally {
@@ -394,16 +495,23 @@ export default function AutomationPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-6xl px-5 py-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 sm:py-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Leadmap AI</div>
             <h1 className="mt-1 text-2xl font-semibold text-foreground">Outreach Automation</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Automatic calls and Gmail run Monday-Friday, 10:00-16:00 Stockholm time.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="gap-2" onClick={refresh} disabled={loading}>
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               Refresh
+            </Button>
+            <Button variant="secondary" size="sm" className="gap-2" onClick={applySmartDefaults} disabled={saving}>
+              <CheckCircle2 size={14} />
+              Use smart auto setup
             </Button>
             <Button size="sm" className="gap-2" onClick={() => save()} disabled={saving}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -412,6 +520,42 @@ export default function AutomationPage() {
           </div>
         </div>
 
+        <section className="mb-5 rounded-lg border border-primary/25 bg-primary/5 p-4">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={isWindowOpen ? 'default' : 'outline'}>
+                  {isWindowOpen ? 'Window open now' : 'Waiting for next window'}
+                </Badge>
+                <Badge variant="secondary">{scheduleDaysText}</Badge>
+                <Badge variant="secondary">{settings.aiStartHour}:00-{settings.aiEndHour}:00 Stockholm</Badge>
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Cron checks every hour in the work window. AI calls start in small batches until the daily cap is hit; Gmail sends small batches with delay, dedupe, opt-out and suppression checks.
+              </p>
+            </div>
+            <StatusTile
+              icon={<Clock size={15} />}
+              label="Next hourly check"
+              value={nextCheck ? `${formatShortDate(nextCheck.toISOString())} at ${formatShortTime(nextCheck)}` : 'No active days'}
+            />
+            <div className="rounded-md border border-border bg-background/50 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck size={15} />
+                Smart safety
+              </div>
+              <div className="mt-1 text-sm font-medium text-foreground">
+                {smartSummary.safeEmail ? 'Gmail pacing is safe' : 'Gmail settings are aggressive'}
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-muted">
+                <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${dayProgress}%` }} />
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">Window progress today</div>
+            </div>
+          </div>
+        </section>
+
         <div className="grid gap-3 md:grid-cols-4">
           <Metric title="AI calls today" value={`${stats.callsToday} / ${settings.aiDaily || 0}`} percent={callPercent} />
           <Metric title="Gmail sent today" value={`${stats.emailsToday} / ${settings.gmailDaily || 0}`} percent={emailPercent} />
@@ -419,13 +563,13 @@ export default function AutomationPage() {
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_0.9fr_0.8fr]">
+        <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_1fr_0.9fr]">
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Bot size={17} className="text-primary" />
                 <h2 className="font-semibold text-foreground">AI call automation</h2>
-                <Badge variant={settings.aiEnabled ? 'default' : 'outline'}>{settings.aiEnabled ? 'Enabled' : 'Paused'}</Badge>
+                <Badge variant={settings.aiEnabled ? 'default' : 'outline'}>{settings.aiEnabled ? 'Auto on' : 'Paused'}</Badge>
               </div>
               <Switch checked={settings.aiEnabled} onCheckedChange={checked => update('aiEnabled', checked)} />
             </div>
@@ -434,7 +578,7 @@ export default function AutomationPage() {
               <Field label="Calls/day">
                 <Input type="number" min="1" max="100" value={settings.aiDaily} onChange={event => update('aiDaily', event.target.value)} />
               </Field>
-              <Field label="Calls/run">
+              <Field label="Calls/hour">
                 <Input type="number" min="1" max="10" value={settings.aiPerRun} onChange={event => update('aiPerRun', event.target.value)} />
               </Field>
               <Field label="Min score">
@@ -472,21 +616,18 @@ export default function AutomationPage() {
               onToggle={value => update('aiCountries', toggle(settings.aiCountries, value))}
             />
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" className="gap-2" onClick={previewCalls} disabled={previewing}>
-                {previewing ? <Loader2 size={14} className="animate-spin" /> : <SlidersHorizontal size={14} />}
-                Preview queue
-              </Button>
-              <Button className="gap-2" onClick={runAiNow} disabled={runningAi}>
-                {runningAi ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                Run AI batch
-              </Button>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <StatusTile icon={<Clock size={15} />} label="Cadence" value={`${settings.aiPerRun}/hour, ${smartSummary.callRunsNeeded} checks to hit ${settings.aiDaily}`} />
+              <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="Dedupe, opt-out, max attempts" />
             </div>
 
-            <div className="mt-5 rounded-md border border-border bg-background/40">
+            <div className="mt-4 rounded-md border border-border bg-background/40">
               <div className="flex items-center justify-between border-b border-border px-3 py-2">
                 <div className="text-sm font-medium text-foreground">Next AI call queue</div>
-                <div className="text-xs text-muted-foreground">{preview.length} shown</div>
+                <Button variant="outline" size="sm" className="h-7 gap-2" onClick={() => previewCalls()} disabled={previewing}>
+                  {previewing ? <Loader2 size={13} className="animate-spin" /> : <SlidersHorizontal size={13} />}
+                  Preview
+                </Button>
               </div>
               <div className="max-h-72 overflow-y-auto">
                 {preview.length === 0 ? (
@@ -505,32 +646,44 @@ export default function AutomationPage() {
                 )}
               </div>
             </div>
+
+            <details className="mt-4 rounded-md border border-border bg-background/40 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-foreground">Manual override</summary>
+              <Button className="mt-3 gap-2" onClick={runAiNow} disabled={runningAi}>
+                {runningAi ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                Run one AI batch now
+              </Button>
+            </details>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Mail size={17} className="text-primary" />
                 <h2 className="font-semibold text-foreground">Gmail automation</h2>
-                <Badge variant={settings.gmailEnabled ? 'default' : 'outline'}>{settings.gmailEnabled ? 'Enabled' : 'Paused'}</Badge>
+                <Badge variant={settings.gmailEnabled ? 'default' : 'outline'}>{settings.gmailEnabled ? 'Auto on' : 'Paused'}</Badge>
               </div>
               <Switch checked={settings.gmailEnabled} onCheckedChange={checked => update('gmailEnabled', checked)} />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Emails/day">
-                <Input type="number" min="1" max="500" value={settings.gmailDaily} onChange={event => update('gmailDaily', event.target.value)} />
+                <Input type="number" min="1" max="100" value={settings.gmailDaily} onChange={event => update('gmailDaily', event.target.value)} />
               </Field>
-              <div className="rounded-md border border-border bg-background/40 px-3 py-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ShieldCheck size={13} />
-                  Gmail lock
-                </div>
-                <div className="mt-1 text-sm font-medium text-foreground">{stats.emailEligible} eligible leads</div>
-              </div>
+              <Field label="Emails/hour">
+                <Input type="number" min="1" max="20" value={settings.gmailBatchSize} onChange={event => update('gmailBatchSize', event.target.value)} />
+              </Field>
+              <Field label="Delay seconds">
+                <Input type="number" min="60" max="900" value={settings.gmailDelaySeconds} onChange={event => update('gmailDelaySeconds', event.target.value)} />
+              </Field>
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Hourly check, up to ${settings.gmailBatchSize}/run`} />
+              <StatusTile icon={<ShieldCheck size={15} />} label="Deliverability" value="Validation, suppression, unsubscribe" />
+            </div>
+
+            <div className="mt-4 space-y-3">
               <Field label="Subject">
                 <Input value={settings.gmailSubject} onChange={event => update('gmailSubject', event.target.value)} />
               </Field>
@@ -538,52 +691,49 @@ export default function AutomationPage() {
                 <Textarea
                   value={settings.gmailBody}
                   onChange={event => update('gmailBody', event.target.value)}
-                  className="min-h-72 font-mono text-sm"
+                  className="min-h-64 font-mono text-sm"
                 />
               </Field>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" className="gap-2" onClick={() => save()} disabled={saving}>
-                <Save size={14} />
-                Save Gmail
-              </Button>
-              <Button className="gap-2" onClick={runGmailNow} disabled={runningGmail}>
-                {runningGmail ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                Run Gmail batch
-              </Button>
+            <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
+              Smart setup keeps Gmail out of blast mode: daily cap max 100, per-run batch max 20, email validation, duplicate prevention, opt-out checks, suppression list, and unsubscribe footer.
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Daily window" value={`${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
-              <StatusTile icon={<ShieldCheck size={15} />} label="Safety" value="Opt-out + dedupe locks" />
-            </div>
+            <details className="mt-4 rounded-md border border-border bg-background/40 p-3">
+              <summary className="cursor-pointer text-sm font-medium text-foreground">Manual override</summary>
+              <Button className="mt-3 gap-2" onClick={runGmailNow} disabled={runningGmail}>
+                {runningGmail ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                Run one Gmail batch now
+              </Button>
+            </details>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="mb-4 flex items-center gap-2">
               <CalendarDays size={17} className="text-primary" />
-              <h2 className="font-semibold text-foreground">Daily AI history</h2>
+              <h2 className="font-semibold text-foreground">Daily progress</h2>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <StatusTile icon={<Clock size={15} />} label="Runs today" value={String(aiRunsToday)} />
-              <StatusTile icon={<PhoneHistoryIcon />} label="Started today" value={`${aiStartedFromHistoryToday} calls`} />
-              <StatusTile icon={<CalendarDays size={15} />} label="Schedule" value={`${scheduleDaysText}, ${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
-              <StatusTile icon={<Zap size={15} />} label="Daily cadence" value={`${settings.aiPerRun}/run, ${neededRunsText} runs to hit ${settings.aiDaily}`} />
+              <StatusTile icon={<Bot size={15} />} label="AI checks today" value={String(aiRunsToday)} />
+              <StatusTile icon={<Mail size={15} />} label="Gmail checks today" value={String(gmailRunsToday)} />
+              <StatusTile icon={<Clock size={15} />} label="Window" value={`${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
+              <StatusTile icon={<Zap size={15} />} label="Active mode" value={settings.aiEnabled || settings.gmailEnabled ? 'Automatic' : 'Paused'} />
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40">
               <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                <div className="text-sm font-medium text-foreground">Recent automation runs</div>
-                <div className="text-xs text-muted-foreground">max {maxRunsPerDay}/day</div>
+                <div className="text-sm font-medium text-foreground">Automation history</div>
+                <div className="text-xs text-muted-foreground">{history.length} events</div>
               </div>
               <div className="max-h-[34rem] overflow-y-auto">
-                {history.filter(isAiAutomationNotification).length === 0 ? (
-                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No AI automation history yet.</div>
+                {history.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No automation history yet.</div>
                 ) : (
-                  history.filter(isAiAutomationNotification).slice(0, 30).map(item => {
+                  history.slice(0, 40).map(item => {
                     const payload = (item.payload || {}) as Record<string, any>;
+                    const isGmail = isGmailAutomationNotification(item);
                     return (
                       <div key={item.id} className="border-b border-border/60 px-3 py-3 last:border-0">
                         <div className="flex items-start justify-between gap-3">
@@ -591,11 +741,11 @@ export default function AutomationPage() {
                             <div className="truncate text-sm font-medium text-foreground">{item.title}</div>
                             <div className="mt-0.5 text-xs text-muted-foreground">{formatShortDate(item.created_at)} at {formatShortTime(item.created_at)}</div>
                           </div>
-                          <Badge variant={payload.forced ? 'secondary' : 'outline'}>{payload.forced ? 'Manual' : 'Auto'}</Badge>
+                          <Badge variant={payload.forced ? 'secondary' : 'outline'}>{isGmail ? 'Gmail' : 'Calls'}</Badge>
                         </div>
                         {item.message && <div className="mt-2 text-xs text-muted-foreground">{item.message}</div>}
                         <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                          <MiniStat label="Started" value={payload.started ?? 0} />
+                          <MiniStat label={isGmail ? 'Sent' : 'Started'} value={isGmail ? payload.sent ?? 0 : payload.started ?? 0} />
                           <MiniStat label="Skipped" value={payload.skipped ?? 0} />
                           <MiniStat label="Failed" value={payload.failed ?? 0} />
                         </div>
@@ -610,19 +760,11 @@ export default function AutomationPage() {
                 )}
               </div>
             </div>
-
-            <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
-              The scheduler checks once per hour during the call window. It starts up to the per-run limit until the daily cap is reached, then stops for the day.
-            </div>
           </section>
         </div>
       </div>
     </AppLayout>
   );
-}
-
-function PhoneHistoryIcon() {
-  return <Bot size={15} />;
 }
 
 function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
