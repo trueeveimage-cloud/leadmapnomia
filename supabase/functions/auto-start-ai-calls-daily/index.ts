@@ -131,7 +131,7 @@ async function getCallEligibilityDiagnostics(
 ) {
   const { data: leads } = await supabase
     .from('leads')
-    .select('id, name, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+    .select('id, name, phone, phone_e164, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
     .or('phone.not.is.null,phone_e164.not.is.null')
     .limit(2000);
 
