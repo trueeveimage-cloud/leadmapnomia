@@ -4,11 +4,13 @@ import AppLayout from '@/components/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
   BarChart3,
+  ChevronDown,
   CheckCircle,
   Globe,
   Layers,
@@ -70,6 +72,29 @@ const LEADMAP_SIGNAL_CARDS = [
   { label: 'Traction', value: '30+ reviews', detail: 'reviews imply inbound demand' },
   { label: 'Reception gap', value: 'weak booking', detail: 'no booking or no receptionist' },
 ];
+
+const RUN_PLANS = [
+  {
+    id: 'focused',
+    label: 'Focused',
+    description: 'Small, clean batch for testing a niche or city.',
+    settings: { targetLeads: 40, radius: 3500, maxPages: 2, maxCandidates: 160, maxDetails: 80, minRating: 3.7, minReviews: 12, requirePhone: true },
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    description: 'Best default: enough volume without getting messy.',
+    settings: { targetLeads: 100, radius: 5000, maxPages: 4, maxCandidates: 400, maxDetails: 180, minRating: 3.4, minReviews: 5, requirePhone: false },
+  },
+  {
+    id: 'deep',
+    label: 'Deep Sweep',
+    description: 'Bigger pass when you want more coverage from selected cities.',
+    settings: { targetLeads: 220, radius: 8000, maxPages: 6, maxCandidates: 900, maxDetails: 360, minRating: 3.2, minReviews: 2, requirePhone: false },
+  },
+] as const;
+
+type RunPlanId = typeof RUN_PLANS[number]['id'];
 
 const PRESETS = [
   {
@@ -302,6 +327,8 @@ export default function EmailFinderPage() {
   const [minRating, setMinRating] = useState(3.4);
   const [minReviews, setMinReviews] = useState(5);
   const [requirePhone, setRequirePhone] = useState(false);
+  const [runPlan, setRunPlan] = useState<RunPlanId>('balanced');
+  const [showAdvancedRunSettings, setShowAdvancedRunSettings] = useState(false);
   const [running, setRunning] = useState(false);
 
   const [runs, setRuns] = useState<FinderRun[]>([]);
@@ -407,6 +434,20 @@ export default function EmailFinderPage() {
       .slice(0, 12)
       .map(city => city.name);
     setSelectedCityNames(names.length ? names : availableCities.slice(0, 6).map(city => city.name));
+  };
+
+  const applyRunPlan = (planId: RunPlanId) => {
+    const plan = RUN_PLANS.find(item => item.id === planId);
+    if (!plan) return;
+    setRunPlan(plan.id);
+    setTargetLeads(plan.settings.targetLeads);
+    setRadius(plan.settings.radius);
+    setMaxPages(plan.settings.maxPages);
+    setMaxCandidates(plan.settings.maxCandidates);
+    setMaxDetails(plan.settings.maxDetails);
+    setMinRating(plan.settings.minRating);
+    setMinReviews(plan.settings.minReviews);
+    setRequirePhone(plan.settings.requirePhone);
   };
 
   const loadSavedStats = async () => {
@@ -648,12 +689,6 @@ export default function EmailFinderPage() {
                 Coverage map
               </Link>
             </Button>
-            <Button variant="outline" asChild>
-              <Link to="/finder">
-                <Search className="h-4 w-4 mr-2" />
-                Old finder
-              </Link>
-            </Button>
           </div>
         </div>
 
@@ -777,91 +812,128 @@ export default function EmailFinderPage() {
               <div>
                 <h2 className="text-base font-semibold flex items-center gap-2">
                   <Target className="h-4 w-4 text-primary" />
-                  Finder run setup
+                  Choose what to search
                 </h2>
                 <p className="text-sm text-muted-foreground">Runs Google Places discovery for Leadmap-fit service businesses, then pulls emails from their websites.</p>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div className="space-y-2">
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Customer type</div>
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2">
                     {PRESETS.map((preset, index) => (
                       <button
                         key={preset.label}
                         onClick={() => setPresetIndex(index)}
-                        className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                        className={`min-h-[94px] rounded-md border px-3 py-2 text-left transition-colors ${
                           presetIndex === index ? 'border-primary bg-primary/10' : 'border-border hover:bg-accent'
                         }`}
                       >
                         <div className="text-sm font-semibold">{preset.label}</div>
-                        <div className="text-[11px] text-muted-foreground">{preset.description}</div>
+                        <div className="text-[11px] text-muted-foreground mt-1">{preset.description}</div>
                       </button>
                     ))}
                   </div>
-                  <Textarea
-                    value={keywordsText}
-                    onChange={event => setKeywordsText(event.target.value)}
-                    className="min-h-[170px]"
-                    placeholder="One niche keyword per line"
-                  />
                 </div>
 
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Target leads</span>
-                      <Input type="number" min={10} max={1000} value={targetLeads} onChange={event => setTargetLeads(Number(event.target.value) || 100)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Radius meters</span>
-                      <Input type="number" min={1000} step={500} value={radius} onChange={event => setRadius(Number(event.target.value) || 5000)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Pages per keyword</span>
-                      <Input type="number" min={1} max={10} value={maxPages} onChange={event => setMaxPages(Number(event.target.value) || 4)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Max candidates</span>
-                      <Input type="number" min={50} value={maxCandidates} onChange={event => setMaxCandidates(Number(event.target.value) || 400)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Max detail lookups</span>
-                      <Input type="number" min={25} value={maxDetails} onChange={event => setMaxDetails(Number(event.target.value) || 180)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Min rating</span>
-                      <Input type="number" min={0} max={5} step={0.1} value={minRating} onChange={event => setMinRating(Number(event.target.value) || 0)} />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground">Min reviews</span>
-                      <Input type="number" min={0} value={minReviews} onChange={event => setMinReviews(Number(event.target.value) || 0)} />
-                    </label>
-                    <div className="rounded-md border border-border px-3 py-2 flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Require phone</span>
-                      <Switch checked={requirePhone} onCheckedChange={setRequirePhone} />
-                    </div>
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Run size</div>
+                  <div className="grid sm:grid-cols-3 gap-2">
+                    {RUN_PLANS.map(plan => {
+                      const isActive = runPlan === plan.id;
+                      return (
+                        <button
+                          key={plan.id}
+                          onClick={() => applyRunPlan(plan.id)}
+                          className={`min-h-[86px] rounded-md border px-3 py-2 text-left transition-colors ${
+                            isActive ? 'border-primary bg-primary/10' : 'border-border hover:bg-accent'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold">{plan.label}</span>
+                            {isActive && <CheckCircle className="h-3.5 w-3.5 text-primary shrink-0" />}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground mt-1">{plan.description}</div>
+                          <div className="text-[10px] text-muted-foreground mt-1">~{plan.settings.targetLeads} leads</div>
+                        </button>
+                      );
+                    })}
                   </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-md border border-border p-3">
-                      <div className="text-[11px] text-muted-foreground">Keywords</div>
-                      <div className="text-lg font-bold">{keywords.length}</div>
-                    </div>
-                    <div className="rounded-md border border-border p-3">
-                      <div className="text-[11px] text-muted-foreground">Search pages</div>
-                      <div className="text-lg font-bold">{estimatedSearches}</div>
-                    </div>
-                    <div className="rounded-md border border-border p-3">
-                      <div className="text-[11px] text-muted-foreground">Detail cap</div>
-                      <div className="text-lg font-bold">{estimatedDetails}</div>
-                    </div>
-                  </div>
-
-                  <Button onClick={startFinder} disabled={running} className="w-full" size="lg">
-                    {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
-                    Start Leadmap email run
-                  </Button>
                 </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-[11px] text-muted-foreground">Keywords</div>
+                    <div className="text-lg font-bold">{keywords.length}</div>
+                  </div>
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-[11px] text-muted-foreground">Search pages</div>
+                    <div className="text-lg font-bold">{estimatedSearches}</div>
+                  </div>
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-[11px] text-muted-foreground">Detail cap</div>
+                    <div className="text-lg font-bold">{estimatedDetails}</div>
+                  </div>
+                </div>
+
+                <Collapsible open={showAdvancedRunSettings} onOpenChange={setShowAdvancedRunSettings}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between" type="button">
+                      <span className="flex items-center gap-2">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Advanced settings
+                      </span>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedRunSettings ? 'rotate-180' : ''}`} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-3 space-y-3">
+                    <Textarea
+                      value={keywordsText}
+                      onChange={event => setKeywordsText(event.target.value)}
+                      className="min-h-[150px]"
+                      placeholder="One niche keyword per line"
+                    />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Target leads</span>
+                        <Input type="number" min={10} max={1000} value={targetLeads} onChange={event => setTargetLeads(Number(event.target.value) || 100)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Radius meters</span>
+                        <Input type="number" min={1000} step={500} value={radius} onChange={event => setRadius(Number(event.target.value) || 5000)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Pages per keyword</span>
+                        <Input type="number" min={1} max={10} value={maxPages} onChange={event => setMaxPages(Number(event.target.value) || 4)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Max candidates</span>
+                        <Input type="number" min={50} value={maxCandidates} onChange={event => setMaxCandidates(Number(event.target.value) || 400)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Max detail lookups</span>
+                        <Input type="number" min={25} value={maxDetails} onChange={event => setMaxDetails(Number(event.target.value) || 180)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Min rating</span>
+                        <Input type="number" min={0} max={5} step={0.1} value={minRating} onChange={event => setMinRating(Number(event.target.value) || 0)} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Min reviews</span>
+                        <Input type="number" min={0} value={minReviews} onChange={event => setMinReviews(Number(event.target.value) || 0)} />
+                      </label>
+                      <div className="rounded-md border border-border px-3 py-2 flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Require phone</span>
+                        <Switch checked={requirePhone} onCheckedChange={setRequirePhone} />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Button onClick={startFinder} disabled={running} className="w-full" size="lg">
+                  {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+                  Start Leadmap email run
+                </Button>
               </div>
             </Card>
           </div>
