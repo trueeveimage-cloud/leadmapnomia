@@ -11,6 +11,7 @@ const DEFAULT_DAILY = 100;
 const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
+const CRON_INTERVAL_MINUTES = 5;
 const DEFAULT_SUBJECT = 'Quick question about missed calls at {{business_name}}';
 const DEFAULT_BODY = `Hi {{owner_name}},
 
@@ -142,12 +143,19 @@ function localParts(timeZone: string) {
     timeZone,
     weekday: 'short',
     hour: '2-digit',
+    minute: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(new Date());
   const weekday = parts.find((part) => part.type === 'weekday')?.value || 'Mon';
   const hour = Number(parts.find((part) => part.type === 'hour')?.value || '0');
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || '0');
   const dayIndex: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour };
+  return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour, minute };
+}
+
+function checksLeftToday(hour: number, minute: number, endHour: number) {
+  const minutesLeft = Math.max(0, ((endHour - hour) * 60) - minute);
+  return Math.max(1, Math.ceil(minutesLeft / CRON_INTERVAL_MINUTES));
 }
 
 async function recordNotification(supabase: any, input: {
@@ -197,7 +205,7 @@ Deno.serve(async (req) => {
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
     const daily = Math.max(1, Math.min(100, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
-    const batchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
+    const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
@@ -257,6 +265,10 @@ Deno.serve(async (req) => {
       });
       return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour);
+    const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
+    const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
 
     const { data: candidates } = await supabase
       .from('leads')
@@ -344,6 +356,9 @@ Deno.serve(async (req) => {
         rejectionSummary: diagnostics?.rejectionSummary,
         topReasons: diagnostics?.topReasons,
         batchSize,
+        configuredBatchSize,
+        catchUpBatchSize,
+        slotsLeft,
         delaySeconds,
         remaining: remaining - sent,
         forced: force,
@@ -364,6 +379,9 @@ Deno.serve(async (req) => {
       eligible: batch.length,
       diagnostics,
       batchSize,
+      configuredBatchSize,
+      catchUpBatchSize,
+      slotsLeft,
       delaySeconds,
       timestamp: new Date().toISOString(),
       details: details.slice(0, 20),

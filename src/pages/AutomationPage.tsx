@@ -99,6 +99,7 @@ const WEEKDAYS = [
 
 const COUNTRIES = ['SE', 'NO', 'DK', 'UK', 'ES'];
 const EXCLUDED_CALL_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
+const AUTOMATION_INTERVAL_MINUTES = 5;
 
 function csv(values: string[]) {
   return values.join(',');
@@ -305,8 +306,8 @@ export default function AutomationPage() {
   }, [settings.gmailDaily, stats.emailsToday]);
 
   const scheduleDaysText = useMemo(() => getScheduleDaysText(settings.aiDays), [settings.aiDays]);
-  const nextCallCheck = useMemo(() => settings.aiEnabled ? nextCheckTime(settings, 20) : null, [settings]);
-  const nextGmailCheck = useMemo(() => settings.gmailEnabled ? nextCheckTime(settings, 20) : null, [settings]);
+  const nextCallCheck = useMemo(() => settings.aiEnabled ? nextCheckTime(settings, AUTOMATION_INTERVAL_MINUTES) : null, [settings]);
+  const nextGmailCheck = useMemo(() => settings.gmailEnabled ? nextCheckTime(settings, AUTOMATION_INTERVAL_MINUTES) : null, [settings]);
   const isWindowOpen = activeNow(settings);
   const dayProgress = windowProgress(settings);
   const latestAi = useMemo(() => latestPayload(history, isAiAutomationNotification), [history]);
@@ -626,12 +627,12 @@ export default function AutomationPage() {
                   {isWindowOpen ? 'Window open now' : 'Waiting for next window'}
                 </Badge>
                 <Badge variant="secondary">{scheduleDaysText}</Badge>
-                <Badge variant="secondary">Every 20 min</Badge>
+                <Badge variant="secondary">Every {AUTOMATION_INTERVAL_MINUTES} min</Badge>
                 <Badge variant="secondary">{settings.aiStartHour}:00-{settings.aiEndHour}:00 Stockholm</Badge>
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every 20 minutes in the work window. AI calls are one-by-one only; Gmail sends paced batches with delay, dedupe, opt-out, suppression and no-call-overlap checks.
+                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before 16:00 with validation, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
@@ -746,7 +747,7 @@ export default function AutomationPage() {
             />
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Cadence" value={`1 call every 20 min, up to ${settings.aiDaily}/day`} />
+              <StatusTile icon={<Clock size={15} />} label="Cadence" value={`1 call every ${AUTOMATION_INTERVAL_MINUTES} min, up to ${settings.aiDaily}/day`} />
               <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="One active call, dedupe, opt-out, email exclusion" />
             </div>
 
@@ -810,7 +811,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Every 20 min, up to ${settings.gmailBatchSize}/run`} />
+              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Every ${AUTOMATION_INTERVAL_MINUTES} min, catch-up max 20/run`} />
               <StatusTile icon={<ShieldCheck size={15} />} label="Deliverability" value="Validation, suppression, unsubscribe" />
             </div>
 
@@ -828,7 +829,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
-              Smart setup keeps Gmail controlled at 100/day: per-run batch max 20, email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
+              Smart setup keeps Gmail controlled at 100/day: catch-up batches increase only when needed before 16:00, with email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
             </div>
 
             <details className="mt-4 rounded-md border border-border bg-background/40 p-3">

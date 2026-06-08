@@ -9,6 +9,7 @@ const DEFAULT_DAILY_CAP = 15;
 const DEFAULT_PER_RUN = 1;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
+const DEFAULT_ACTIVE_GUARD_MINUTES = 8;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 
 type Settings = Record<string, string>;
@@ -196,6 +197,7 @@ Deno.serve(async (req) => {
       'ai_calls_min_score',
       'ai_calls_product',
       'ai_calls_timezone',
+      'ai_calls_active_guard_minutes',
     ];
     const { data: rows, error: settingsError } = await supabase.from('settings').select('key, value').in('key', keys);
     if (settingsError) throw settingsError;
@@ -208,6 +210,7 @@ Deno.serve(async (req) => {
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const endHour = intSetting(settings, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
+    const activeGuardMinutes = intSetting(settings, 'ai_calls_active_guard_minutes', DEFAULT_ACTIVE_GUARD_MINUTES, 5, 45);
     const countries = csvSetting(settings.ai_calls_countries, ['SE']);
     const days = csvSetting(settings.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const product = settings.ai_calls_product || 'leadmap';
@@ -240,7 +243,7 @@ Deno.serve(async (req) => {
     }
 
     if (!preview) {
-      const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+      const activeSince = new Date(Date.now() - activeGuardMinutes * 60 * 1000).toISOString();
       const { data: activeCall } = await supabase
         .from('leads')
         .select('id, name, retell_call_id')
@@ -263,6 +266,7 @@ Deno.serve(async (req) => {
             dailyCap,
             callsToday: callsToday || 0,
             remainingToday,
+            activeGuardMinutes,
           },
         });
         return json({
@@ -272,6 +276,7 @@ Deno.serve(async (req) => {
           dailyCap,
           callsToday: callsToday || 0,
           remainingToday,
+          activeGuardMinutes,
         });
       }
     }
@@ -371,6 +376,7 @@ Deno.serve(async (req) => {
         dailyCap,
         callsTodayBeforeRun: callsToday || 0,
         remainingToday: Math.max(0, remainingToday - started),
+        activeGuardMinutes,
         forced: force,
         scheduled: !force,
       },
@@ -386,6 +392,7 @@ Deno.serve(async (req) => {
       remainingToday: Math.max(0, remainingToday - started),
       eligible: candidates.length,
       diagnostics,
+      activeGuardMinutes,
       details: details.slice(0, 20),
       timestamp: new Date().toISOString(),
     });
