@@ -384,31 +384,32 @@ export default function AutomationPage() {
 
   const loadStats = async (nextSettings = settings) => {
     const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+    const sb = supabase as any;
     const [{ count: emailsToday }, { count: callsToday }, { count: activeCalls }, emailRowsRes, callRowsRes] = await Promise.all([
-      supabase
+      sb
         .from('message_logs')
         .select('id', { count: 'exact', head: true })
         .eq('channel', 'email')
         .eq('direction', 'outbound')
         .eq('status', 'sent')
         .gte('created_at', startOfTodayIso()),
-      supabase
+      sb
         .from('activities')
         .select('id', { count: 'exact', head: true })
         .eq('type', 'ai_call_started')
         .gte('created_at', startOfTodayIso()),
-      supabase
+      sb
         .from('leads')
         .select('id', { count: 'exact', head: true })
         .eq('call_status', 'Calling')
         .gte('last_called_at', activeSince),
-      supabase
+      sb
         .from('leads')
         .select('id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
         .not('email', 'is', null)
         .neq('email', '')
         .limit(5000),
-      supabase
+      sb
         .from('leads')
         .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
         .or('phone.not.is.null,phone_e164.not.is.null')
