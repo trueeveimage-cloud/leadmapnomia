@@ -41,12 +41,28 @@ function localParts(timeZone: string) {
     timeZone,
     weekday: 'short',
     hour: '2-digit',
+    minute: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(new Date());
   const weekday = parts.find((part) => part.type === 'weekday')?.value || 'Mon';
   const hour = Number(parts.find((part) => part.type === 'hour')?.value || '0');
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || '0');
   const dayIndex: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour };
+  return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour, minute };
+}
+
+function minutesOfDay(hour: number, minute: number) {
+  return (hour * 60) + minute;
+}
+
+function insideWindow(now: { hour: number; minute: number }, startHour: number, startMinute: number, endHour: number, endMinute: number) {
+  const current = minutesOfDay(now.hour, now.minute);
+  return current >= minutesOfDay(startHour, startMinute) && current < minutesOfDay(endHour, endMinute);
+}
+
+function windowLabel(startHour: number, startMinute: number, endHour: number, endMinute: number) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(startHour)}:${pad(startMinute)}-${pad(endHour)}:${pad(endMinute)}`;
 }
 
 function normalizeE164(value?: string | null) {
@@ -191,7 +207,9 @@ Deno.serve(async (req) => {
       'ai_calls_daily',
       'ai_calls_per_run',
       'ai_calls_start_hour',
+      'ai_calls_start_minute',
       'ai_calls_end_hour',
+      'ai_calls_end_minute',
       'ai_calls_days',
       'ai_calls_countries',
       'ai_calls_min_score',
@@ -208,7 +226,9 @@ Deno.serve(async (req) => {
     const dailyCap = intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100);
     const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 1);
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
+    const startMinute = intSetting(settings, 'ai_calls_start_minute', 0, 0, 59);
     const endHour = intSetting(settings, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
+    const endMinute = intSetting(settings, 'ai_calls_end_minute', 0, 0, 59);
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
     const activeGuardMinutes = intSetting(settings, 'ai_calls_active_guard_minutes', DEFAULT_ACTIVE_GUARD_MINUTES, 5, 45);
     const countries = csvSetting(settings.ai_calls_countries, ['SE']);
@@ -219,8 +239,18 @@ Deno.serve(async (req) => {
 
     if (!enabled && !force && !preview) return json({ skipped: true, reason: 'disabled' });
     if (!force && !preview && !days.includes(nowLocal.day)) return json({ skipped: true, reason: 'day_blocked', day: nowLocal.day });
-    if (!force && !preview && (nowLocal.hour < startHour || nowLocal.hour >= endHour)) {
-      return json({ skipped: true, reason: 'outside_call_window', hour: nowLocal.hour, startHour, endHour });
+    if (!force && !preview && !insideWindow(nowLocal, startHour, startMinute, endHour, endMinute)) {
+      return json({
+        skipped: true,
+        reason: 'outside_call_window',
+        hour: nowLocal.hour,
+        minute: nowLocal.minute,
+        startHour,
+        startMinute,
+        endHour,
+        endMinute,
+        window: windowLabel(startHour, startMinute, endHour, endMinute),
+      });
     }
 
     const startOfDay = new Date();

@@ -153,9 +153,23 @@ function localParts(timeZone: string) {
   return { day: dayIndex[weekday] ?? new Date().getUTCDay(), hour, minute };
 }
 
-function checksLeftToday(hour: number, minute: number, endHour: number) {
-  const minutesLeft = Math.max(0, ((endHour - hour) * 60) - minute);
+function minutesOfDay(hour: number, minute: number) {
+  return (hour * 60) + minute;
+}
+
+function insideWindow(now: { hour: number; minute: number }, startHour: number, startMinute: number, endHour: number, endMinute: number) {
+  const current = minutesOfDay(now.hour, now.minute);
+  return current >= minutesOfDay(startHour, startMinute) && current < minutesOfDay(endHour, endMinute);
+}
+
+function checksLeftToday(hour: number, minute: number, endHour: number, endMinute: number) {
+  const minutesLeft = Math.max(0, minutesOfDay(endHour, endMinute) - minutesOfDay(hour, minute));
   return Math.max(1, Math.ceil(minutesLeft / CRON_INTERVAL_MINUTES));
+}
+
+function windowLabel(startHour: number, startMinute: number, endHour: number, endMinute: number) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(startHour)}:${pad(startMinute)}-${pad(endHour)}:${pad(endMinute)}`;
 }
 
 async function recordNotification(supabase: any, input: {
@@ -194,7 +208,9 @@ Deno.serve(async (req) => {
       'gmail_autosend_delay_seconds',
       'gmail_autosend_batch_size',
       'ai_calls_start_hour',
+      'ai_calls_start_minute',
       'ai_calls_end_hour',
+      'ai_calls_end_minute',
       'ai_calls_days',
       'ai_calls_timezone',
     ];
@@ -208,7 +224,9 @@ Deno.serve(async (req) => {
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
+    const startMinute = intSetting(cfg, 'ai_calls_start_minute', 0, 0, 59);
     const endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
+    const endMinute = intSetting(cfg, 'ai_calls_end_minute', 0, 0, 59);
     const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
@@ -235,14 +253,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'day_blocked', day: nowLocal.day }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    if (!force && (nowLocal.hour < startHour || nowLocal.hour >= endHour)) {
+    if (!force && !insideWindow(nowLocal, startHour, startMinute, endHour, endMinute)) {
       await recordNotification(supabase, {
         type: 'gmail_batch_done',
         title: 'Gmail auto-send skipped',
-        message: `Auto-send is outside the ${startHour}:00-${endHour}:00 ${timeZone} window.`,
-        payload: { reason: 'outside_send_window', hour: nowLocal.hour, startHour, endHour, timeZone },
+        message: `Auto-send is outside the ${windowLabel(startHour, startMinute, endHour, endMinute)} ${timeZone} window.`,
+        payload: { reason: 'outside_send_window', hour: nowLocal.hour, minute: nowLocal.minute, startHour, startMinute, endHour, endMinute, timeZone },
       });
-      return new Response(JSON.stringify({ skipped: true, reason: 'outside_send_window', hour: nowLocal.hour, startHour, endHour }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ skipped: true, reason: 'outside_send_window', hour: nowLocal.hour, minute: nowLocal.minute, startHour, startMinute, endHour, endMinute }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const startOfDay = new Date();
@@ -266,7 +284,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour);
+    const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour, endMinute);
     const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
     const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
 
@@ -364,7 +382,9 @@ Deno.serve(async (req) => {
         forced: force,
         scheduled: !force,
         startHour,
+        startMinute,
         endHour,
+        endMinute,
         timeZone,
       },
     });

@@ -30,7 +30,9 @@ type AutomationSettings = {
   aiDaily: string;
   aiPerRun: string;
   aiStartHour: string;
+  aiStartMinute: string;
   aiEndHour: string;
+  aiEndMinute: string;
   aiDays: string[];
   aiCountries: string[];
   aiMinScore: string;
@@ -73,7 +75,9 @@ const DEFAULTS: AutomationSettings = {
   aiDaily: '15',
   aiPerRun: '1',
   aiStartHour: '10',
-  aiEndHour: '16',
+  aiStartMinute: '0',
+  aiEndHour: '17',
+  aiEndMinute: '30',
   aiDays: ['1', '2', '3', '4', '5'],
   aiCountries: ['SE'],
   aiMinScore: '0',
@@ -188,10 +192,21 @@ function getScheduleDaysText(days: string[]) {
 function activeNow(settings: AutomationSettings) {
   const now = new Date();
   const day = String(now.getDay());
-  const hour = now.getHours();
+  const current = minutesOfDay(now.getHours(), now.getMinutes());
+  const start = minutesOfDay(Number(settings.aiStartHour || 0), Number(settings.aiStartMinute || 0));
+  const end = minutesOfDay(Number(settings.aiEndHour || 0), Number(settings.aiEndMinute || 0));
   return settings.aiDays.includes(day)
-    && hour >= Number(settings.aiStartHour || 0)
-    && hour < Number(settings.aiEndHour || 0);
+    && current >= start
+    && current < end;
+}
+
+function minutesOfDay(hour: number, minute: number) {
+  return (hour * 60) + minute;
+}
+
+function formatWindow(settings: AutomationSettings) {
+  const pad = (value: string) => String(Number(value || 0)).padStart(2, '0');
+  return `${pad(settings.aiStartHour)}:${pad(settings.aiStartMinute)}-${pad(settings.aiEndHour)}:${pad(settings.aiEndMinute)} Stockholm`;
 }
 
 function roundUpToInterval(date: Date, intervalMinutes: number) {
@@ -210,7 +225,9 @@ function roundUpToInterval(date: Date, intervalMinutes: number) {
 function nextCheckTime(settings: AutomationSettings, intervalMinutes = 20) {
   const now = new Date();
   const startHour = Number(settings.aiStartHour || 10);
-  const endHour = Number(settings.aiEndHour || 16);
+  const startMinute = Number(settings.aiStartMinute || 0);
+  const endHour = Number(settings.aiEndHour || 17);
+  const endMinute = Number(settings.aiEndMinute || 30);
   const days = settings.aiDays.length ? settings.aiDays : DEFAULTS.aiDays;
 
   for (let offset = 0; offset < 14; offset++) {
@@ -221,13 +238,14 @@ function nextCheckTime(settings: AutomationSettings, intervalMinutes = 20) {
 
     if (offset === 0) {
       const next = roundUpToInterval(now, intervalMinutes);
-      if (next.getHours() >= startHour && next.getHours() < endHour) return next;
-      if (now.getHours() < startHour) {
-        candidate.setHours(startHour, 0, 0, 0);
+      const nextMinutes = minutesOfDay(next.getHours(), next.getMinutes());
+      if (nextMinutes >= minutesOfDay(startHour, startMinute) && nextMinutes < minutesOfDay(endHour, endMinute)) return next;
+      if (minutesOfDay(now.getHours(), now.getMinutes()) < minutesOfDay(startHour, startMinute)) {
+        candidate.setHours(startHour, startMinute, 0, 0);
         return candidate;
       }
     } else {
-      candidate.setHours(startHour, 0, 0, 0);
+      candidate.setHours(startHour, startMinute, 0, 0);
       return candidate;
     }
   }
@@ -238,9 +256,14 @@ function windowProgress(settings: AutomationSettings) {
   if (!activeNow(settings)) return 0;
   const now = new Date();
   const startHour = Number(settings.aiStartHour || 10);
-  const endHour = Number(settings.aiEndHour || 16);
-  const minutesTotal = Math.max(1, (endHour - startHour) * 60);
-  const minutesDone = Math.max(0, ((now.getHours() - startHour) * 60) + now.getMinutes());
+  const startMinute = Number(settings.aiStartMinute || 0);
+  const endHour = Number(settings.aiEndHour || 17);
+  const endMinute = Number(settings.aiEndMinute || 30);
+  const start = minutesOfDay(startHour, startMinute);
+  const end = minutesOfDay(endHour, endMinute);
+  const current = minutesOfDay(now.getHours(), now.getMinutes());
+  const minutesTotal = Math.max(1, end - start);
+  const minutesDone = Math.max(0, current - start);
   return Math.min(100, Math.round((minutesDone / minutesTotal) * 100));
 }
 
@@ -347,7 +370,9 @@ export default function AutomationPage() {
       'ai_calls_daily',
       'ai_calls_per_run',
       'ai_calls_start_hour',
+      'ai_calls_start_minute',
       'ai_calls_end_hour',
+      'ai_calls_end_minute',
       'ai_calls_days',
       'ai_calls_countries',
       'ai_calls_min_score',
@@ -367,7 +392,9 @@ export default function AutomationPage() {
       aiDaily: cfg.ai_calls_daily || DEFAULTS.aiDaily,
       aiPerRun: cfg.ai_calls_per_run || DEFAULTS.aiPerRun,
       aiStartHour: cfg.ai_calls_start_hour || DEFAULTS.aiStartHour,
+      aiStartMinute: cfg.ai_calls_start_minute || DEFAULTS.aiStartMinute,
       aiEndHour: cfg.ai_calls_end_hour || DEFAULTS.aiEndHour,
+      aiEndMinute: cfg.ai_calls_end_minute || DEFAULTS.aiEndMinute,
       aiDays: parseCsv(cfg.ai_calls_days, DEFAULTS.aiDays),
       aiCountries: parseCsv(cfg.ai_calls_countries, DEFAULTS.aiCountries),
       aiMinScore: cfg.ai_calls_min_score || DEFAULTS.aiMinScore,
@@ -489,7 +516,9 @@ export default function AutomationPage() {
         setSetting('ai_calls_daily', next.aiDaily),
         setSetting('ai_calls_per_run', next.aiPerRun),
         setSetting('ai_calls_start_hour', next.aiStartHour),
+        setSetting('ai_calls_start_minute', next.aiStartMinute),
         setSetting('ai_calls_end_hour', next.aiEndHour),
+        setSetting('ai_calls_end_minute', next.aiEndMinute),
         setSetting('ai_calls_days', csv(next.aiDays)),
         setSetting('ai_calls_countries', csv(next.aiCountries)),
         setSetting('ai_calls_min_score', next.aiMinScore),
@@ -519,7 +548,9 @@ export default function AutomationPage() {
       aiDaily: '15',
       aiPerRun: '1',
       aiStartHour: '10',
-      aiEndHour: '16',
+      aiStartMinute: '0',
+      aiEndHour: '17',
+      aiEndMinute: '30',
       aiDays: ['1', '2', '3', '4', '5'],
       aiCountries: settings.aiCountries.length ? settings.aiCountries : ['SE'],
       gmailEnabled: true,
@@ -628,11 +659,11 @@ export default function AutomationPage() {
                 </Badge>
                 <Badge variant="secondary">{scheduleDaysText}</Badge>
                 <Badge variant="secondary">Every {AUTOMATION_INTERVAL_MINUTES} min</Badge>
-                <Badge variant="secondary">{settings.aiStartHour}:00-{settings.aiEndHour}:00 Stockholm</Badge>
+                <Badge variant="secondary">{formatWindow(settings)}</Badge>
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before 16:00 with validation, dedupe, opt-out, suppression and no-call-overlap checks.
+                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before 17:30 with validation, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
@@ -717,8 +748,14 @@ export default function AutomationPage() {
               <Field label="Start hour">
                 <Input type="number" min="0" max="23" value={settings.aiStartHour} onChange={event => update('aiStartHour', event.target.value)} />
               </Field>
+              <Field label="Start min">
+                <Input type="number" min="0" max="59" step="5" value={settings.aiStartMinute} onChange={event => update('aiStartMinute', event.target.value)} />
+              </Field>
               <Field label="End hour">
                 <Input type="number" min="1" max="24" value={settings.aiEndHour} onChange={event => update('aiEndHour', event.target.value)} />
+              </Field>
+              <Field label="End min">
+                <Input type="number" min="0" max="59" step="5" value={settings.aiEndMinute} onChange={event => update('aiEndMinute', event.target.value)} />
               </Field>
               <Field label="Product">
                 <select
@@ -850,7 +887,7 @@ export default function AutomationPage() {
             <div className="grid grid-cols-2 gap-3">
               <StatusTile icon={<Bot size={15} />} label="AI checks today" value={String(aiRunsToday)} />
               <StatusTile icon={<Mail size={15} />} label="Gmail checks today" value={String(gmailRunsToday)} />
-              <StatusTile icon={<Clock size={15} />} label="Window" value={`${settings.aiStartHour}:00-${settings.aiEndHour}:00`} />
+              <StatusTile icon={<Clock size={15} />} label="Window" value={formatWindow(settings).replace(' Stockholm', '')} />
               <StatusTile icon={<Zap size={15} />} label="Active mode" value={settings.aiEnabled || settings.gmailEnabled ? 'Automatic' : 'Paused'} />
             </div>
 
