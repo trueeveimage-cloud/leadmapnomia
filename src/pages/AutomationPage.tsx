@@ -48,6 +48,7 @@ type Stats = {
   emailsToday: number;
   callEligible: number;
   emailEligible: number;
+  activeCalls: number;
 };
 
 type PreviewLead = {
@@ -62,7 +63,7 @@ type PreviewLead = {
 const DEFAULTS: AutomationSettings = {
   aiEnabled: true,
   aiDaily: '15',
-  aiPerRun: '3',
+  aiPerRun: '1',
   aiStartHour: '10',
   aiEndHour: '16',
   aiDays: ['1', '2', '3', '4', '5'],
@@ -180,7 +181,20 @@ function activeNow(settings: AutomationSettings) {
     && hour < Number(settings.aiEndHour || 0);
 }
 
-function nextCheckTime(settings: AutomationSettings) {
+function roundUpToInterval(date: Date, intervalMinutes: number) {
+  const next = new Date(date);
+  next.setSeconds(0, 0);
+  const minutes = next.getMinutes();
+  const rounded = Math.ceil(minutes / intervalMinutes) * intervalMinutes;
+  if (rounded >= 60) {
+    next.setHours(next.getHours() + 1, 0, 0, 0);
+  } else {
+    next.setMinutes(rounded, 0, 0);
+  }
+  return next;
+}
+
+function nextCheckTime(settings: AutomationSettings, intervalMinutes = 20) {
   const now = new Date();
   const startHour = Number(settings.aiStartHour || 10);
   const endHour = Number(settings.aiEndHour || 16);
@@ -193,9 +207,7 @@ function nextCheckTime(settings: AutomationSettings) {
     if (!days.includes(day)) continue;
 
     if (offset === 0) {
-      const next = new Date(now);
-      next.setMinutes(0, 0, 0);
-      if (now.getMinutes() > 0 || now.getSeconds() > 0) next.setHours(next.getHours() + 1);
+      const next = roundUpToInterval(now, intervalMinutes);
       if (next.getHours() >= startHour && next.getHours() < endHour) return next;
       if (now.getHours() < startHour) {
         candidate.setHours(startHour, 0, 0, 0);
@@ -225,9 +237,32 @@ function clampNumber(value: string, fallback: number, min: number, max: number) 
   return Math.max(min, Math.min(max, parsed));
 }
 
+function reasonLabel(reason?: string) {
+  const labels: Record<string, string> = {
+    active_call_in_progress: 'waiting for current call to finish',
+    daily_cap_reached: 'daily cap reached',
+    outside_call_window: 'outside call window',
+    outside_send_window: 'outside Gmail window',
+    day_blocked: 'outside selected days',
+    disabled: 'automation paused',
+    no_candidates: 'no eligible leads',
+  };
+  return reason ? (labels[reason] || reason.replace(/_/g, ' ')) : '';
+}
+
+function lastRunText(items: AppNotification[], predicate: (item: AppNotification) => boolean) {
+  const item = items.find(predicate);
+  if (!item) return 'No history yet';
+  const payload = (item.payload || {}) as Record<string, any>;
+  const reason = reasonLabel(payload.reason);
+  const count = payload.started ?? payload.sent ?? 0;
+  const suffix = reason ? ` - ${reason}` : '';
+  return `${formatShortTime(item.created_at)}: ${count} started/sent${suffix}`;
+}
+
 export default function AutomationPage() {
   const [settings, setSettings] = useState<AutomationSettings>(DEFAULTS);
-  const [stats, setStats] = useState<Stats>({ callsToday: 0, emailsToday: 0, callEligible: 0, emailEligible: 0 });
+  const [stats, setStats] = useState<Stats>({ callsToday: 0, emailsToday: 0, callEligible: 0, emailEligible: 0, activeCalls: 0 });
   const [preview, setPreview] = useState<PreviewLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -247,7 +282,8 @@ export default function AutomationPage() {
   }, [settings.gmailDaily, stats.emailsToday]);
 
   const scheduleDaysText = useMemo(() => getScheduleDaysText(settings.aiDays), [settings.aiDays]);
-  const nextCheck = useMemo(() => nextCheckTime(settings), [settings]);
+  const nextCallCheck = useMemo(() => settings.aiEnabled ? nextCheckTime(settings, 20) : null, [settings]);
+  const nextGmailCheck = useMemo(() => settings.gmailEnabled ? nextCheckTime(settings, 20) : null, [settings]);
   const isWindowOpen = activeNow(settings);
   const dayProgress = windowProgress(settings);
 
@@ -262,7 +298,7 @@ export default function AutomationPage() {
   }, [history]);
 
   const smartSummary = useMemo(() => {
-    const callsPerRun = clampNumber(settings.aiPerRun, 3, 1, 10);
+    const callsPerRun = clampNumber(settings.aiPerRun, 1, 1, 1);
     const callDaily = clampNumber(settings.aiDaily, 15, 1, 100);
     const emailDaily = clampNumber(settings.gmailDaily, 100, 1, 100);
     const emailBatch = clampNumber(settings.gmailBatchSize, 10, 1, 20);
@@ -320,7 +356,8 @@ export default function AutomationPage() {
   };
 
   const loadStats = async (nextSettings = settings) => {
-    const [{ count: emailsToday }, { count: callsToday }, emailRowsRes, callRowsRes] = await Promise.all([
+    const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+    const [{ count: emailsToday }, { count: callsToday }, { count: activeCalls }, emailRowsRes, callRowsRes] = await Promise.all([
       supabase
         .from('message_logs')
         .select('id', { count: 'exact', head: true })
@@ -333,6 +370,11 @@ export default function AutomationPage() {
         .select('id', { count: 'exact', head: true })
         .eq('type', 'ai_call_started')
         .gte('created_at', startOfTodayIso()),
+      supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('call_status', 'Calling')
+        .gte('last_called_at', activeSince),
       supabase
         .from('leads')
         .select('id, outreach_state, last_called_at, last_contact_method, call_attempts')
@@ -376,6 +418,7 @@ export default function AutomationPage() {
       emailsToday: emailsToday || 0,
       callEligible,
       emailEligible,
+      activeCalls: activeCalls || 0,
     });
   };
 
@@ -440,7 +483,7 @@ export default function AutomationPage() {
       ...settings,
       aiEnabled: true,
       aiDaily: '15',
-      aiPerRun: '3',
+      aiPerRun: '1',
       aiStartHour: '10',
       aiEndHour: '16',
       aiDays: ['1', '2', '3', '4', '5'],
@@ -472,7 +515,7 @@ export default function AutomationPage() {
   };
 
   const runAiNow = async () => {
-    if (!window.confirm(`Manual override: start up to ${settings.aiPerRun} real AI calls now?`)) return;
+    if (!window.confirm('Manual override: start exactly 1 real AI call now?')) return;
     setRunningAi(true);
     try {
       const next = { ...settings, aiEnabled: true };
@@ -546,25 +589,33 @@ export default function AutomationPage() {
                   {isWindowOpen ? 'Window open now' : 'Waiting for next window'}
                 </Badge>
                 <Badge variant="secondary">{scheduleDaysText}</Badge>
+                <Badge variant="secondary">Every 20 min</Badge>
                 <Badge variant="secondary">{settings.aiStartHour}:00-{settings.aiEndHour}:00 Stockholm</Badge>
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every hour in the work window. AI calls start in small batches until the daily cap is hit; Gmail sends small batches with delay, dedupe, opt-out, suppression and no-call-overlap checks.
+                Cron checks every 20 minutes in the work window. AI calls are one-by-one only; Gmail sends paced batches with delay, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
               icon={<Clock size={15} />}
-              label="Next hourly check"
-              value={nextCheck ? `${formatShortDate(nextCheck.toISOString())} at ${formatShortTime(nextCheck)}` : 'No active days'}
+              label="Next AI call check"
+              value={nextCallCheck ? `${formatShortDate(nextCallCheck.toISOString())} at ${formatShortTime(nextCallCheck)}` : 'AI paused'}
             />
-            <div className="rounded-md border border-border bg-background/50 px-3 py-2">
+            <StatusTile
+              icon={<Mail size={15} />}
+              label="Next Gmail batch"
+              value={nextGmailCheck ? `${formatShortDate(nextGmailCheck.toISOString())} at ${formatShortTime(nextGmailCheck)}` : 'Gmail paused'}
+            />
+            <div className="rounded-md border border-border bg-background/50 px-3 py-2 lg:col-span-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck size={15} />
                 Smart safety
               </div>
-              <div className="mt-1 text-sm font-medium text-foreground">
-                {smartSummary.safeEmail ? 'Gmail pacing is ready for 100/day' : 'Gmail settings need review'}
+              <div className="mt-1 grid gap-2 text-sm font-medium text-foreground md:grid-cols-3">
+                <span>{stats.activeCalls ? 'AI call in progress now' : 'No active AI call right now'}</span>
+                <span>Last AI: {lastRunText(history, isAiAutomationNotification)}</span>
+                <span>Last Gmail: {lastRunText(history, isGmailAutomationNotification)}</span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-muted">
                 <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${dayProgress}%` }} />
@@ -577,7 +628,7 @@ export default function AutomationPage() {
         <div className="grid gap-3 md:grid-cols-4">
           <Metric title="AI calls today" value={`${stats.callsToday} / ${settings.aiDaily || 0}`} percent={callPercent} />
           <Metric title="Gmail sent today" value={`${stats.emailsToday} / ${settings.gmailDaily || 0}`} percent={emailPercent} />
-          <Metric title="Call queue" value={String(stats.callEligible)} />
+          <Metric title="Call queue" value={stats.activeCalls ? `${stats.callEligible} queued, 1 active` : String(stats.callEligible)} />
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
 
@@ -596,8 +647,8 @@ export default function AutomationPage() {
               <Field label="Calls/day">
                 <Input type="number" min="1" max="100" value={settings.aiDaily} onChange={event => update('aiDaily', event.target.value)} />
               </Field>
-              <Field label="Calls/hour">
-                <Input type="number" min="1" max="10" value={settings.aiPerRun} onChange={event => update('aiPerRun', event.target.value)} />
+              <Field label="Calls/check">
+                <Input type="number" min="1" max="1" value="1" disabled onChange={() => undefined} />
               </Field>
               <Field label="Min score">
                 <Input type="number" min="0" max="100" value={settings.aiMinScore} onChange={event => update('aiMinScore', event.target.value)} />
@@ -635,8 +686,8 @@ export default function AutomationPage() {
             />
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Cadence" value={`${settings.aiPerRun}/hour, ${smartSummary.callRunsNeeded} checks to hit ${settings.aiDaily}`} />
-              <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="Dedupe, opt-out, email exclusion" />
+              <StatusTile icon={<Clock size={15} />} label="Cadence" value={`1 call every 20 min, up to ${settings.aiDaily}/day`} />
+              <StatusTile icon={<ShieldCheck size={15} />} label="Calling guardrails" value="One active call, dedupe, opt-out, email exclusion" />
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40">
@@ -669,7 +720,7 @@ export default function AutomationPage() {
               <summary className="cursor-pointer text-sm font-medium text-foreground">Manual override</summary>
               <Button className="mt-3 gap-2" onClick={runAiNow} disabled={runningAi}>
                 {runningAi ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                Run one AI batch now
+                Start 1 AI call now
               </Button>
             </details>
           </section>
@@ -697,7 +748,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Hourly check, up to ${settings.gmailBatchSize}/run`} />
+              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Every 20 min, up to ${settings.gmailBatchSize}/run`} />
               <StatusTile icon={<ShieldCheck size={15} />} label="Deliverability" value="Validation, suppression, unsubscribe" />
             </div>
 

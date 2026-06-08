@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 const DEFAULT_DAILY_CAP = 15;
-const DEFAULT_PER_RUN = 3;
+const DEFAULT_PER_RUN = 1;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
 
     const enabled = settings.ai_calls_enabled === 'true';
     const dailyCap = intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100);
-    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 10);
+    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 1);
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const endHour = intSetting(settings, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
@@ -160,6 +160,43 @@ Deno.serve(async (req) => {
         payload: { automation: 'ai_calls', reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap },
       });
       return json({ skipped: true, reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap });
+    }
+
+    if (!preview) {
+      const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+      const { data: activeCall } = await supabase
+        .from('leads')
+        .select('id, name, retell_call_id')
+        .eq('call_status', 'Calling')
+        .gte('last_called_at', activeSince)
+        .order('last_called_at', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeCall) {
+        await recordNotification(supabase, {
+          type: 'ai_call_batch_done',
+          title: 'AI call automation waiting',
+          message: `One-by-one guard: ${activeCall.name || 'a lead'} is still marked Calling.`,
+          payload: {
+            automation: 'ai_calls',
+            reason: 'active_call_in_progress',
+            activeLeadId: activeCall.id,
+            retell_call_id: activeCall.retell_call_id,
+            dailyCap,
+            callsToday: callsToday || 0,
+            remainingToday,
+          },
+        });
+        return json({
+          skipped: true,
+          reason: 'active_call_in_progress',
+          activeLeadId: activeCall.id,
+          dailyCap,
+          callsToday: callsToday || 0,
+          remainingToday,
+        });
+      }
     }
 
     let query = supabase
