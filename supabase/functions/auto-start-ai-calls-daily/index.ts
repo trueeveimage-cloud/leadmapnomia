@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
 
     const enabled = settings.ai_calls_enabled === 'true';
     const dailyCap = intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100);
-    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 1);
+    const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 50);
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const endHour = intSetting(settings, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
