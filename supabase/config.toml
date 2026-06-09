@@ -18,6 +18,9 @@ verify_jwt = false
 [functions.scrape-emails]
 verify_jwt = false
 
+[functions.finder-search]
+verify_jwt = false
+
 [functions.send-sms]
 verify_jwt = false
 

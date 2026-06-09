@@ -6,6 +6,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const HARD_COST_CAP_USD = 280;
+const TEXT_SEARCH_COST = 0.032;
+const DETAIL_COST = 0.017;
+
+type BudgetTracker = {
+  cap: number;
+  baseSpent: number;
+  textSearchRequests: number;
+  detailRequests: number;
+  exhausted: boolean;
+  reserveTextSearch: () => boolean;
+  reserveDetail: () => boolean;
+  spent: () => number;
+  remaining: () => number;
+  stats: () => Record<string, number | boolean>;
+};
+
 interface SearchRequest {
   runId: string;
   city: string;
@@ -19,7 +36,56 @@ interface SearchRequest {
   maxReviews?: number;
   requirePhone: boolean;
   findGmailOnly?: boolean;
-  action: 'search' | 'details' | 'estimate' | 'resume';
+  action: 'search' | 'details' | 'estimate' | 'resume' | 'refetch';
+}
+
+function costFor(textSearchRequests: number, detailRequests: number) {
+  return (textSearchRequests * TEXT_SEARCH_COST) + (detailRequests * DETAIL_COST);
+}
+
+function createBudgetTracker(baseSpent: number, cap: number): BudgetTracker {
+  const budget: BudgetTracker = {
+    cap,
+    baseSpent,
+    textSearchRequests: 0,
+    detailRequests: 0,
+    exhausted: false,
+    reserveTextSearch() {
+      if (this.spent() + TEXT_SEARCH_COST > this.cap) {
+        this.exhausted = true;
+        return false;
+      }
+      this.textSearchRequests += 1;
+      return true;
+    },
+    reserveDetail() {
+      if (this.spent() + DETAIL_COST > this.cap) {
+        this.exhausted = true;
+        return false;
+      }
+      this.detailRequests += 1;
+      return true;
+    },
+    spent() {
+      return this.baseSpent + costFor(this.textSearchRequests, this.detailRequests);
+    },
+    remaining() {
+      return Math.max(0, this.cap - this.spent());
+    },
+    stats() {
+      return {
+        apiSpendCapUsd: this.cap,
+        apiSpendBeforeRunUsd: Number(this.baseSpent.toFixed(2)),
+        runTextSearchRequests: this.textSearchRequests,
+        runDetailRequests: this.detailRequests,
+        runCostUsd: Number(costFor(this.textSearchRequests, this.detailRequests).toFixed(2)),
+        totalCostUsd: Number(this.spent().toFixed(2)),
+        budgetRemainingUsd: Number(this.remaining().toFixed(2)),
+        budgetExhausted: this.exhausted,
+      };
+    },
+  };
+  return budget;
 }
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -190,6 +256,15 @@ function getCityCoords(city: string): { lat: number; lng: number } | null {
   return CITY_COORDS[normalized] || null;
 }
 
+function getSearchLocale(city: string): { connector: string; language: string } {
+  const normalized = city.toLowerCase().trim();
+  const ukCities = new Set(['london', 'manchester', 'birmingham', 'leeds', 'liverpool', 'bristol', 'edinburgh', 'glasgow', 'cardiff', 'brighton']);
+  const esCities = new Set(['madrid', 'barcelona', 'valencia', 'sevilla', 'malaga', 'marbella', 'alicante', 'palma', 'zaragoza', 'murcia']);
+  if (ukCities.has(normalized)) return { connector: 'in', language: 'en' };
+  if (esCities.has(normalized)) return { connector: 'en', language: 'es' };
+  return { connector: 'i', language: 'sv' };
+}
+
 /** Social media / free-site domains that don't count as a real website */
 const FAKE_WEBSITE_PATTERNS = [
   'facebook.com', 'fb.com', 'fb.me',
@@ -220,14 +295,21 @@ async function textSearchPaginated(
   coords: { lat: number; lng: number },
   radius: number,
   maxPages: number,
-  apiKey: string
+  apiKey: string,
+  budget?: BudgetTracker,
 ): Promise<any[]> {
-  const query = `${keyword} i ${city}`;
+  const locale = getSearchLocale(city);
+  const query = `${keyword} ${locale.connector} ${city}`;
   const allResults: any[] = [];
   let pageToken: string | null = null;
 
   for (let page = 0; page < maxPages; page++) {
-    let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${coords.lat},${coords.lng}&radius=${radius}&language=sv&key=${apiKey}`;
+    if (budget && !budget.reserveTextSearch()) {
+      console.log(`Text Search budget cap reached before "${keyword}" page ${page + 1}`);
+      break;
+    }
+
+    let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${coords.lat},${coords.lng}&radius=${radius}&language=${locale.language}&key=${apiKey}`;
     if (pageToken) url += `&pagetoken=${pageToken}`;
 
     const res = await fetch(url);
@@ -286,12 +368,22 @@ async function fetchDetailsWithConcurrency(
   cacheTtlMs: number,
   allCandidatesCount: number,
   maxReviews?: number,
+  budget?: BudgetTracker,
 ): Promise<number> {
   let detailsFetched = 0;
   const CONCURRENCY = 4;
   let idx = 0;
 
   while (idx < candidates.length) {
+    if (budget?.exhausted) {
+      const remaining = candidates.slice(idx).map(c => c.place_id);
+      for (let i = 0; i < remaining.length; i += 50) {
+        await supabase.from('finder_candidates').update({ outcome: 'skipped' })
+          .eq('run_id', runId).in('place_id', remaining.slice(i, i + 50)).eq('outcome', 'pending');
+      }
+      break;
+    }
+
     if (detailsFetched >= maxDetails) {
       // Mark remaining as skipped
       const remaining = candidates.slice(idx).map(c => c.place_id);
@@ -342,6 +434,12 @@ async function fetchDetailsWithConcurrency(
       }
 
       // Fetch from API
+      if (budget && !budget.reserveDetail()) {
+        await supabase.from('finder_candidates').update({ outcome: 'skipped' })
+          .eq('run_id', runId).eq('place_id', candidate.place_id);
+        return;
+      }
+
       const details = await fetchPlaceDetails(candidate.place_id, apiKey);
       detailsFetched++;
 
@@ -401,7 +499,7 @@ async function fetchDetailsWithConcurrency(
     // Update stats periodically
     if (detailsFetched % 5 === 0) {
       await supabase.from('finder_runs').update({
-        stats: { stage: 'details', candidatesFound: allCandidatesCount, detailsFetched },
+        stats: { stage: 'details', candidatesFound: allCandidatesCount, detailsFetched, ...(budget?.stats() || {}) },
       }).eq('id', runId);
     }
   }
@@ -414,8 +512,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const { requireUserJwt } = await import('../_shared/auth.ts');
-  const authFail = await requireUserJwt(req, corsHeaders);
+  const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
+  const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
 
@@ -433,21 +531,32 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // --- API spending cap ---
-    const COST_CAP = 5000; // USD
-    const TEXT_SEARCH_COST = 0.032;
-    const DETAIL_COST = 0.017;
-    
-    async function checkSpendingCap(): Promise<{ spent: number; ok: boolean }> {
-      const { data: allRuns } = await supabase.from('finder_runs').select('stats');
+    const { data: capSetting } = await supabase.from('settings').select('value').eq('key', 'finder_spend_cap_usd').maybeSingle();
+    const configuredCap = Number.parseFloat(Deno.env.get('FINDER_SPEND_CAP_USD') || capSetting?.value || String(HARD_COST_CAP_USD));
+    const COST_CAP = Math.max(0, Math.min(HARD_COST_CAP_USD, Number.isFinite(configuredCap) ? configuredCap : HARD_COST_CAP_USD));
+
+    async function getSpent(excludeRunId?: string): Promise<number> {
+      const { data: allRuns } = await supabase.from('finder_runs').select('id, stats');
       let totalSpent = 0;
       for (const run of (allRuns || [])) {
+        if (excludeRunId && run.id === excludeRunId) continue;
         const s = run.stats as any;
         if (!s) continue;
-        const searches = s.textSearchRequests || (s.candidatesFound ? Math.ceil(s.candidatesFound / 20) : 0);
-        const details = s.detailsFetched || 0;
-        totalSpent += (searches * TEXT_SEARCH_COST) + (details * DETAIL_COST);
+        const runCost = Number(s.runCostUsd);
+        if (Number.isFinite(runCost) && runCost > 0) {
+          totalSpent += runCost;
+          continue;
+        }
+        const searches = Number(s.runTextSearchRequests || s.textSearchRequests || (s.candidatesFound ? Math.ceil(s.candidatesFound / 20) : 0));
+        const details = Number(s.runDetailRequests || s.detailsFetched || 0);
+        totalSpent += costFor(searches, details);
       }
-      return { spent: totalSpent, ok: totalSpent < COST_CAP };
+      return totalSpent;
+    }
+
+    async function checkSpendingCap(excludeRunId?: string): Promise<{ spent: number; ok: boolean }> {
+      const spent = await getSpent(excludeRunId);
+      return { spent, ok: spent < COST_CAP };
     }
 
     const body: SearchRequest = await req.json();
@@ -457,21 +566,25 @@ serve(async (req) => {
     if (action === 'estimate') {
       const stage1Requests = keywords.length * maxPages;
       const maxStage2 = Math.min(maxCandidates, maxDetails);
+      const estimatedUsd = costFor(stage1Requests, maxStage2);
       const { spent } = await checkSpendingCap();
       return new Response(JSON.stringify({
         stage1Requests,
         maxStage2Details: maxStage2,
         estimatedCost: `Stage 1: ~${stage1Requests} text searches. Stage 2: up to ${maxStage2} detail lookups.`,
+        estimatedUsd: estimatedUsd.toFixed(2),
         totalSpentSoFar: spent.toFixed(2),
         budgetRemaining: Math.max(0, COST_CAP - spent).toFixed(2),
+        spendCapUsd: COST_CAP.toFixed(2),
+        fitsBudget: spent + estimatedUsd <= COST_CAP,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     // Check spending cap before any search/resume
-    if (action === 'search' || action === 'resume') {
-      const { spent, ok } = await checkSpendingCap();
+    if (action === 'search' || action === 'resume' || action === 'refetch') {
+      const { spent, ok } = await checkSpendingCap(runId);
       if (!ok) {
         // Update the run status so it doesn't stay stuck as "pending"
         if (runId) {
@@ -481,12 +594,14 @@ serve(async (req) => {
           }).eq('id', runId);
         }
         return new Response(JSON.stringify({ 
-          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Increase the cap in the edge function to continue.` 
+          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Reduce the batch size or stop here.` 
         }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
     }
+
+    const budget = createBudgetTracker(await getSpent(runId), COST_CAP);
 
     // Resume mode — continue detail fetching for pending candidates from a timed-out run
     if (action === 'resume' as any) {
@@ -521,7 +636,7 @@ serve(async (req) => {
       
       await supabase.from('finder_runs').update({ 
         status: 'running', 
-        stats: { stage: 'details', candidatesFound: allCount, detailsFetched: allCount - pendingCandidates.length, resuming: true } 
+        stats: { stage: 'details', candidatesFound: allCount, detailsFetched: allCount - pendingCandidates.length, resuming: true, ...budget.stats() } 
       }).eq('id', runId);
 
       const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
@@ -531,7 +646,7 @@ serve(async (req) => {
       const remainingBudget = Math.min(pendingCandidates.length, (runData?.max_details || 9999) - alreadyFetched);
       
       const detailsFetched = await fetchDetailsWithConcurrency(
-        pendingCandidates, Math.max(remainingBudget, 0), apiKey, supabase, runId, cacheTtlMs, allCount, maxReviews
+        pendingCandidates, Math.max(remainingBudget, 0), apiKey, supabase, runId, cacheTtlMs, allCount, maxReviews, budget
       );
 
       // Recompute outcomes
@@ -567,6 +682,7 @@ serve(async (req) => {
         skipped: (finalCandidates || []).filter((c: any) => c.outcome === 'skipped').length,
         failed: (finalCandidates || []).filter((c: any) => c.outcome === 'failed').length,
         remaining,
+        ...budget.stats(),
       };
       await supabase.from('finder_runs').update({ status: finalStatus, stats }).eq('id', runId);
 
@@ -595,7 +711,7 @@ serve(async (req) => {
 
       const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
       const detailsFetched = await fetchDetailsWithConcurrency(
-        failedCandidates, failedCandidates.length, apiKey, supabase, runId, cacheTtlMs, failedCandidates.length, maxReviews
+        failedCandidates, failedCandidates.length, apiKey, supabase, runId, cacheTtlMs, failedCandidates.length, maxReviews, budget
       );
 
       // Recompute
@@ -624,6 +740,7 @@ serve(async (req) => {
         duplicates: (finalCandidates || []).filter(c => c.outcome === 'duplicate').length,
         skipped: (finalCandidates || []).filter(c => c.outcome === 'skipped').length,
         failed: (finalCandidates || []).filter(c => c.outcome === 'failed').length,
+        ...budget.stats(),
       };
       await supabase.from('finder_runs').update({ status: 'done', stats }).eq('id', runId);
 
@@ -640,7 +757,7 @@ serve(async (req) => {
     }
 
     // Update run status
-    await supabase.from('finder_runs').update({ status: 'running', stats: { stage: 'search', startedAt: new Date().toISOString() } }).eq('id', runId);
+    await supabase.from('finder_runs').update({ status: 'running', stats: { stage: 'search', startedAt: new Date().toISOString(), ...budget.stats() } }).eq('id', runId);
 
     // --- STAGE 1: Text Search ---
     const allCandidates: any[] = [];
@@ -660,7 +777,7 @@ serve(async (req) => {
 
       if (allCandidates.length >= maxCandidates) break;
 
-      const results = await textSearchPaginated(keyword, city, coords, radius, maxPages, apiKey);
+      const results = await textSearchPaginated(keyword, city, coords, radius, maxPages, apiKey, budget);
 
       for (const place of results) {
         if (allCandidates.length >= maxCandidates) break;
@@ -689,8 +806,10 @@ serve(async (req) => {
       }
 
       await supabase.from('finder_runs').update({
-        stats: { stage: 'search', candidatesFound: allCandidates.length, keywordsProcessed: keywords.indexOf(keyword) + 1 },
+        stats: { stage: 'search', candidatesFound: allCandidates.length, keywordsProcessed: keywords.indexOf(keyword) + 1, ...budget.stats() },
       }).eq('id', runId);
+
+      if (budget.exhausted) break;
     }
 
     // Insert candidates
@@ -706,7 +825,7 @@ serve(async (req) => {
     const cacheTtlMs = 30 * 24 * 60 * 60 * 1000;
     
     const detailsFetched = await fetchDetailsWithConcurrency(
-      pendingCandidates, maxDetails, apiKey, supabase, runId, cacheTtlMs, allCandidates.length, maxReviews
+      pendingCandidates, maxDetails, apiKey, supabase, runId, cacheTtlMs, allCandidates.length, maxReviews, budget
     );
 
     // --- RECOMPUTE STEP: ensure all fetched candidates have correct outcome ---
@@ -742,6 +861,7 @@ serve(async (req) => {
       duplicates: (finalCandidates || []).filter(c => c.outcome === 'duplicate').length,
       skipped: (finalCandidates || []).filter(c => c.outcome === 'skipped').length,
       failed: (finalCandidates || []).filter(c => c.outcome === 'failed').length,
+      ...budget.stats(),
     };
 
     await supabase.from('finder_runs').update({ status: 'done', stats }).eq('id', runId);
