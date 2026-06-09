@@ -12,17 +12,52 @@ const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const CRON_INTERVAL_MINUTES = 5;
-const DEFAULT_SUBJECT = 'Quick question about missed calls at {{business_name}}';
-const DEFAULT_BODY = `Hi {{owner_name}},
+const DEFAULT_SUBJECTS: Record<string, string> = {
+  sv: 'En snabb fråga om missade samtal hos {{business_name}}',
+  en: 'Quick question about missed calls at {{business_name}}',
+  es: 'Pregunta rápida sobre llamadas perdidas en {{business_name}}',
+};
+const DEFAULT_BODIES: Record<string, string> = {
+  sv: `Hej {{owner_name}},
 
-I noticed {{business_name}} serves customers in {{city}}. Leadmap helps service businesses answer and summarize calls when the team is busy or closed.
+Jag såg {{business_name}} och tänkte bara fråga en sak.
 
-Would it make sense to show you a 5 minute example?
+Händer det att ni ibland missar samtal när ni är upptagna, ute på jobb eller kanske när ni har det stängt?
 
-Best,
-Maged
+Jag har byggt en enkel AI-telefonist som svarar när ni inte hinner, tar kundens namn, nummer, ärende och önskad tid, och skickar allt direkt till er.
 
-If this is not relevant, reply unsubscribe and I will not contact you again.`;
+Vill du att jag skickar en kort demo på hur det skulle kunna se ut för er?
+
+Mvh
+
+Leadmap.se`,
+  en: `Hi {{owner_name}},
+
+I saw {{business_name}} and just wanted to ask one thing.
+
+Do you sometimes miss calls when you are busy, out on jobs, or closed?
+
+I have built a simple AI receptionist that answers when you cannot, takes the customer's name, number, request and preferred time, and sends everything straight to you.
+
+Would you like me to send a short demo of how it could look for you?
+
+Best regards
+
+Leadmap.se`,
+  es: `Hola {{owner_name}},
+
+Vi {{business_name}} y quería hacerte una pregunta rápida.
+
+¿A veces pierden llamadas cuando están ocupados, fuera trabajando o cuando están cerrados?
+
+He creado una recepcionista de IA sencilla que responde cuando no podéis, toma el nombre, número, motivo y hora preferida del cliente, y os lo envía todo directamente.
+
+¿Quieres que te envíe una demo corta de cómo podría verse para vosotros?
+
+Saludos
+
+Leadmap.se`,
+};
 
 type ReasonSummary = Record<string, number>;
 
@@ -36,6 +71,20 @@ function personalize(template: string, lead: any) {
     .replace(/\{\{niche\}\}/g, lead.niche_label || lead.category || 'service')
     .replace(/\{name\}/g, lead.name || 'there')
     .replace(/\{city\}/g, city);
+}
+
+function detectLeadLanguage(lead: any) {
+  const country = String(lead.country || '').trim().toUpperCase();
+  const text = `${lead.address || ''} ${lead.city || ''} ${lead.phone || ''} ${lead.phone_e164 || ''}`.toLowerCase();
+  if (country === 'ES' || text.includes('+34') || text.includes('spain') || text.includes('españa') || text.includes('espana')) return 'es';
+  if (country === 'SE' || text.includes('+46') || text.includes('sweden') || text.includes('sverige')) return 'sv';
+  return 'en';
+}
+
+function localizedSetting(cfg: Record<string, string>, baseKey: string, lang: string, fallback: string) {
+  if (cfg[`${baseKey}_${lang}`]) return cfg[`${baseKey}_${lang}`];
+  if (lang === 'sv' && cfg[baseKey]) return cfg[baseKey];
+  return fallback;
 }
 
 function validEmail(email: string | null | undefined) {
@@ -204,6 +253,12 @@ Deno.serve(async (req) => {
       'gmail_autosend_daily',
       'gmail_autosend_subject',
       'gmail_autosend_body',
+      'gmail_autosend_subject_sv',
+      'gmail_autosend_body_sv',
+      'gmail_autosend_subject_en',
+      'gmail_autosend_body_en',
+      'gmail_autosend_subject_es',
+      'gmail_autosend_body_es',
       'gmail_autosend_force',
       'gmail_autosend_delay_seconds',
       'gmail_autosend_batch_size',
@@ -230,8 +285,6 @@ Deno.serve(async (req) => {
     const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
-    const subjectTpl = cfg.gmail_autosend_subject || DEFAULT_SUBJECT;
-    const bodyTpl = cfg.gmail_autosend_body || DEFAULT_BODY;
 
     if (!enabled && !force) {
       await recordNotification(supabase, {
@@ -290,7 +343,7 @@ Deno.serve(async (req) => {
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
-      .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
+      .select('id, name, owner_name, email, address, city, country, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
       .in('lead_tier', ['S', 'A+', 'A'])
@@ -325,6 +378,9 @@ Deno.serve(async (req) => {
     for (const lead of batch) {
       if (sent >= remaining || sent >= batchSize) break;
       try {
+        const language = detectLeadLanguage(lead);
+        const subjectTpl = localizedSetting(cfg, 'gmail_autosend_subject', language, DEFAULT_SUBJECTS[language] || DEFAULT_SUBJECTS.en);
+        const bodyTpl = localizedSetting(cfg, 'gmail_autosend_body', language, DEFAULT_BODIES[language] || DEFAULT_BODIES.en);
         const resp = await fetch(`${supabaseUrl}/functions/v1/send-gmail`, {
           method: 'POST',
           headers: {
@@ -342,13 +398,13 @@ Deno.serve(async (req) => {
         const data = await resp.json().catch(() => ({}));
         if (data?.success) {
           sent++;
-          details.push({ id: lead.id, status: 'sent' });
+          details.push({ id: lead.id, status: 'sent', language });
         } else if (data?.skipped) {
           skipped++;
-          details.push({ id: lead.id, status: 'skipped', reason: data.reason });
+          details.push({ id: lead.id, status: 'skipped', reason: data.reason, language });
         } else {
           failed++;
-          details.push({ id: lead.id, status: 'failed', error: data?.error });
+          details.push({ id: lead.id, status: 'failed', error: data?.error, language });
         }
         if (data?.reason === 'daily_cap' || data?.reason === 'send_cooldown') break;
         if (sent > 0 && delaySeconds > 0 && sent < batch.length) {

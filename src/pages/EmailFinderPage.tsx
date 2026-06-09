@@ -29,7 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { createFinderRun, fetchFinderRuns, FinderRun, runFinderSearch, scrapeFinderCandidateEmails } from '@/lib/finder';
 import { COUNTRY_LABELS, Country, CityProfile, findCity, getCitiesByCountry } from '@/lib/cities';
-import { createNotification, determineSection, Lead, updateLead } from '@/lib/supabase';
+import { createNotification, determineSection, fetchNotifications, Lead, type AppNotification, updateLead } from '@/lib/supabase';
 import { calculateScore, generateWhyGoodLead, NicheKey } from '@/lib/leadScoring';
 
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
@@ -335,6 +335,7 @@ export default function EmailFinderPage() {
 
   const [runs, setRuns] = useState<FinderRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
+  const [scrapeHistory, setScrapeHistory] = useState<AppNotification[]>([]);
 
   const [savedProduct, setSavedProduct] = useState<SavedProductFilter>('leadmap');
   const [savedCountry, setSavedCountry] = useState<SavedCountryFilter>('SE');
@@ -363,7 +364,13 @@ export default function EmailFinderPage() {
         toast.error('Could not load coverage history');
       })
       .finally(() => setRunsLoading(false));
+    loadScrapeHistory();
   }, []);
+
+  const loadScrapeHistory = async () => {
+    const rows = await fetchNotifications(100);
+    setScrapeHistory(rows.filter(item => item.type === 'email_scrape_done').slice(0, 8));
+  };
 
   useEffect(() => {
     setKeywordsText(PRESETS[presetIndex].niches[country].join('\n'));
@@ -415,6 +422,7 @@ export default function EmailFinderPage() {
   const keywords = useMemo(() => parseKeywords(keywordsText), [keywordsText]);
   const selectedPreset = PRESETS[presetIndex];
   const selectedRunPlan = RUN_PLANS.find(plan => plan.id === runPlan) ?? RUN_PLANS[1];
+  const recentRuns = useMemo(() => runs.slice(0, 6), [runs]);
 
   const estimatedSearches = Math.max(1, keywords.length) * selectedCities.length * maxPages;
   const estimatedDetails = selectedCities.length * maxDetails;
@@ -571,6 +579,7 @@ export default function EmailFinderPage() {
             batchId: batchId || '',
           },
         });
+        await loadScrapeHistory();
         if (totals.found > 0) {
           toast.success(`Lead Finder found ${totals.found} emails and saved ${totals.added + totals.updated} leads`);
         } else {
@@ -698,6 +707,7 @@ export default function EmailFinderPage() {
         message: `Found ${found} emails from ${done} checked saved leads.`,
         payload: { found, checked: done, failed, filters: { savedProduct, savedCountry, savedCity, savedLimit } },
       });
+      await loadScrapeHistory();
       toast.success(`Found ${found} emails from ${done} checked leads`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to scrape saved leads');
@@ -1074,6 +1084,80 @@ export default function EmailFinderPage() {
                   Open full coverage map
                 </Link>
               </Button>
+            </Card>
+
+            <Card className="p-4 sm:p-5 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-primary" />
+                    Recent scrape history
+                  </h2>
+                  <p className="text-sm text-muted-foreground">Latest country searches and email discovery results.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setRuns(await fetchFinderRuns());
+                    await loadScrapeHistory();
+                  }}
+                >
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {recentRuns.length === 0 && scrapeHistory.length === 0 ? (
+                  <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+                    No Lead Finder history yet. Start UK, Spain, or Sweden runs and they will appear here.
+                  </div>
+                ) : (
+                  <>
+                    {recentRuns.map(run => {
+                      const stats = (run.stats || {}) as Record<string, any>;
+                      return (
+                        <Link
+                          key={run.id}
+                          to={run.batch_id ? `/finder/batch/${run.batch_id}` : `/finder/runs/${run.id}`}
+                          className="block rounded-md border border-border p-3 hover:bg-accent transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium truncate">{run.city}</span>
+                            <Badge variant={run.status === 'done' ? 'secondary' : run.status === 'failed' ? 'destructive' : 'outline'} className="text-[10px]">
+                              {run.status}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+                            <span>{(stats.candidatesFound || 0).toLocaleString()} candidates</span>
+                            <span>{(stats.emailsFound || stats.savedLeads || 0).toLocaleString()} saved/email</span>
+                            <span>{new Date(run.created_at).toLocaleDateString()}</span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+
+                    {scrapeHistory.map(item => {
+                      const payload = (item.payload || {}) as Record<string, any>;
+                      return (
+                        <div key={item.id} className="rounded-md border border-border p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-medium truncate">{item.title}</span>
+                            <span className="text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">{item.message}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {typeof payload.checked !== 'undefined' && <Badge variant="outline" className="text-[10px]">{payload.checked} checked</Badge>}
+                            {typeof payload.found !== 'undefined' && <Badge variant="outline" className="text-[10px]">{payload.found} emails</Badge>}
+                            {typeof payload.added !== 'undefined' && <Badge variant="outline" className="text-[10px]">{payload.added} added</Badge>}
+                            {typeof payload.updated !== 'undefined' && <Badge variant="outline" className="text-[10px]">{payload.updated} updated</Badge>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
             </Card>
 
             <Card id="saved-leads" className="p-4 sm:p-5 space-y-4">

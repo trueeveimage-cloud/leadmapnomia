@@ -249,6 +249,30 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   'middelfart': { lat: 55.5053, lng: 9.7314 },
   'aabenraa': { lat: 55.0444, lng: 9.4167 },
   'grenaa': { lat: 56.4156, lng: 10.8794 },
+
+  // United Kingdom
+  'london': { lat: 51.5072, lng: -0.1276 },
+  'manchester': { lat: 53.4808, lng: -2.2426 },
+  'birmingham': { lat: 52.4862, lng: -1.8904 },
+  'leeds': { lat: 53.8008, lng: -1.5491 },
+  'liverpool': { lat: 53.4084, lng: -2.9916 },
+  'bristol': { lat: 51.4545, lng: -2.5879 },
+  'edinburgh': { lat: 55.9533, lng: -3.1883 },
+  'glasgow': { lat: 55.8642, lng: -4.2518 },
+  'cardiff': { lat: 51.4816, lng: -3.1791 },
+  'brighton': { lat: 50.8225, lng: -0.1372 },
+
+  // Spain
+  'madrid': { lat: 40.4168, lng: -3.7038 },
+  'barcelona': { lat: 41.3874, lng: 2.1686 },
+  'valencia': { lat: 39.4699, lng: -0.3763 },
+  'sevilla': { lat: 37.3891, lng: -5.9845 },
+  'malaga': { lat: 36.7213, lng: -4.4214 },
+  'marbella': { lat: 36.5101, lng: -4.8824 },
+  'alicante': { lat: 38.3452, lng: -0.4810 },
+  'palma': { lat: 39.5696, lng: 2.6502 },
+  'zaragoza': { lat: 41.6488, lng: -0.8891 },
+  'murcia': { lat: 37.9922, lng: -1.1307 },
 };
 
 function getCityCoords(city: string): { lat: number; lng: number } | null {

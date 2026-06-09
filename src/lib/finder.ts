@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { addLead, determineSection, updateLead } from "@/lib/supabase";
+import { findCity } from "@/lib/cities";
 
 export interface FinderRun {
   id: string;
@@ -178,19 +179,76 @@ export async function scrapeFinderCandidateEmails(params: {
   const { data, error } = await supabase
     .from('finder_candidates')
     .select('*')
-    .in('run_id', runIds)
-    .not('website', 'is', null)
-    .is('email', null);
+    .in('run_id', runIds);
 
   if (error) throw error;
 
-  const candidates = ((data || []) as unknown as FinderCandidate[])
+  const allCandidates = ((data || []) as unknown as FinderCandidate[]);
+  const candidates = allCandidates
     .filter(candidate => candidate.website && !candidate.email);
+  const { data: runRows } = await supabase
+    .from('finder_runs')
+    .select('id, city')
+    .in('id', runIds);
+  const runMeta = new Map((runRows || []).map((run: any) => {
+    const cityProfile = findCity(run.city);
+    return [run.id, { city: run.city, country: cityProfile?.country || null }];
+  }));
 
   let checked = 0;
   let found = 0;
   let added = 0;
   let updated = 0;
+
+  const saveCandidateLead = async (candidate: FinderCandidate, email?: string | null, emailSource?: string | null) => {
+    if (!candidate.phone && !email && !candidate.email) return;
+    const meta = runMeta.get(candidate.run_id);
+    const leadData = {
+      place_id: candidate.place_id,
+      maps_url: candidate.maps_url,
+      name: candidate.name,
+      category: candidate.category,
+      niche_label: candidate.category?.split(',')[0]?.trim() || null,
+      rating: candidate.rating,
+      reviews_count: candidate.reviews_count,
+      phone: candidate.phone,
+      email: email || candidate.email,
+      address: candidate.address,
+      city: meta?.city || null,
+      country: meta?.country || null,
+      website: candidate.website,
+      section: determineSection({ phone: candidate.phone, email: email || candidate.email }),
+      status: 'not_contacted' as const,
+      email_source: email ? (emailSource || 'website_scrape') : null,
+      product: 'leadmap' as const,
+    };
+
+    const { duplicate, error: addError } = await addLead(leadData);
+    if (addError) return;
+    if (duplicate) {
+      const patch: Record<string, any> = {};
+      if (!duplicate.phone && candidate.phone) patch.phone = candidate.phone;
+      if (!duplicate.email && (email || candidate.email)) {
+        patch.email = email || candidate.email;
+        patch.email_source = email ? (emailSource || 'website_scrape') : duplicate.email_source;
+      }
+      if (!duplicate.city && meta?.city) patch.city = meta.city;
+      if (!duplicate.country && meta?.country) patch.country = meta.country;
+      const nextEmail = patch.email || duplicate.email;
+      const nextPhone = patch.phone || duplicate.phone;
+      if (Object.keys(patch).length > 0) {
+        patch.section = determineSection({ phone: nextPhone, email: nextEmail });
+        await updateLead(duplicate.id, patch);
+        updated++;
+      }
+    } else {
+      added++;
+    }
+  };
+
+  for (const candidate of allCandidates) {
+    await saveCandidateLead(candidate);
+  }
 
   params.onProgress?.({ done: checked, total: candidates.length, found, added, updated });
 
@@ -217,38 +275,7 @@ export async function scrapeFinderCandidateEmails(params: {
         .update({ email } as any)
         .eq('id', candidate.id);
 
-      const leadData = {
-        place_id: candidate.place_id,
-        maps_url: candidate.maps_url,
-        name: candidate.name,
-        category: candidate.category,
-        niche_label: candidate.category?.split(',')[0]?.trim() || null,
-        rating: candidate.rating,
-        reviews_count: candidate.reviews_count,
-        phone: candidate.phone,
-        email,
-        address: candidate.address,
-        website: candidate.website,
-        section: determineSection({ phone: candidate.phone, email }),
-        status: 'not_contacted' as const,
-        email_source: result.source || 'website_scrape',
-        product: 'leadmap' as const,
-      };
-
-      const { duplicate, error: addError } = await addLead(leadData);
-      if (addError) continue;
-      if (duplicate) {
-        if (!duplicate.email) {
-          await updateLead(duplicate.id, {
-            email,
-            email_source: result.source || 'website_scrape',
-            section: determineSection({ ...duplicate, email }),
-          });
-          updated++;
-        }
-      } else {
-        added++;
-      }
+      await saveCandidateLead(candidate, email, result.source || 'website_scrape');
     }
 
     checked = Math.min(i + 4, candidates.length);

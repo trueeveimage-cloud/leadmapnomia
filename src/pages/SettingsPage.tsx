@@ -15,6 +15,21 @@ import { useAuth } from '@/context/AuthContext';
 import InfoTip from '@/components/InfoTip';
 import { useCRM } from '@/context/CRMContext';
 
+const LEADMAP_AUTOSEND_SUBJECT_SV = 'En snabb fråga om missade samtal hos {{business_name}}';
+const LEADMAP_AUTOSEND_BODY_SV = `Hej {{owner_name}},
+
+Jag såg {{business_name}} och tänkte bara fråga en sak.
+
+Händer det att ni ibland missar samtal när ni är upptagna, ute på jobb eller kanske när ni har det stängt?
+
+Jag har byggt en enkel AI-telefonist som svarar när ni inte hinner, tar kundens namn, nummer, ärende och önskad tid, och skickar allt direkt till er.
+
+Vill du att jag skickar en kort demo på hur det skulle kunna se ut för er?
+
+Mvh
+
+Leadmap.se`;
+
 export default function SettingsPage() {
   const { refreshCounts } = useCRM();
   const { user } = useAuth();
@@ -121,8 +136,8 @@ export default function SettingsPage() {
   // Gmail auto-send (100/business-day)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
   const [autosendDaily, setAutosendDaily] = useState('100');
-  const [autosendSubject, setAutosendSubject] = useState('En snabb fråga om era inkommande samtal');
-  const [autosendBody, setAutosendBody] = useState('Hej {name}!\n\nVi bygger en AI-receptionist som svarar i telefon dygnet runt så ni inte missar några samtal från nya kunder.\n\nVill du höra hur det fungerar? Tar 5 minuter.');
+  const [autosendSubject, setAutosendSubject] = useState(LEADMAP_AUTOSEND_SUBJECT_SV);
+  const [autosendBody, setAutosendBody] = useState(LEADMAP_AUTOSEND_BODY_SV);
   const [autosendRunning, setAutosendRunning] = useState(false);
 
   // Scoring weights (multipliers, default 1.0)
@@ -196,6 +211,8 @@ export default function SettingsPage() {
       setSetting('gmail_autosend_daily', autosendDaily),
       setSetting('gmail_autosend_subject', autosendSubject),
       setSetting('gmail_autosend_body', autosendBody),
+      setSetting('gmail_autosend_subject_sv', autosendSubject),
+      setSetting('gmail_autosend_body_sv', autosendBody),
       setSetting('scoring_weights', JSON.stringify(weights)),
     ]);
     setSaved(true);
@@ -399,7 +416,7 @@ export default function SettingsPage() {
             <div className="flex items-start justify-between gap-3 mb-2">
               <h2 className="font-semibold text-foreground flex items-center gap-2">
                 <Zap size={15} className="text-[hsl(280,80%,65%)]" /> Gmail Auto-Send (Mon–Fri)
-                <InfoTip text="Each business day at 09:00 UTC the system picks top-scoring leads (S/A+/A tier) with email, who haven't been emailed yet and haven't opted out, then sends up to N emails using the template below. {name} and {city} are personalized per lead." />
+                <InfoTip text="The system picks top-scoring S/A+/A leads with email, skips opt-outs and already-contacted businesses, and sends the saved Swedish body to Swedish leads. UK and Spain use translated variants automatically." />
               </h2>
               <Switch checked={autosendEnabled} onCheckedChange={setAutosendEnabled} />
             </div>
@@ -442,8 +459,25 @@ export default function SettingsPage() {
                 <Input value={autosendSubject} onChange={(e) => setAutosendSubject(e.target.value)} className="h-8 text-sm" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Body (uses {'{name}'} and {'{city}'})</label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="text-xs text-muted-foreground block">Body (uses {'{{owner_name}}'}, {'{{business_name}}'}, {'{{city}}'}, {'{{niche}}'})</label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      setAutosendSubject(LEADMAP_AUTOSEND_SUBJECT_SV);
+                      setAutosendBody(LEADMAP_AUTOSEND_BODY_SV);
+                    }}
+                  >
+                    Use Leadmap preset
+                  </Button>
+                </div>
                 <Textarea value={autosendBody} onChange={(e) => setAutosendBody(e.target.value)} rows={6} className="text-sm font-mono" />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Your saved Swedish body stays exactly as saved. English and Spanish recipients get matching translated versions from the scheduler.
+                </p>
               </div>
             </div>
           </div>
