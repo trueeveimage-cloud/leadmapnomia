@@ -490,6 +490,7 @@ export type Database = {
           caller_id: string | null
           caller_name: string | null
           category: string | null
+          city: string | null
           country: string | null
           created_at: string
           detected_niche: string | null
@@ -558,6 +559,7 @@ export type Database = {
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
           country?: string | null
           created_at?: string
           detected_niche?: string | null
@@ -626,6 +628,7 @@ export type Database = {
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
           country?: string | null
           created_at?: string
           detected_niche?: string | null
