@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
     const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
     const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
 
-    const { data: candidates } = await supabase
+    const { data: candidates, error: candErr } = await supabase
       .from('leads')
       .select('id, name, email, address, city, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
@@ -298,16 +298,20 @@ Deno.serve(async (req) => {
       .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(1000);
+    console.log('[gmail-auto] candidates', { count: candidates?.length, error: candErr?.message });
 
     const seenEmails = new Set<string>();
+    const rejectionTrace: ReasonSummary = {};
     const batch = (candidates || [])
       .filter((lead: any) => {
         const email = String(lead.email || '').trim().toLowerCase();
-        if (emailRejectionReasons(lead, seenEmails).length > 0) return false;
+        const reasons = emailRejectionReasons(lead, seenEmails);
+        if (reasons.length > 0) { reasons.forEach(r => addReason(rejectionTrace, r)); return false; }
         lead.email = email;
         return true;
       })
       .slice(0, Math.min(remaining, batchSize));
+    console.log('[gmail-auto] batch', { len: batch.length, rejectionTrace });
     const diagnostics = batch.length === 0 ? await getEmailEligibilityDiagnostics(supabase) : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
