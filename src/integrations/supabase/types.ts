@@ -886,7 +886,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      acquire_outreach_lock: {
+        Args: { p_lead_id: string; p_manual_unlock?: boolean; p_method: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
