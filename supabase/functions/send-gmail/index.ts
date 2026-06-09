@@ -95,7 +95,7 @@ async function notify(supabase: any, input: { type: string; title: string; messa
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const authFail = await requireUserJwt(req, corsHeaders);
+  const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
 
