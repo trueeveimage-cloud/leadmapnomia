@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3';
-import { requireUserJwt } from '../_shared/auth.ts';
+import { requireCronServiceOrUserJwt } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,7 +95,7 @@ async function notify(supabase: any, input: { type: string; title: string; messa
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  const authFail = await requireUserJwt(req, corsHeaders);
+  const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
 

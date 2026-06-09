@@ -490,6 +490,7 @@ export type Database = {
           caller_id: string | null
           caller_name: string | null
           category: string | null
+          city: string | null
           country: string | null
           created_at: string
           detected_niche: string | null
@@ -558,6 +559,7 @@ export type Database = {
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
           country?: string | null
           created_at?: string
           detected_niche?: string | null
@@ -626,6 +628,7 @@ export type Database = {
           caller_id?: string | null
           caller_name?: string | null
           category?: string | null
+          city?: string | null
           country?: string | null
           created_at?: string
           detected_niche?: string | null
@@ -886,7 +889,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      acquire_outreach_lock: {
+        Args: { p_lead_id: string; p_manual_unlock?: boolean; p_method: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
