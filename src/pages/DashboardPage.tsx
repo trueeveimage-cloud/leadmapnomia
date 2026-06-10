@@ -1,4 +1,5 @@
 import AppLayout from "@/components/AppLayout";
+import TodayOutreachPanel from "@/components/TodayOutreachPanel";
 import { useCRM } from "@/context/CRMContext";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -294,6 +295,8 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-foreground">Statistics</h1>
           <p className="text-sm text-muted-foreground">Overview of your outreach pipeline</p>
         </div>
+
+        <TodayOutreachPanel />
 
         {/* Stat cards - 2 rows */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

@@ -313,10 +313,14 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
-      .or('call_attempts.is.null,call_attempts.lt.2')
+      .or('do_not_contact.is.null,do_not_contact.eq.false')
+      .or('call_attempts.is.null,call_attempts.lt.3')
+      .or('no_answer_count.is.null,no_answer_count.lt.3')
+      .or(`next_call_after.is.null,next_call_after.lte.${new Date().toISOString()}`)
+      .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(Math.max(50, perRun * 20));
     if (product !== 'all') query = query.eq('product', product);

@@ -507,6 +507,7 @@ export type Database = {
           has_replied: boolean
           id: string
           instagram_url: string | null
+          last_call_attempt_at: string | null
           last_called_at: string | null
           last_contact_method: string | null
           last_contacted_at: string | null
@@ -520,7 +521,9 @@ export type Database = {
           name: string
           needs_call: boolean
           next_action_at: string | null
+          next_call_after: string | null
           niche_label: string | null
+          no_answer_count: number
           notes: string | null
           opening_hours: string | null
           outreach_count: number | null
@@ -576,6 +579,7 @@ export type Database = {
           has_replied?: boolean
           id?: string
           instagram_url?: string | null
+          last_call_attempt_at?: string | null
           last_called_at?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
@@ -589,7 +593,9 @@ export type Database = {
           name: string
           needs_call?: boolean
           next_action_at?: string | null
+          next_call_after?: string | null
           niche_label?: string | null
+          no_answer_count?: number
           notes?: string | null
           opening_hours?: string | null
           outreach_count?: number | null
@@ -645,6 +651,7 @@ export type Database = {
           has_replied?: boolean
           id?: string
           instagram_url?: string | null
+          last_call_attempt_at?: string | null
           last_called_at?: string | null
           last_contact_method?: string | null
           last_contacted_at?: string | null
@@ -658,7 +665,9 @@ export type Database = {
           name?: string
           needs_call?: boolean
           next_action_at?: string | null
+          next_call_after?: string | null
           niche_label?: string | null
+          no_answer_count?: number
           notes?: string | null
           opening_hours?: string | null
           outreach_count?: number | null
