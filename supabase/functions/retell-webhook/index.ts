@@ -101,7 +101,9 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     return { call_status: 'Interested', status: 'interested', outreach_state: 'called', next_step: 'Follow up manually' };
   }
   if (hasAny(text, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy'])) {
-    return { call_status: 'No answer', outreach_state: 'follow_up_needed', next_step: 'Try one more time later' };
+    // Doesn't count as a real call — clear last_called_at so it isn't counted in "calls today",
+    // schedule a retry for tomorrow, and let no_answer_count gate the 3-strike rule.
+    return { call_status: 'No answer', outreach_state: 'not_contacted', next_step: 'Auto-retry on next eligible day', __no_answer: true };
   }
   if (event === 'call_failed' || hasAny(text, ['error', 'failed'])) {
     return { call_status: 'Error', outreach_state: 'follow_up_needed', next_step: 'Check Retell error and retry manually if appropriate' };
