@@ -296,6 +296,8 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">Overview of your outreach pipeline</p>
         </div>
 
+        <TodayOutreachPanel />
+
         {/* Stat cards - 2 rows */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="Reachable Leads" value={counts.total - counts.hasWebsite - counts.missing} icon={<Users size={18} />} color={COLORS.primary} sub={`${counts.total.toLocaleString()} total`} />
