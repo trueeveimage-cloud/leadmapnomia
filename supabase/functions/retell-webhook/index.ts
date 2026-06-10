@@ -187,9 +187,12 @@ Deno.serve(async (req) => {
   const demoDeliveryMethod = firstString(custom.demo_delivery_method, custom.preferred_contact_method, custom.delivery_method, dynamicVariables.demo_delivery_method);
   const demoContactValue = firstString(custom.demo_contact_value, custom.contact_value, custom.email, custom.phone);
 
+  const isNoAnswer = (statusUpdate as JsonRecord).__no_answer === true;
+  delete (statusUpdate as JsonRecord).__no_answer;
+
   const outreach_history = [
     ...history,
-    { event_id: eventId, event, method: 'AI Call', status: outcome, retell_call_id: callId, at: new Date().toISOString() },
+    { event_id: eventId, event, method: 'AI Call', status: outcome, retell_call_id: callId, no_answer: isNoAnswer || undefined, at: new Date().toISOString() },
   ];
 
   const updates: Record<string, unknown> = {
@@ -201,11 +204,35 @@ Deno.serve(async (req) => {
     call_outcome: outcome || lead.call_outcome,
     demo_delivery_method: demoDeliveryMethod || lead.demo_delivery_method,
     demo_contact_value: demoContactValue || lead.demo_contact_value,
-    last_called_at: lead.last_called_at || new Date().toISOString(),
-    last_contacted_at: lead.last_contacted_at || new Date().toISOString(),
+    last_call_attempt_at: new Date().toISOString(),
     last_contact_method: 'AI Call',
     outreach_history,
   };
+
+  if (isNoAnswer) {
+    // No-answer = not a real call. Wipe last_called_at, refund call_attempts,
+    // bump no_answer_count, defer next attempt to tomorrow. After 3 no-answers, mark as dead.
+    const naCount = (typeof lead.no_answer_count === 'number' ? lead.no_answer_count : 0) + 1;
+    const callAttempts = Math.max(0, (typeof lead.call_attempts === 'number' ? lead.call_attempts : 1) - 1);
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    tomorrow.setUTCHours(7, 0, 0, 0); // ~09:00 Stockholm
+    updates.last_called_at = null;
+    updates.call_attempts = callAttempts;
+    updates.no_answer_count = naCount;
+    updates.next_call_after = tomorrow.toISOString();
+    if (naCount >= 3) {
+      updates.outreach_state = 'do_not_contact';
+      updates.do_not_contact = true;
+      updates.call_status = 'Dead (3x no answer)';
+      updates.next_step = 'Stop calling — 3 no-answers';
+      updates.next_call_after = null;
+    }
+  } else {
+    // Real call result — stamp last_called_at and last_contacted_at
+    updates.last_called_at = lead.last_called_at || new Date().toISOString();
+    updates.last_contacted_at = lead.last_contacted_at || new Date().toISOString();
+  }
 
   const { error: updateError } = await supabase.from('leads').update(updates).eq('id', String(lead.id));
   if (updateError) return json({ error: 'lead_update_failed', details: updateError.message }, 500);
