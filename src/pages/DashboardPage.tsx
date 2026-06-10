@@ -1,4 +1,5 @@
 import AppLayout from "@/components/AppLayout";
+import TodayOutreachPanel from "@/components/TodayOutreachPanel";
 import { useCRM } from "@/context/CRMContext";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
