@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getSetting, setSetting } from '@/lib/supabase';
 import { AlertTriangle, Loader2, Mail, Play, Save, Send, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
 
 const STORAGE_KEY = 'leadmap.gmailAutoSendDraft';
 
@@ -26,8 +27,8 @@ interface Draft {
 
 const DEFAULT_DRAFT: Draft = {
   enabled: false,
-  subject: 'Quick question about missed calls at {{business_name}}',
-  body: 'Hi {{owner_name}},\n\nI noticed {{business_name}} serves customers in {{city}}. Leadmap helps service businesses answer and summarize calls when the team is busy or closed.\n\nWould it make sense to show you a 5 minute example?\n\nBest,\nMaged\n\nIf this is not relevant, reply unsubscribe and I will not contact you again.',
+  subject: LEADMAP_EMAIL_SUBJECT_SV,
+  body: LEADMAP_EMAIL_BODY_SV,
   senderName: 'Maged',
   dailyLimit: '100',
   delaySeconds: '120',

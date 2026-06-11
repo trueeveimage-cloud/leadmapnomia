@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
 
 type AutomationSettings = {
   aiEnabled: boolean;
@@ -77,21 +78,6 @@ type DailyOutreachStat = {
   aiConnected: number;
 };
 
-const LEADMAP_AUTOSEND_SUBJECT_SV = 'En snabb fråga om missade samtal hos {{business_name}}';
-const LEADMAP_AUTOSEND_BODY_SV = `Hej {{owner_name}},
-
-Jag såg {{business_name}} och tänkte bara fråga en sak.
-
-Händer det att ni ibland missar samtal när ni är upptagna, ute på jobb eller kanske när ni har det stängt?
-
-Jag har byggt en enkel AI-telefonist som svarar när ni inte hinner, tar kundens namn, nummer, ärende och önskad tid, och skickar allt direkt till er.
-
-Vill du att jag skickar en kort demo på hur det skulle kunna se ut för er?
-
-Mvh
-
-Leadmap.se`;
-
 const DEFAULTS: AutomationSettings = {
   aiEnabled: true,
   aiDaily: '15',
@@ -108,8 +94,8 @@ const DEFAULTS: AutomationSettings = {
   gmailDaily: '100',
   gmailBatchSize: '10',
   gmailDelaySeconds: '120',
-  gmailSubject: LEADMAP_AUTOSEND_SUBJECT_SV,
-  gmailBody: LEADMAP_AUTOSEND_BODY_SV,
+  gmailSubject: LEADMAP_EMAIL_SUBJECT_SV,
+  gmailBody: LEADMAP_EMAIL_BODY_SV,
 };
 
 const WEEKDAYS = [

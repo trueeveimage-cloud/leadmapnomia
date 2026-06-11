@@ -14,21 +14,7 @@ import { Lead } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import InfoTip from '@/components/InfoTip';
 import { useCRM } from '@/context/CRMContext';
-
-const LEADMAP_AUTOSEND_SUBJECT_SV = 'En snabb fråga om missade samtal hos {{business_name}}';
-const LEADMAP_AUTOSEND_BODY_SV = `Hej {{owner_name}},
-
-Jag såg {{business_name}} och tänkte bara fråga en sak.
-
-Händer det att ni ibland missar samtal när ni är upptagna, ute på jobb eller kanske när ni har det stängt?
-
-Jag har byggt en enkel AI-telefonist som svarar när ni inte hinner, tar kundens namn, nummer, ärende och önskad tid, och skickar allt direkt till er.
-
-Vill du att jag skickar en kort demo på hur det skulle kunna se ut för er?
-
-Mvh
-
-Leadmap.se`;
+import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
 
 export default function SettingsPage() {
   const { refreshCounts } = useCRM();
@@ -136,8 +122,8 @@ export default function SettingsPage() {
   // Gmail auto-send (100/business-day)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
   const [autosendDaily, setAutosendDaily] = useState('100');
-  const [autosendSubject, setAutosendSubject] = useState(LEADMAP_AUTOSEND_SUBJECT_SV);
-  const [autosendBody, setAutosendBody] = useState(LEADMAP_AUTOSEND_BODY_SV);
+  const [autosendSubject, setAutosendSubject] = useState(LEADMAP_EMAIL_SUBJECT_SV);
+  const [autosendBody, setAutosendBody] = useState(LEADMAP_EMAIL_BODY_SV);
   const [autosendRunning, setAutosendRunning] = useState(false);
 
   // Scoring weights (multipliers, default 1.0)
@@ -467,8 +453,8 @@ export default function SettingsPage() {
                     size="sm"
                     className="h-7 px-2 text-xs"
                     onClick={() => {
-                      setAutosendSubject(LEADMAP_AUTOSEND_SUBJECT_SV);
-                      setAutosendBody(LEADMAP_AUTOSEND_BODY_SV);
+                      setAutosendSubject(LEADMAP_EMAIL_SUBJECT_SV);
+                      setAutosendBody(LEADMAP_EMAIL_BODY_SV);
                     }}
                   >
                     Use Leadmap preset

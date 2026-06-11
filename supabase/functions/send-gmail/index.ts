@@ -51,13 +51,8 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function hasUnsubscribeLine(body: string) {
-  return /unsubscribe|do not contact|stop contacting/i.test(body);
-}
-
 function withComplianceFooter(body: string) {
-  if (hasUnsubscribeLine(body)) return body;
-  return `${body.trim()}\n\nIf this is not relevant, reply unsubscribe and I will not contact you again.`;
+  return body;
 }
 
 function parseSuppressionList(value: string | null | undefined) {
