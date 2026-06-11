@@ -16,8 +16,19 @@ interface DailyState {
   finderSpend: number;
   finderCap: number;
   finderRuns: number;
+  finderIgnoredRuns: number;
+  finderIgnoredSpend: number;
+  finderBudgetStartDate: string;
   latestGmailIssue: string;
+  dailyOutreach: DailyOutreachRow[];
 }
+
+type DailyOutreachRow = {
+  date: string;
+  gmailSent: number;
+  callsStarted: number;
+  callsConnected: number;
+};
 
 const DEFAULTS: DailyState = {
   emailsSent: 0,
@@ -32,7 +43,11 @@ const DEFAULTS: DailyState = {
   finderSpend: 0,
   finderCap: 280,
   finderRuns: 0,
+  finderIgnoredRuns: 0,
+  finderIgnoredSpend: 0,
+  finderBudgetStartDate: "2026-06-11",
   latestGmailIssue: "",
+  dailyOutreach: [],
 };
 
 const TEXT_SEARCH_COST = 0.032;
@@ -48,6 +63,54 @@ function runCost(stats: any) {
 
 function validEmail(value?: string | null) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function dayKey(value: string | Date) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shortDayLabel(value: string) {
+  const today = dayKey(new Date());
+  if (value === today) return "Today";
+  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function startOfDaysAgoIso(days: number) {
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  start.setHours(0, 0, 0, 0);
+  return start.toISOString();
+}
+
+function dateInputToStartIso(value?: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return startOfDaysAgoIso(0);
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? startOfDaysAgoIso(0) : date.toISOString();
+}
+
+function makeDailyBuckets(days = 7) {
+  const rows = new Map<string, DailyOutreachRow>();
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    date.setHours(0, 0, 0, 0);
+    rows.set(dayKey(date), {
+      date: dayKey(date),
+      gmailSent: 0,
+      callsStarted: 0,
+      callsConnected: 0,
+    });
+  }
+  return rows;
+}
+
+function connectedCallStatus(status?: string | null) {
+  const value = String(status || "").toLowerCase();
+  return !!value && !["no answer", "calling", "error", "dead (3x no answer)"].includes(value);
 }
 
 function normalizePhone(value?: string | null) {
@@ -86,6 +149,9 @@ export default function TodayOutreachPanel() {
       emailRows,
       callRows,
       finderRuns,
+      recentEmails,
+      aiStartedRows,
+      recentConnectedCalls,
       settings,
       gmailNotifications,
     ] = await Promise.all([
@@ -103,9 +169,15 @@ export default function TodayOutreachPanel() {
         .not("email", "is", null).neq("email", "").limit(5000),
       supabase.from("leads").select("id, phone, phone_e164, product, status, call_attempts, no_answer_count, next_call_after, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state")
         .or("phone.not.is.null,phone_e164.not.is.null").limit(5000),
-      supabase.from("finder_runs").select("id, stats"),
+      supabase.from("finder_runs").select("id, stats, created_at"),
+      supabase.from("message_logs").select("id, created_at")
+        .eq("channel", "email").eq("direction", "outbound").eq("status", "sent").gte("created_at", startOfDaysAgoIso(6)).limit(5000),
+      (supabase as any).from("activities").select("id, created_at")
+        .eq("type", "ai_call_started").gte("created_at", startOfDaysAgoIso(6)).limit(5000),
+      supabase.from("leads").select("id, last_contacted_at, call_status")
+        .eq("last_contact_method", "AI Call").gte("last_contacted_at", startOfDaysAgoIso(6)).limit(5000),
       supabase.from("settings").select("key, value")
-        .in("key", ["gmail_autosend_daily", "ai_calls_daily", "finder_spend_cap_usd"]),
+        .in("key", ["gmail_autosend_daily", "ai_calls_daily", "finder_spend_cap_usd", "finder_budget_start_date"]),
       supabase.from("app_notifications").select("title, message, payload, created_at")
         .eq("type", "gmail_batch_done").order("created_at", { ascending: false }).limit(3),
     ]);
@@ -113,10 +185,7 @@ export default function TodayOutreachPanel() {
     const cfg: Record<string, string> = {};
     (settings.data || []).forEach((row: any) => { cfg[row.key] = row.value; });
 
-    const connectedCalls = (connectedCallRows.data || []).filter((lead: any) => {
-      const status = String(lead.call_status || "").toLowerCase();
-      return status && !["no answer", "calling", "error", "dead (3x no answer)"].includes(status);
-    }).length;
+    const connectedCalls = (connectedCallRows.data || []).filter((lead: any) => connectedCallStatus(lead.call_status)).length;
     const noAnswerToday = (attemptedCallRows.data || []).filter((lead: any) => {
       const status = String(lead.call_status || "").toLowerCase();
       return status.includes("no answer") || status.includes("dead");
@@ -153,7 +222,28 @@ export default function TodayOutreachPanel() {
       return Number(payload.failed || 0) > 0 || String(row.message || "").toLowerCase().includes("failed");
     });
 
-    const spend = (finderRuns.data || []).reduce((sum: number, run: any) => sum + runCost(run.stats), 0);
+    const budgetStartDate = cfg.finder_budget_start_date || DEFAULTS.finderBudgetStartDate;
+    const budgetStartIso = dateInputToStartIso(budgetStartDate);
+    const allFinderRuns = finderRuns.data || [];
+    const billableFinderRuns = allFinderRuns.filter((run: any) => new Date(run.created_at).getTime() >= new Date(budgetStartIso).getTime());
+    const ignoredFinderRuns = allFinderRuns.filter((run: any) => new Date(run.created_at).getTime() < new Date(budgetStartIso).getTime());
+    const spend = billableFinderRuns.reduce((sum: number, run: any) => sum + runCost(run.stats), 0);
+    const ignoredSpend = ignoredFinderRuns.reduce((sum: number, run: any) => sum + runCost(run.stats), 0);
+
+    const dailyBuckets = makeDailyBuckets(7);
+    for (const row of recentEmails.data || []) {
+      const bucket = dailyBuckets.get(dayKey(row.created_at));
+      if (bucket) bucket.gmailSent += 1;
+    }
+    for (const row of aiStartedRows.data || []) {
+      const bucket = dailyBuckets.get(dayKey(row.created_at));
+      if (bucket) bucket.callsStarted += 1;
+    }
+    for (const row of recentConnectedCalls.data || []) {
+      if (!connectedCallStatus(row.call_status)) continue;
+      const bucket = dailyBuckets.get(dayKey(row.last_contacted_at));
+      if (bucket) bucket.callsConnected += 1;
+    }
 
     setState({
       emailsSent: emailsSent.count || 0,
@@ -167,8 +257,12 @@ export default function TodayOutreachPanel() {
       deadCount: dead.count || 0,
       finderSpend: spend,
       finderCap: parseFloat(cfg.finder_spend_cap_usd || "280"),
-      finderRuns: finderRuns.data?.length || 0,
+      finderRuns: billableFinderRuns.length,
+      finderIgnoredRuns: ignoredFinderRuns.length,
+      finderIgnoredSpend: ignoredSpend,
+      finderBudgetStartDate: budgetStartDate,
       latestGmailIssue: latestIssue ? String(latestIssue.message || latestIssue.title || "") : "",
+      dailyOutreach: Array.from(dailyBuckets.values()).reverse(),
     });
   }
 
@@ -263,7 +357,44 @@ export default function TodayOutreachPanel() {
             </div>
             <Bar value={state.finderSpend} max={state.finderCap} color={finderPct > 85 ? "hsl(0, 72%, 55%)" : "hsl(262, 83%, 65%)"} />
           </div>
-          <p className="text-xs text-muted-foreground">{state.finderRuns.toLocaleString()} Lead Finder runs tracked</p>
+          <p className="text-xs text-muted-foreground">
+            {state.finderRuns.toLocaleString()} runs since {state.finderBudgetStartDate}
+            {state.finderIgnoredRuns > 0 && (
+              <> · ignoring ${state.finderIgnoredSpend.toFixed(2)} old spend</>
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-secondary/20 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <div>
+            <div className="text-sm font-medium text-foreground">Outreach by date</div>
+            <div className="text-[11px] text-muted-foreground">Gmails sent and AI calls started. No-answer does not count as connected.</div>
+          </div>
+          <span className="text-xs text-muted-foreground">7 days</span>
+        </div>
+        <div className="divide-y divide-border/60">
+          {state.dailyOutreach.map(row => (
+            <div key={row.date} className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr] items-center gap-2 px-3 py-2 text-xs">
+              <div>
+                <div className="font-medium text-foreground">{shortDayLabel(row.date)}</div>
+                <div className="text-[10px] text-muted-foreground">{row.date}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-foreground">{row.gmailSent}</div>
+                <div className="text-[10px] text-muted-foreground">Gmails</div>
+              </div>
+              <div>
+                <div className="font-semibold text-foreground">{row.callsStarted}</div>
+                <div className="text-[10px] text-muted-foreground">Calls sent</div>
+              </div>
+              <div>
+                <div className="font-semibold text-foreground">{row.callsConnected}</div>
+                <div className="text-[10px] text-muted-foreground">Connected</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 

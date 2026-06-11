@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const { counts } = useCRM();
   const [msgStats, setMsgStats] = useState({ sent: 0, delivered: 0, failed: 0, undelivered: 0, inbound: 0, queued: 0 });
   const [callStats, setCallStats] = useState<{ outcome: string; count: number }[]>([]);
-  const [dailyActivity, setDailyActivity] = useState<{ date: string; sms: number; calls: number }[]>([]);
+  const [dailyActivity, setDailyActivity] = useState<{ date: string; gmails: number; callsSent: number; connected: number }[]>([]);
   const [countryLeads, setCountryLeads] = useState<Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number; contacted: number; replied: number }>>({
     SE: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
     NO: { total: 0, phone: 0, email: 0, smsOnly: 0, callOnly: 0, contacted: 0, replied: 0 },
@@ -113,6 +113,27 @@ export default function DashboardPage() {
   });
   const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
   const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
+  const [finderBudgetStartDate, setFinderBudgetStartDate] = useState('2026-06-11');
+
+  function connectedCallStatus(status?: string | null) {
+    const value = String(status || '').toLowerCase();
+    return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
+  }
+
+  function dayKey(value: string | Date) {
+    const date = new Date(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function startOfDaysAgoIso(days: number) {
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
 
   useEffect(() => {
     // Fetch SMS stats with more detail
@@ -181,25 +202,56 @@ export default function DashboardPage() {
       });
     });
 
-    // Fetch daily activity (last 14 days)
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
-    supabase
-      .from("message_logs")
-      .select("created_at, direction")
-      .gte("created_at", fourteenDaysAgo)
-      .order("created_at", { ascending: true })
-      .then(({ data }) => {
-        const dayMap: Record<string, { sms: number; calls: number }> = {};
-        (data || []).forEach((m: any) => {
-          const day = m.created_at.slice(0, 10);
-          if (!dayMap[day]) dayMap[day] = { sms: 0, calls: 0 };
-          if (m.direction === "outbound") dayMap[day].sms++;
-          else dayMap[day].calls++;
-        });
-        setDailyActivity(
-          Object.entries(dayMap).map(([date, v]) => ({ date: date.slice(5), ...v }))
-        );
+    // Fetch daily Leadmap outreach activity (last 14 days)
+    (async () => {
+      const since = startOfDaysAgoIso(13);
+      const dayMap: Record<string, { date: string; gmails: number; callsSent: number; connected: number }> = {};
+      for (let offset = 13; offset >= 0; offset--) {
+        const date = new Date();
+        date.setDate(date.getDate() - offset);
+        const key = dayKey(date);
+        dayMap[key] = { date: key.slice(5), gmails: 0, callsSent: 0, connected: 0 };
+      }
+
+      const [emails, callStarts, connectedCalls] = await Promise.all([
+        supabase
+          .from("message_logs")
+          .select("created_at")
+          .eq("channel", "email")
+          .eq("direction", "outbound")
+          .eq("status", "sent")
+          .gte("created_at", since)
+          .limit(5000),
+        (supabase as any)
+          .from("activities")
+          .select("created_at")
+          .eq("type", "ai_call_started")
+          .gte("created_at", since)
+          .limit(5000),
+        supabase
+          .from("leads")
+          .select("last_contacted_at, call_status")
+          .eq("last_contact_method", "AI Call")
+          .gte("last_contacted_at", since)
+          .limit(5000),
+      ]);
+
+      (emails.data || []).forEach((row: any) => {
+        const key = dayKey(row.created_at);
+        if (dayMap[key]) dayMap[key].gmails++;
       });
+      (callStarts.data || []).forEach((row: any) => {
+        const key = dayKey(row.created_at);
+        if (dayMap[key]) dayMap[key].callsSent++;
+      });
+      (connectedCalls.data || []).forEach((row: any) => {
+        if (!connectedCallStatus(row.call_status)) return;
+        const key = dayKey(row.last_contacted_at);
+        if (dayMap[key]) dayMap[key].connected++;
+      });
+
+      setDailyActivity(Object.values(dayMap));
+    })();
 
     // Fetch leads by country
     (async () => {
@@ -237,7 +289,11 @@ export default function DashboardPage() {
 
     // Fetch finder stats by country
     (async () => {
-      const { data: runs } = await supabase.from('finder_runs').select('city, stats');
+      const { data: budgetSetting } = await supabase.from('settings').select('value').eq('key', 'finder_budget_start_date').maybeSingle();
+      const budgetStart = /^\d{4}-\d{2}-\d{2}$/.test(String(budgetSetting?.value || '')) ? String(budgetSetting?.value) : '2026-06-11';
+      setFinderBudgetStartDate(budgetStart);
+      const budgetStartIso = new Date(`${budgetStart}T00:00:00`).toISOString();
+      const { data: runs } = await supabase.from('finder_runs').select('city, stats, created_at').gte('created_at', budgetStartIso);
       const fStats: Record<Country, { runs: number; leads: number; spend: number; cities: number }> = {
         SE: { runs: 0, leads: 0, spend: 0, cities: 0 },
         NO: { runs: 0, leads: 0, spend: 0, cities: 0 },
@@ -335,7 +391,7 @@ export default function DashboardPage() {
           <StatCard label="Delivered" value={msgStats.delivered} icon={<CheckCircle size={18} />} color={COLORS.green} sub={`${msgStats.undelivered} undelivered`} />
           <StatCard label="Connected Calls" value={realCallTotal} icon={<Phone size={18} />} color={COLORS.amber} sub={`${noAnswerTotal} no-answer attempts excluded`} />
           <StatCard label="Campaigns" value={campaignStats.total} icon={<Zap size={18} />} color={COLORS.purple} sub={`${campaignStats.running} active · ${campaignStats.totalRuns} runs`} />
-          <StatCard label="Total API Spend" value={`$${(Object.values(finderStats).reduce((s, f) => s + f.spend, 0)).toFixed(0)}`} icon={<Search size={18} />} color={COLORS.cyan} sub={`${Object.values(finderStats).reduce((s, f) => s + f.runs, 0)} finder runs`} />
+          <StatCard label="API Spend Since Key" value={`$${(Object.values(finderStats).reduce((s, f) => s + f.spend, 0)).toFixed(0)}`} icon={<Search size={18} />} color={COLORS.cyan} sub={`${Object.values(finderStats).reduce((s, f) => s + f.runs, 0)} runs from ${finderBudgetStartDate}`} />
         </div>
 
         {/* Country breakdown */}
@@ -499,7 +555,7 @@ export default function DashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Daily Activity (14 days)">
+          <ChartCard title="Daily Outreach (14 days)">
             {dailyActivity.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={dailyActivity} margin={{ left: -10, right: 10 }}>
@@ -508,8 +564,9 @@ export default function DashboardPage() {
                   <Tooltip
                     contentStyle={{ background: "hsl(222, 24%, 10%)", border: "1px solid hsl(222, 22%, 16%)", borderRadius: 8, fontSize: 12 }}
                   />
-                  <Area type="monotone" dataKey="sms" stackId="1" stroke={COLORS.primary} fill={COLORS.primary} fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="calls" stackId="1" stroke={COLORS.amber} fill={COLORS.amber} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="gmails" name="Gmails sent" stackId="1" stroke={COLORS.cyan} fill={COLORS.cyan} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="callsSent" name="Calls sent" stackId="1" stroke={COLORS.amber} fill={COLORS.amber} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="connected" name="Connected calls" stackId="1" stroke={COLORS.green} fill={COLORS.green} fillOpacity={0.3} />
                   <Legend wrapperStyle={{ fontSize: 11, color: "hsl(215, 15%, 50%)" }} />
                 </AreaChart>
               </ResponsiveContainer>
