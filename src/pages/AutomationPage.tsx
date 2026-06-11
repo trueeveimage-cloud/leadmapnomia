@@ -70,6 +70,13 @@ type QueueDiagnostics = {
   rejectionSummary?: Record<string, number>;
 };
 
+type DailyOutreachStat = {
+  date: string;
+  gmailSent: number;
+  aiStarted: number;
+  aiConnected: number;
+};
+
 const LEADMAP_AUTOSEND_SUBJECT_SV = 'En snabb fråga om missade samtal hos {{business_name}}';
 const LEADMAP_AUTOSEND_BODY_SV = `Hej {{owner_name}},
 
@@ -173,6 +180,42 @@ function startOfTodayIso() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   return start.toISOString();
+}
+
+function startOfDaysAgoIso(days: number) {
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  start.setHours(0, 0, 0, 0);
+  return start.toISOString();
+}
+
+function dayKey(value: string | Date) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function makeDailyBuckets(days = 14) {
+  const rows = new Map<string, DailyOutreachStat>();
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date();
+    date.setDate(date.getDate() - offset);
+    date.setHours(0, 0, 0, 0);
+    rows.set(dayKey(date), {
+      date: dayKey(date),
+      gmailSent: 0,
+      aiStarted: 0,
+      aiConnected: 0,
+    });
+  }
+  return rows;
+}
+
+function connectedCallStatus(status?: string | null) {
+  const value = String(status || '').toLowerCase();
+  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
 }
 
 function isAiAutomationNotification(item: AppNotification) {
@@ -331,6 +374,7 @@ export default function AutomationPage() {
   const [runningGmail, setRunningGmail] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [history, setHistory] = useState<AppNotification[]>([]);
+  const [dailyStats, setDailyStats] = useState<DailyOutreachStat[]>([]);
 
   const callPercent = useMemo(() => {
     const cap = Number(settings.aiDaily) || 1;
@@ -459,10 +503,7 @@ export default function AutomationPage() {
         .limit(2000),
     ]);
 
-    const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => {
-      const status = String(lead.call_status || '').toLowerCase();
-      return status && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(status);
-    }).length;
+    const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => connectedCallStatus(lead.call_status)).length;
 
     const callEligible = (callRowsRes.data || []).filter((lead: any) => {
       const status = String(lead.call_status || '').toLowerCase();
@@ -510,11 +551,57 @@ export default function AutomationPage() {
     setHistory(rows.filter(item => isAiAutomationNotification(item) || isGmailAutomationNotification(item)).slice(0, 100));
   };
 
+  const loadDailyStats = async () => {
+    const since = startOfDaysAgoIso(13);
+    const sb = supabase as any;
+    const [{ data: emailRows }, { data: aiStartRows }, { data: connectedRows }] = await Promise.all([
+      sb
+        .from('message_logs')
+        .select('id, created_at')
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .eq('status', 'sent')
+        .gte('created_at', since)
+        .limit(5000),
+      sb
+        .from('activities')
+        .select('id, created_at')
+        .eq('type', 'ai_call_started')
+        .gte('created_at', since)
+        .limit(5000),
+      sb
+        .from('leads')
+        .select('id, last_contacted_at, call_status')
+        .eq('last_contact_method', 'AI Call')
+        .gte('last_contacted_at', since)
+        .limit(5000),
+    ]);
+
+    const buckets = makeDailyBuckets(14);
+    for (const row of emailRows || []) {
+      const key = dayKey(row.created_at);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.gmailSent += 1;
+    }
+    for (const row of aiStartRows || []) {
+      const key = dayKey(row.created_at);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.aiStarted += 1;
+    }
+    for (const row of connectedRows || []) {
+      if (!connectedCallStatus(row.call_status)) continue;
+      const key = dayKey(row.last_contacted_at);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.aiConnected += 1;
+    }
+    setDailyStats(Array.from(buckets.values()).reverse());
+  };
+
   const refresh = async () => {
     setLoading(true);
     try {
       const next = await loadSettings();
-      await Promise.all([loadStats(next), loadHistory()]);
+      await Promise.all([loadStats(next), loadHistory(), loadDailyStats()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load automation');
     } finally {
@@ -557,7 +644,7 @@ export default function AutomationPage() {
         setSetting('gmail_autosend_body_sv', next.gmailBody),
       ]);
       toast.success('Automation saved');
-      await Promise.all([loadStats(next), loadHistory()]);
+      await Promise.all([loadStats(next), loadHistory(), loadDailyStats()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Save failed');
     } finally {
@@ -618,7 +705,7 @@ export default function AutomationPage() {
       if (error || data?.error) throw new Error(data?.error || error?.message || 'AI batch failed');
       if ((data?.started || 0) === 0 && data?.diagnostics?.message) toast.message(data.diagnostics.message);
       else toast.success(`AI calls: ${data?.started || 0} started, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
-      await Promise.all([loadStats(next), previewCalls(next), loadHistory()]);
+      await Promise.all([loadStats(next), previewCalls(next), loadHistory(), loadDailyStats()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'AI batch failed');
     } finally {
@@ -639,7 +726,7 @@ export default function AutomationPage() {
       if ((data?.sent || 0) === 0 && data?.diagnostics?.message) toast.message(data.diagnostics.message);
       else if (data?.skipped && data?.reason) toast.message(`Gmail skipped: ${data.reason}`);
       else toast.success(`Gmail: ${data?.sent || 0} sent, ${data?.skipped || 0} skipped, ${data?.failed || 0} failed`);
-      await Promise.all([loadStats(next), loadHistory()]);
+      await Promise.all([loadStats(next), loadHistory(), loadDailyStats()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gmail batch failed');
     } finally {
@@ -655,7 +742,7 @@ export default function AutomationPage() {
             <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Leadmap AI</div>
             <h1 className="mt-1 text-2xl font-semibold text-foreground">Outreach Automation</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Automatic calls and Gmail run Monday-Friday, 10:00-16:00 Stockholm time.
+              Automatic calls and Gmail follow the saved Stockholm schedule and daily caps.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -687,7 +774,7 @@ export default function AutomationPage() {
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before 17:30 with validation, dedupe, opt-out, suppression and no-call-overlap checks.
+                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before the window closes with validation, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
@@ -705,10 +792,11 @@ export default function AutomationPage() {
                 <ShieldCheck size={15} />
                 Smart safety
               </div>
-              <div className="mt-1 grid gap-2 text-sm font-medium text-foreground md:grid-cols-3">
+              <div className="mt-1 grid gap-2 text-sm font-medium text-foreground md:grid-cols-4">
                 <span>{stats.activeCalls ? 'AI call in progress now' : 'No active AI call right now'}</span>
                 <span>Last AI: {lastRunText(history, isAiAutomationNotification)}</span>
                 <span>Last Gmail: {lastRunText(history, isGmailAutomationNotification)}</span>
+                <span>Lovable key: Edge-only via Deno.env</span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-muted">
                 <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${dayProgress}%` }} />
@@ -920,6 +1008,38 @@ export default function AutomationPage() {
               <MiniStat label="Total emails sent" value={sumHistory(history, 'sent', isGmailAutomationNotification)} />
               <MiniStat label="Total skipped" value={sumHistory(history, 'skipped')} />
               <MiniStat label="Total failed" value={sumHistory(history, 'failed')} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-border bg-background/40">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Sent stats by date</div>
+                  <div className="text-[11px] text-muted-foreground">No answer is not counted as a connected call.</div>
+                </div>
+                <div className="text-xs text-muted-foreground">Last 14 days</div>
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {dailyStats.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No daily stats loaded yet.</div>
+                ) : (
+                  dailyStats.map(row => {
+                    const isToday = row.date === dayKey(new Date());
+                    return (
+                      <div key={row.date} className="grid grid-cols-[1.1fr_0.9fr_0.9fr_0.9fr] items-center gap-2 border-b border-border/60 px-3 py-2 text-xs last:border-0">
+                        <div>
+                          <div className="font-medium text-foreground">
+                            {isToday ? 'Today' : formatShortDate(`${row.date}T00:00:00`)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">{row.date}</div>
+                        </div>
+                        <MiniStat label="Gmail sent" value={row.gmailSent} />
+                        <MiniStat label="AI started" value={row.aiStarted} />
+                        <MiniStat label="Connected" value={row.aiConnected} />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40">

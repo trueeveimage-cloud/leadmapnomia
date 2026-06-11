@@ -29,13 +29,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { createFinderRun, fetchFinderRuns, FinderRun, runFinderSearch, scrapeFinderCandidateEmails } from '@/lib/finder';
 import { COUNTRY_LABELS, Country, CityProfile, findCity, getCitiesByCountry } from '@/lib/cities';
-import { createNotification, determineSection, fetchNotifications, Lead, type AppNotification, updateLead } from '@/lib/supabase';
+import { createNotification, determineSection, fetchNotifications, getSetting, Lead, setSetting, type AppNotification, updateLead } from '@/lib/supabase';
 import { calculateScore, generateWhyGoodLead, NicheKey } from '@/lib/leadScoring';
 
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
 const GOOGLE_TEXT_SEARCH_COST_USD = 0.032;
 const GOOGLE_PLACE_DETAIL_COST_USD = 0.017;
 const FINDER_SPEND_CAP_USD = 280;
+const DEFAULT_FINDER_BUDGET_START_DATE = '2026-06-11';
 
 const LEADMAP_CORE_NICHES = new Set<NicheKey>([
   'plumber',
@@ -229,6 +230,12 @@ function getFinderRunCost(stats: any) {
   return (searches * GOOGLE_TEXT_SEARCH_COST_USD) + (details * GOOGLE_PLACE_DETAIL_COST_USD);
 }
 
+function dateInputToStartIso(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function hasWebsite(lead: ScrapeLead) {
   return !!lead.website?.trim();
 }
@@ -347,6 +354,8 @@ export default function EmailFinderPage() {
   const [runs, setRuns] = useState<FinderRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
   const [scrapeHistory, setScrapeHistory] = useState<AppNotification[]>([]);
+  const [finderBudgetStartDate, setFinderBudgetStartDate] = useState(DEFAULT_FINDER_BUDGET_START_DATE);
+  const [savingBudgetStart, setSavingBudgetStart] = useState(false);
 
   const [savedProduct, setSavedProduct] = useState<SavedProductFilter>('leadmap');
   const [savedCountry, setSavedCountry] = useState<SavedCountryFilter>('SE');
@@ -376,6 +385,9 @@ export default function EmailFinderPage() {
       })
       .finally(() => setRunsLoading(false));
     loadScrapeHistory();
+    getSetting('finder_budget_start_date').then(value => {
+      if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) setFinderBudgetStartDate(value);
+    });
   }, []);
 
   const loadScrapeHistory = async () => {
@@ -440,9 +452,37 @@ export default function EmailFinderPage() {
   const estimatedSearchCost = estimatedSearches * GOOGLE_TEXT_SEARCH_COST_USD;
   const estimatedDetailsCost = estimatedDetails * GOOGLE_PLACE_DETAIL_COST_USD;
   const estimatedRunCost = estimatedSearchCost + estimatedDetailsCost;
-  const finderSpendTotal = useMemo(() => runs.reduce((sum, run) => sum + getFinderRunCost(run.stats), 0), [runs]);
+  const finderBudgetStartIso = useMemo(() => dateInputToStartIso(finderBudgetStartDate), [finderBudgetStartDate]);
+  const billableFinderRuns = useMemo(() => {
+    if (!finderBudgetStartIso) return runs;
+    return runs.filter(run => new Date(run.created_at).getTime() >= new Date(finderBudgetStartIso).getTime());
+  }, [runs, finderBudgetStartIso]);
+  const ignoredFinderRuns = Math.max(0, runs.length - billableFinderRuns.length);
+  const ignoredFinderSpend = useMemo(() => {
+    const billableIds = new Set(billableFinderRuns.map(run => run.id));
+    return runs
+      .filter(run => !billableIds.has(run.id))
+      .reduce((sum, run) => sum + getFinderRunCost(run.stats), 0);
+  }, [runs, billableFinderRuns]);
+  const finderSpendTotal = useMemo(() => billableFinderRuns.reduce((sum, run) => sum + getFinderRunCost(run.stats), 0), [billableFinderRuns]);
   const finderSpendAfterRun = finderSpendTotal + estimatedRunCost;
   const finderBudgetPct = FINDER_SPEND_CAP_USD > 0 ? Math.min(100, (finderSpendAfterRun / FINDER_SPEND_CAP_USD) * 100) : 0;
+
+  const saveBudgetStartDate = async () => {
+    if (!finderBudgetStartIso) {
+      toast.error('Use a valid budget start date');
+      return;
+    }
+    setSavingBudgetStart(true);
+    try {
+      await setSetting('finder_budget_start_date', finderBudgetStartDate);
+      toast.success('Finder budget start saved');
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not save budget start');
+    } finally {
+      setSavingBudgetStart(false);
+    }
+  };
 
   const toggleCity = (city: CityProfile) => {
     const key = getCityKey(city.name);
@@ -994,9 +1034,28 @@ export default function EmailFinderPage() {
                 </div>
 
                 <div className={`rounded-md border p-3 space-y-2 ${finderSpendAfterRun > FINDER_SPEND_CAP_USD ? 'border-destructive/50 bg-destructive/10' : 'border-border bg-secondary/30'}`}>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium">Google Places budget</span>
-                    <span className="font-semibold">${finderSpendTotal.toFixed(2)} spent / ${FINDER_SPEND_CAP_USD}</span>
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-sm">
+                      <div className="font-medium">Google Places budget</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Counting from the new API key baseline. Older runs are ignored here.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        From
+                        <Input
+                          type="date"
+                          value={finderBudgetStartDate}
+                          onChange={event => setFinderBudgetStartDate(event.target.value)}
+                          className="h-8 w-[150px] bg-background text-xs"
+                        />
+                      </label>
+                      <Button type="button" variant="outline" size="sm" onClick={saveBudgetStartDate} disabled={savingBudgetStart}>
+                        {savingBudgetStart ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+                      </Button>
+                      <span className="font-semibold text-sm">${finderSpendTotal.toFixed(2)} spent / ${FINDER_SPEND_CAP_USD}</span>
+                    </div>
                   </div>
                   <div className="h-2 rounded-full bg-background overflow-hidden">
                     <div
@@ -1009,8 +1068,14 @@ export default function EmailFinderPage() {
                     <div>After run: <span className="text-foreground font-medium">${finderSpendAfterRun.toFixed(2)}</span></div>
                     <div>Remaining: <span className="text-foreground font-medium">${Math.max(0, FINDER_SPEND_CAP_USD - finderSpendAfterRun).toFixed(2)}</span></div>
                   </div>
+                  {ignoredFinderRuns > 0 && (
+                    <div className="rounded border border-border/70 bg-background/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+                      Ignoring {ignoredFinderRuns} older run{ignoredFinderRuns === 1 ? '' : 's'} before {finderBudgetStartDate}
+                      {' '}(${ignoredFinderSpend.toFixed(2)} historical estimate).
+                    </div>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
-                    Estimate uses Google Places text search (${GOOGLE_TEXT_SEARCH_COST_USD.toFixed(3)}) and detail lookup (${GOOGLE_PLACE_DETAIL_COST_USD.toFixed(3)}) pricing per request. The live Edge Function also stops at the configured cap.
+                    Estimate uses Google Places text search (${GOOGLE_TEXT_SEARCH_COST_USD.toFixed(3)}) and detail lookup (${GOOGLE_PLACE_DETAIL_COST_USD.toFixed(3)}) pricing per request. The live Edge Function uses the same start date and stops at the configured cap.
                   </p>
                 </div>
 

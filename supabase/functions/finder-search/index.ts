@@ -9,6 +9,7 @@ const corsHeaders = {
 const HARD_COST_CAP_USD = 280;
 const TEXT_SEARCH_COST = 0.032;
 const DETAIL_COST = 0.017;
+const DEFAULT_BUDGET_START_DATE = '2026-06-11';
 
 type BudgetTracker = {
   cap: number;
@@ -86,6 +87,13 @@ function createBudgetTracker(baseSpent: number, cap: number): BudgetTracker {
     },
   };
   return budget;
+}
+
+function budgetStartIso(value?: string | null) {
+  const date = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -555,12 +563,19 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // --- API spending cap ---
-    const { data: capSetting } = await supabase.from('settings').select('value').eq('key', 'finder_spend_cap_usd').maybeSingle();
+    const [{ data: capSetting }, { data: startSetting }] = await Promise.all([
+      supabase.from('settings').select('value').eq('key', 'finder_spend_cap_usd').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'finder_budget_start_date').maybeSingle(),
+    ]);
     const configuredCap = Number.parseFloat(Deno.env.get('FINDER_SPEND_CAP_USD') || capSetting?.value || String(HARD_COST_CAP_USD));
     const COST_CAP = Math.max(0, Math.min(HARD_COST_CAP_USD, Number.isFinite(configuredCap) ? configuredCap : HARD_COST_CAP_USD));
+    const budgetStartDate = Deno.env.get('FINDER_BUDGET_START_DATE') || startSetting?.value || DEFAULT_BUDGET_START_DATE;
+    const budgetStart = budgetStartIso(budgetStartDate);
 
     async function getSpent(excludeRunId?: string): Promise<number> {
-      const { data: allRuns } = await supabase.from('finder_runs').select('id, stats');
+      let query = supabase.from('finder_runs').select('id, created_at, stats');
+      if (budgetStart) query = query.gte('created_at', budgetStart);
+      const { data: allRuns } = await query;
       let totalSpent = 0;
       for (const run of (allRuns || [])) {
         if (excludeRunId && run.id === excludeRunId) continue;
@@ -600,6 +615,7 @@ serve(async (req) => {
         totalSpentSoFar: spent.toFixed(2),
         budgetRemaining: Math.max(0, COST_CAP - spent).toFixed(2),
         spendCapUsd: COST_CAP.toFixed(2),
+        budgetStartDate,
         fitsBudget: spent + estimatedUsd <= COST_CAP,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -614,11 +630,11 @@ serve(async (req) => {
         if (runId) {
           await supabase.from('finder_runs').update({ 
             status: 'failed', 
-            stats: { error: 'spending_cap', spent: spent.toFixed(2), cap: COST_CAP } 
+            stats: { error: 'spending_cap', spent: spent.toFixed(2), cap: COST_CAP, budgetStartDate }
           }).eq('id', runId);
         }
         return new Response(JSON.stringify({ 
-          error: `API spending cap of $${COST_CAP} reached. Total spent: $${spent.toFixed(2)}. Reduce the batch size or stop here.` 
+          error: `API spending cap of $${COST_CAP} reached since ${budgetStartDate}. Total spent: $${spent.toFixed(2)}. Reduce the batch size or stop here.`
         }), {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
