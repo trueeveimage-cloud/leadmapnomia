@@ -19,6 +19,44 @@ const COLORS = {
 };
 
 const COUNTRY_NAMES: Record<Country, string> = { SE: 'Sweden', NO: 'Norway', DK: 'Denmark', UK: 'United Kingdom', ES: 'Spain' };
+const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
+const TEXT_SEARCH_COST = 0.032;
+const DETAIL_COST = 0.017;
+
+function detectDashboardCountry(lead: any): Country {
+  const explicit = String(lead.country || '').toUpperCase();
+  if (COUNTRIES.includes(explicit as Country)) return explicit as Country;
+  const addr = String(lead.address || '').toLowerCase();
+  const phone = String(lead.phone || '').trim();
+  if (phone.startsWith('+47') || addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) return 'NO';
+  if (phone.startsWith('+45') || addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) return 'DK';
+  if (phone.startsWith('+44') || addr.includes('united kingdom') || addr.includes('england') || addr.includes(', uk')) return 'UK';
+  if (phone.startsWith('+34') || addr.includes('spain') || addr.includes('espana') || addr.includes('españa')) return 'ES';
+  for (const c of COUNTRIES) {
+    if (getCitiesByCountry(c).some(city => addr.includes(city.name.toLowerCase()))) return c;
+  }
+  return 'SE';
+}
+
+function finderRunCountry(run: any): Country {
+  const city = findCity(run.city);
+  if (city?.country) return city.country;
+  const statsCountry = String(run.stats?.country || '').toUpperCase();
+  return COUNTRIES.includes(statsCountry as Country) ? statsCountry as Country : 'SE';
+}
+
+function finderRunSpend(stats: any) {
+  const stored = Number(stats?.runCostUsd);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const searches = Number(stats?.runTextSearchRequests || stats?.textSearchRequests || 0);
+  const details = Number(stats?.runDetailRequests || stats?.detailsFetched || 0);
+  return (searches * TEXT_SEARCH_COST) + (details * DETAIL_COST);
+}
+
+function isNoAnswerOutcome(value: string) {
+  const normalized = value.toLowerCase().replace(/[_-]/g, ' ');
+  return normalized.includes('no answer') || normalized.includes('busy') || normalized.includes('failed') || normalized.includes('not connected');
+}
 
 interface StatCardProps {
   label: string;
@@ -169,7 +207,7 @@ export default function DashboardPage() {
       const allLeads: any[] = [];
       let from = 0;
       while (true) {
-        const { data, error } = await supabase.from('leads').select('address, phone, email, section, outreach_opt_out, needs_call, status, has_replied, outreach_stage').range(from, from + PAGE_SIZE - 1);
+        const { data, error } = await supabase.from('leads').select('address, country, phone, email, section, outreach_opt_out, needs_call, status, has_replied, outreach_stage').range(from, from + PAGE_SIZE - 1);
         if (error || !data || data.length === 0) break;
         allLeads.push(...data);
         if (data.length < PAGE_SIZE) break;
@@ -185,20 +223,7 @@ export default function DashboardPage() {
       };
 
       for (const lead of allLeads) {
-        const addr = (lead.address || '').toLowerCase();
-        let country: Country = 'SE';
-        if (addr.includes('norge') || addr.includes('norway') || addr.includes(', no')) country = 'NO';
-        else if (addr.includes('danmark') || addr.includes('denmark') || addr.includes(', dk')) country = 'DK';
-        else {
-          for (const c of getCitiesByCountry('NO')) {
-            if (addr.includes(c.name.toLowerCase())) { country = 'NO'; break; }
-          }
-          if (country === 'SE') {
-            for (const c of getCitiesByCountry('DK')) {
-              if (addr.includes(c.name.toLowerCase())) { country = 'DK'; break; }
-            }
-          }
-        }
+        const country = detectDashboardCountry(lead);
         stats[country].total++;
         if (lead.phone) stats[country].phone++;
         if (lead.email) stats[country].email++;
@@ -222,15 +247,14 @@ export default function DashboardPage() {
       };
       const citySets: Record<Country, Set<string>> = { SE: new Set(), NO: new Set(), DK: new Set(), UK: new Set(), ES: new Set() };
       for (const run of (runs || [])) {
-        const city = findCity(run.city);
-        const c = city?.country || 'SE';
+        const c = finderRunCountry(run);
         fStats[c].runs++;
         citySets[c].add(run.city);
         const s = run.stats as any;
         fStats[c].leads += (s?.noWebsiteWithPhone ?? 0) + (s?.noWebsiteEmailOnly ?? 0);
-        fStats[c].spend += ((s?.detailsFetched ?? 0) * 0.017) + (0.032 * 2);
+        fStats[c].spend += finderRunSpend(s);
       }
-      for (const c of ['SE', 'NO', 'DK'] as Country[]) {
+      for (const c of COUNTRIES) {
         fStats[c].cities = citySets[c].size;
       }
       setFinderStats(fStats);
@@ -278,6 +302,8 @@ export default function DashboardPage() {
   const replyRate = msgStats.sent > 0
     ? (msgStats.inbound / msgStats.sent * 100).toFixed(1)
     : "0";
+  const realCallTotal = callStats.filter(item => !isNoAnswerOutcome(item.outcome)).reduce((sum, item) => sum + item.count, 0);
+  const noAnswerTotal = callStats.filter(item => isNoAnswerOutcome(item.outcome)).reduce((sum, item) => sum + item.count, 0);
 
   // Outreach stage colors
   const stageColors: Record<string, string> = {
@@ -307,15 +333,15 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard label="Delivered" value={msgStats.delivered} icon={<CheckCircle size={18} />} color={COLORS.green} sub={`${msgStats.undelivered} undelivered`} />
-          <StatCard label="Calls Made" value={callStats.reduce((s, c) => s + c.count, 0)} icon={<Phone size={18} />} color={COLORS.amber} />
+          <StatCard label="Connected Calls" value={realCallTotal} icon={<Phone size={18} />} color={COLORS.amber} sub={`${noAnswerTotal} no-answer attempts excluded`} />
           <StatCard label="Campaigns" value={campaignStats.total} icon={<Zap size={18} />} color={COLORS.purple} sub={`${campaignStats.running} active · ${campaignStats.totalRuns} runs`} />
           <StatCard label="Total API Spend" value={`$${(Object.values(finderStats).reduce((s, f) => s + f.spend, 0)).toFixed(0)}`} icon={<Search size={18} />} color={COLORS.cyan} sub={`${Object.values(finderStats).reduce((s, f) => s + f.runs, 0)} finder runs`} />
         </div>
 
         {/* Country breakdown */}
         <ChartCard title="Leads by Country">
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {(['SE', 'NO', 'DK'] as Country[]).map(c => {
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+            {COUNTRIES.map(c => {
               const cl = countryLeads[c];
               const fs = finderStats[c];
               const costPerLead = fs.leads > 0 ? (fs.spend / fs.leads).toFixed(2) : '-';
@@ -363,12 +389,12 @@ export default function DashboardPage() {
             })}
           </div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={(['SE', 'NO', 'DK'] as Country[]).map(c => ({
+            <BarChart data={COUNTRIES.map(c => ({
               name: COUNTRY_NAMES[c],
               leads: countryLeads[c].total,
               contacted: countryLeads[c].contacted,
               replied: countryLeads[c].replied,
-              fill: c === 'SE' ? COLORS.primary : c === 'NO' ? COLORS.red : COLORS.amber,
+              fill: c === 'SE' ? COLORS.primary : c === 'NO' ? COLORS.red : c === 'DK' ? COLORS.amber : c === 'UK' ? COLORS.cyan : COLORS.purple,
             }))} margin={{ left: 10, right: 10 }}>
               <XAxis dataKey="name" tick={{ fontSize: 12, fill: "hsl(215, 15%, 50%)" }} />
               <YAxis tick={{ fontSize: 10, fill: "hsl(215, 15%, 50%)" }} />

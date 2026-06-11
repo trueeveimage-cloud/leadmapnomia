@@ -427,7 +427,7 @@ export default function AutomationPage() {
   const loadStats = async (nextSettings = settings) => {
     const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
     const sb = supabase as any;
-    const [{ count: emailsToday }, { count: callsToday }, { count: activeCalls }, emailRowsRes, callRowsRes] = await Promise.all([
+    const [{ count: emailsToday }, callsTodayRes, { count: activeCalls }, emailRowsRes, callRowsRes] = await Promise.all([
       sb
         .from('message_logs')
         .select('id', { count: 'exact', head: true })
@@ -436,10 +436,11 @@ export default function AutomationPage() {
         .eq('status', 'sent')
         .gte('created_at', startOfTodayIso()),
       sb
-        .from('activities')
-        .select('id', { count: 'exact', head: true })
-        .eq('type', 'ai_call_started')
-        .gte('created_at', startOfTodayIso()),
+        .from('leads')
+        .select('id, call_status')
+        .eq('last_contact_method', 'AI Call')
+        .gte('last_contacted_at', startOfTodayIso())
+        .limit(1000),
       sb
         .from('leads')
         .select('id', { count: 'exact', head: true })
@@ -458,7 +459,14 @@ export default function AutomationPage() {
         .limit(2000),
     ]);
 
+    const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => {
+      const status = String(lead.call_status || '').toLowerCase();
+      return status && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(status);
+    }).length;
+
     const callEligible = (callRowsRes.data || []).filter((lead: any) => {
+      const status = String(lead.call_status || '').toLowerCase();
+      const isNoAnswer = status.includes('no answer');
       if (lead.outreach_opt_out) return false;
       if (Number(lead.call_attempts || 0) >= 2) return false;
       if (nextSettings.aiProduct !== 'all' && lead.product !== nextSettings.aiProduct) return false;
@@ -466,7 +474,7 @@ export default function AutomationPage() {
       if (!nextSettings.aiCountries.includes(detectCountry(lead))) return false;
       if (lead.do_not_contact === true) return false;
       if (lead.call_status === 'Calling') return false;
-      if (lead.last_contacted_at || lead.outreach_state === 'called') return false;
+      if ((lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) return false;
       if (lead.outreach_state === 'do_not_contact') return false;
       if (EXCLUDED_CALL_STATUSES.includes(String(lead.status || ''))) return false;
       return !!normalizePhone(lead.phone_e164 || lead.phone);
@@ -489,7 +497,7 @@ export default function AutomationPage() {
     }).length;
 
     setStats({
-      callsToday: callsToday || 0,
+      callsToday: connectedCallsToday,
       emailsToday: emailsToday || 0,
       callEligible,
       emailEligible,

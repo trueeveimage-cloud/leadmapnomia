@@ -33,6 +33,9 @@ import { createNotification, determineSection, fetchNotifications, Lead, type Ap
 import { calculateScore, generateWhyGoodLead, NicheKey } from '@/lib/leadScoring';
 
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
+const GOOGLE_TEXT_SEARCH_COST_USD = 0.032;
+const GOOGLE_PLACE_DETAIL_COST_USD = 0.017;
+const FINDER_SPEND_CAP_USD = 280;
 
 const LEADMAP_CORE_NICHES = new Set<NicheKey>([
   'plumber',
@@ -216,6 +219,14 @@ function getCityKey(name: string) {
 function makeBatchId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getFinderRunCost(stats: any) {
+  const stored = Number(stats?.runCostUsd);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const searches = Number(stats?.runTextSearchRequests || stats?.textSearchRequests || 0);
+  const details = Number(stats?.runDetailRequests || stats?.detailsFetched || 0);
+  return (searches * GOOGLE_TEXT_SEARCH_COST_USD) + (details * GOOGLE_PLACE_DETAIL_COST_USD);
 }
 
 function hasWebsite(lead: ScrapeLead) {
@@ -426,6 +437,12 @@ export default function EmailFinderPage() {
 
   const estimatedSearches = Math.max(1, keywords.length) * selectedCities.length * maxPages;
   const estimatedDetails = selectedCities.length * maxDetails;
+  const estimatedSearchCost = estimatedSearches * GOOGLE_TEXT_SEARCH_COST_USD;
+  const estimatedDetailsCost = estimatedDetails * GOOGLE_PLACE_DETAIL_COST_USD;
+  const estimatedRunCost = estimatedSearchCost + estimatedDetailsCost;
+  const finderSpendTotal = useMemo(() => runs.reduce((sum, run) => sum + getFinderRunCost(run.stats), 0), [runs]);
+  const finderSpendAfterRun = finderSpendTotal + estimatedRunCost;
+  const finderBudgetPct = FINDER_SPEND_CAP_USD > 0 ? Math.min(100, (finderSpendAfterRun / FINDER_SPEND_CAP_USD) * 100) : 0;
 
   const toggleCity = (city: CityProfile) => {
     const key = getCityKey(city.name);
@@ -957,7 +974,7 @@ export default function EmailFinderPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-md border border-border p-3">
                     <div className="text-[11px] text-muted-foreground">Keywords</div>
                     <div className="text-lg font-bold">{keywords.length}</div>
@@ -970,6 +987,31 @@ export default function EmailFinderPage() {
                     <div className="text-[11px] text-muted-foreground">Detail cap</div>
                     <div className="text-lg font-bold">{estimatedDetails}</div>
                   </div>
+                  <div className="rounded-md border border-border p-3">
+                    <div className="text-[11px] text-muted-foreground">Run cost est.</div>
+                    <div className="text-lg font-bold">${estimatedRunCost.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <div className={`rounded-md border p-3 space-y-2 ${finderSpendAfterRun > FINDER_SPEND_CAP_USD ? 'border-destructive/50 bg-destructive/10' : 'border-border bg-secondary/30'}`}>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium">Google Places budget</span>
+                    <span className="font-semibold">${finderSpendTotal.toFixed(2)} spent / ${FINDER_SPEND_CAP_USD}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-background overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${finderSpendAfterRun > FINDER_SPEND_CAP_USD ? 'bg-destructive' : 'bg-primary'}`}
+                      style={{ width: `${finderBudgetPct}%` }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+                    <div>This search: <span className="text-foreground font-medium">${estimatedRunCost.toFixed(2)}</span></div>
+                    <div>After run: <span className="text-foreground font-medium">${finderSpendAfterRun.toFixed(2)}</span></div>
+                    <div>Remaining: <span className="text-foreground font-medium">${Math.max(0, FINDER_SPEND_CAP_USD - finderSpendAfterRun).toFixed(2)}</span></div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Estimate uses Google Places text search (${GOOGLE_TEXT_SEARCH_COST_USD.toFixed(3)}) and detail lookup (${GOOGLE_PLACE_DETAIL_COST_USD.toFixed(3)}) pricing per request. The live Edge Function also stops at the configured cap.
+                  </p>
                 </div>
 
                 <Collapsible open={showAdvancedRunSettings} onOpenChange={setShowAdvancedRunSettings}>

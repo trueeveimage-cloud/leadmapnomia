@@ -124,12 +124,12 @@ Deno.serve(async (req) => {
     retell_call_id: callId,
     retell_agent_id: RETELL_AGENT_ID,
     call_status: 'Calling',
-    outreach_state: 'called',
+    outreach_state: String(lead.outreach_state || 'not_contacted'),
     call_attempts: callAttempts + 1,
     outreach_count: (typeof lead.outreach_count === 'number' ? lead.outreach_count : 0) + 1,
     last_called_at: now,
-    last_contacted_at: now,
-    last_contact_method: 'AI Call',
+    last_call_attempt_at: now,
+    last_contact_method: 'AI Call Attempt',
     outreach_history: appendHistory(lead, { method: 'AI Call', status: 'started', retell_call_id: callId }),
   };
 

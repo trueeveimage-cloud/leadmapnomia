@@ -218,7 +218,10 @@ Deno.serve(async (req) => {
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     tomorrow.setUTCHours(7, 0, 0, 0); // ~09:00 Stockholm
     updates.last_called_at = null;
+    updates.last_contacted_at = null;
+    updates.last_contact_method = null;
     updates.call_attempts = callAttempts;
+    updates.outreach_count = Math.max(0, (typeof lead.outreach_count === 'number' ? lead.outreach_count : 1) - 1);
     updates.no_answer_count = naCount;
     updates.next_call_after = tomorrow.toISOString();
     if (naCount >= 3) {

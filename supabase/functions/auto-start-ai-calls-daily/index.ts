@@ -127,6 +127,8 @@ function summarizeReasons(summary: ReasonSummary) {
 
 function callRejectionReasons(lead: any, input: { product: string; minScore: number; countries: string[] }) {
   const reasons: string[] = [];
+  const callStatus = String(lead.call_status || '').toLowerCase();
+  const isNoAnswer = callStatus.includes('no answer');
   if (input.product !== 'all' && lead.product !== input.product) reasons.push('wrong_product');
   if (input.minScore > 0 && (lead.potential_score || 0) < input.minScore) reasons.push('low_score');
   if (!input.countries.includes(detectCountry(lead))) reasons.push('wrong_country');
@@ -134,7 +136,7 @@ function callRejectionReasons(lead: any, input: { product: string; minScore: num
   if (lead.do_not_contact === true) reasons.push('do_not_contact');
   if (lead.outreach_state === 'do_not_contact') reasons.push('do_not_contact_state');
   if (lead.call_status === 'Calling') reasons.push('currently_calling');
-  if (lead.last_contacted_at || lead.outreach_state === 'called') reasons.push('already_contacted');
+  if ((lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) reasons.push('already_contacted');
   if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) reasons.push('excluded_status');
   if (!normalizeE164(lead.phone_e164 || lead.phone)) reasons.push('bad_phone');
   if (Number(lead.call_attempts || 0) >= 2) reasons.push('attempt_limit');
@@ -255,21 +257,27 @@ Deno.serve(async (req) => {
 
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const { count: callsToday } = await supabase
-      .from('activities')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', 'ai_call_started')
-      .gte('created_at', startOfDay.toISOString());
+    const { data: callRows, error: callCountError } = await supabase
+      .from('leads')
+      .select('id, call_status')
+      .eq('last_contact_method', 'AI Call')
+      .gte('last_contacted_at', startOfDay.toISOString())
+      .limit(1000);
+    if (callCountError) throw callCountError;
+    const callsToday = (callRows || []).filter((lead: any) => {
+      const status = String(lead.call_status || '').toLowerCase();
+      return status && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(status);
+    }).length;
 
-    const remainingToday = Math.max(0, dailyCap - (callsToday || 0));
+    const remainingToday = Math.max(0, dailyCap - callsToday);
     if (!preview && remainingToday <= 0) {
       await recordNotification(supabase, {
         type: 'ai_call_batch_done',
         title: 'AI call automation skipped',
-        message: `Daily AI call cap reached (${callsToday || 0}/${dailyCap}).`,
-        payload: { automation: 'ai_calls', reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap },
+        message: `Daily connected AI call cap reached (${callsToday}/${dailyCap}).`,
+        payload: { automation: 'ai_calls', reason: 'daily_cap_reached', callsToday, dailyCap },
       });
-      return json({ skipped: true, reason: 'daily_cap_reached', callsToday: callsToday || 0, dailyCap });
+      return json({ skipped: true, reason: 'daily_cap_reached', callsToday, dailyCap });
     }
 
     if (!preview && !force) {
@@ -294,7 +302,7 @@ Deno.serve(async (req) => {
             activeLeadId: activeCall.id,
             retell_call_id: activeCall.retell_call_id,
             dailyCap,
-            callsToday: callsToday || 0,
+            callsToday,
             remainingToday,
             activeGuardMinutes,
           },
@@ -304,7 +312,7 @@ Deno.serve(async (req) => {
           reason: 'active_call_in_progress',
           activeLeadId: activeCall.id,
           dailyCap,
-          callsToday: callsToday || 0,
+          callsToday,
           remainingToday,
           activeGuardMinutes,
         });
@@ -338,7 +346,7 @@ Deno.serve(async (req) => {
       return json({
         success: true,
         preview: true,
-        callsToday: callsToday || 0,
+        callsToday,
         dailyCap,
         remainingToday,
         eligible: candidates.length,
@@ -360,7 +368,8 @@ Deno.serve(async (req) => {
     let failed = 0;
     const details: any[] = [];
 
-    for (const lead of candidates.slice(0, limit)) {
+    for (const lead of candidates) {
+      if (started >= limit) break;
       const e164 = normalizeE164(lead.phone_e164 || lead.phone);
       if (!e164) {
         skipped++;
@@ -384,7 +393,7 @@ Deno.serve(async (req) => {
       if (response.ok && payload?.success) {
         started++;
         details.push({ id: lead.id, name: lead.name, status: 'started', retell_call_id: payload.retell_call_id });
-      } else if (payload?.error === 'outreach_locked' || payload?.error === 'call_attempt_limit' || payload?.error === 'duplicate_phone_contacted') {
+      } else if (payload?.error === 'outreach_locked' || payload?.error === 'call_attempt_limit' || payload?.error === 'duplicate_phone_contacted' || payload?.error === 'duplicate_phone') {
         skipped++;
         details.push({ id: lead.id, name: lead.name, status: 'skipped', reason: payload.error });
       } else {
@@ -408,7 +417,7 @@ Deno.serve(async (req) => {
         rejectionSummary: diagnostics?.rejectionSummary,
         topReasons: diagnostics?.topReasons,
         dailyCap,
-        callsTodayBeforeRun: callsToday || 0,
+        callsTodayBeforeRun: callsToday,
         remainingToday: Math.max(0, remainingToday - started),
         activeGuardMinutes,
         forced: force,
@@ -421,7 +430,7 @@ Deno.serve(async (req) => {
       started,
       skipped,
       failed,
-      callsTodayBeforeRun: callsToday || 0,
+      callsTodayBeforeRun: callsToday,
       dailyCap,
       remainingToday: Math.max(0, remainingToday - started),
       eligible: candidates.length,
@@ -432,6 +441,9 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('auto-start-ai-calls-daily error:', error);
-    return json({ error: error instanceof Error ? error.message : 'unknown' }, 500);
+    return json({
+      error: error instanceof Error ? error.message : 'unknown',
+      details: error instanceof Error ? undefined : JSON.stringify(error),
+    }, 500);
   }
 });
