@@ -509,7 +509,7 @@ export default function AutomationPage() {
       const status = String(lead.call_status || '').toLowerCase();
       const isNoAnswer = status.includes('no answer');
       if (lead.outreach_opt_out) return false;
-      if (Number(lead.call_attempts || 0) >= 2) return false;
+      if (Number(lead.call_attempts || 0) >= 3) return false;
       if (nextSettings.aiProduct !== 'all' && lead.product !== nextSettings.aiProduct) return false;
       if (Number(nextSettings.aiMinScore || 0) > 0 && (lead.potential_score || 0) < Number(nextSettings.aiMinScore)) return false;
       if (!nextSettings.aiCountries.includes(detectCountry(lead))) return false;
@@ -1071,11 +1071,33 @@ export default function AutomationPage() {
                             ))}
                           </div>
                         )}
+                        {Array.isArray(payload.errorSummary) && payload.errorSummary.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {payload.errorSummary.slice(0, 4).map((reason: string) => (
+                              <Badge key={reason} variant="destructive" className="text-[10px]">{reason}</Badge>
+                            ))}
+                          </div>
+                        )}
                         <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
                           <MiniStat label={isGmail ? 'Sent' : 'Started'} value={isGmail ? payload.sent ?? 0 : payload.started ?? 0} />
                           <MiniStat label="Skipped" value={payload.skipped ?? 0} />
                           <MiniStat label="Failed" value={payload.failed ?? 0} />
                         </div>
+                        {Array.isArray(payload.details) && payload.details.length > 0 && (
+                          <details className="mt-2 rounded border border-border bg-background/60 px-2 py-1.5">
+                            <summary className="cursor-pointer text-xs font-medium text-foreground">Run details</summary>
+                            <div className="mt-2 space-y-1">
+                              {payload.details.slice(0, 8).map((detail: Record<string, any>, index: number) => (
+                                <div key={`${detail.id || index}-${detail.status || 'row'}`} className="grid grid-cols-[1fr_auto] gap-2 text-[11px] text-muted-foreground">
+                                  <span className="truncate">{detail.name || detail.id || `Lead ${index + 1}`}</span>
+                                  <span className={detail.status === 'failed' ? 'text-destructive' : detail.status === 'started' || detail.status === 'sent' ? 'text-emerald-500' : ''}>
+                                    {detail.status}{detail.error ? `: ${detail.error}` : detail.reason ? `: ${detail.reason}` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                         {(payload.remainingToday !== undefined || payload.remaining !== undefined || payload.checked !== undefined) && (
                           <div className="mt-2 text-xs text-muted-foreground">
                             {payload.remainingToday !== undefined && <>Remaining today: <span className="text-foreground">{payload.remainingToday}</span></>}

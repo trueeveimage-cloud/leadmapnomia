@@ -10,6 +10,7 @@ const DEFAULT_PER_RUN = 1;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const DEFAULT_ACTIVE_GUARD_MINUTES = 8;
+const DEFAULT_STALE_CALL_MINUTES = 35;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 
 type Settings = Record<string, string>;
@@ -125,6 +126,18 @@ function summarizeReasons(summary: ReasonSummary) {
     .map(([reason, count]) => `${labelReason(reason)} (${count})`);
 }
 
+function summarizeDetails(details: any[]) {
+  const summary: ReasonSummary = {};
+  for (const item of details) {
+    if (item.status !== 'failed') continue;
+    addReason(summary, item.error || item.reason || 'unknown');
+  }
+  return Object.entries(summary)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([reason, count]) => `${String(reason).replace(/_/g, ' ')} (${count})`);
+}
+
 function callRejectionReasons(lead: any, input: { product: string; minScore: number; countries: string[] }) {
   const reasons: string[] = [];
   const callStatus = String(lead.call_status || '').toLowerCase();
@@ -139,7 +152,7 @@ function callRejectionReasons(lead: any, input: { product: string; minScore: num
   if ((lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) reasons.push('already_contacted');
   if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) reasons.push('excluded_status');
   if (!normalizeE164(lead.phone_e164 || lead.phone)) reasons.push('bad_phone');
-  if (Number(lead.call_attempts || 0) >= 2) reasons.push('attempt_limit');
+  if (Number(lead.call_attempts || 0) >= 3) reasons.push('attempt_limit');
   return reasons;
 }
 
@@ -218,6 +231,7 @@ Deno.serve(async (req) => {
       'ai_calls_product',
       'ai_calls_timezone',
       'ai_calls_active_guard_minutes',
+      'ai_calls_stale_call_minutes',
     ];
     const { data: rows, error: settingsError } = await supabase.from('settings').select('key, value').in('key', keys);
     if (settingsError) throw settingsError;
@@ -233,6 +247,7 @@ Deno.serve(async (req) => {
     const endMinute = intSetting(settings, 'ai_calls_end_minute', 0, 0, 59);
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
     const activeGuardMinutes = intSetting(settings, 'ai_calls_active_guard_minutes', DEFAULT_ACTIVE_GUARD_MINUTES, 5, 45);
+    const staleCallMinutes = intSetting(settings, 'ai_calls_stale_call_minutes', DEFAULT_STALE_CALL_MINUTES, activeGuardMinutes + 5, 180);
     const countries = csvSetting(settings.ai_calls_countries, ['SE']);
     const days = csvSetting(settings.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const product = settings.ai_calls_product || 'leadmap';
@@ -252,6 +267,41 @@ Deno.serve(async (req) => {
         endHour,
         endMinute,
         window: windowLabel(startHour, startMinute, endHour, endMinute),
+      });
+    }
+
+    const staleSince = new Date(Date.now() - staleCallMinutes * 60 * 1000).toISOString();
+    const { data: staleCalls } = await supabase
+      .from('leads')
+      .select('id, name, call_attempts, no_answer_count')
+      .eq('call_status', 'Calling')
+      .lt('last_called_at', staleSince)
+      .limit(25);
+    if (!preview && staleCalls?.length) {
+      const retryAfter = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      for (const lead of staleCalls) {
+        await supabase.from('leads').update({
+          call_status: 'No answer',
+          outreach_state: 'not_contacted',
+          last_called_at: null,
+          last_contacted_at: null,
+          call_attempts: Math.max(0, Number(lead.call_attempts || 1) - 1),
+          no_answer_count: Math.min(3, Number(lead.no_answer_count || 0) + 1),
+          next_call_after: retryAfter,
+        } as any).eq('id', lead.id);
+      }
+      await recordNotification(supabase, {
+        type: 'ai_call_batch_done',
+        title: 'AI call stale lock recovered',
+        message: `Recovered ${staleCalls.length} stale Calling lead${staleCalls.length === 1 ? '' : 's'} so the queue can continue.`,
+        payload: {
+          automation: 'ai_calls',
+          reason: 'stale_call_recovered',
+          recovered: staleCalls.length,
+          staleCallMinutes,
+          nextCallAfter: retryAfter,
+          leadIds: staleCalls.map((lead: any) => lead.id).slice(0, 20),
+        },
       });
     }
 
@@ -305,6 +355,7 @@ Deno.serve(async (req) => {
             callsToday,
             remainingToday,
             activeGuardMinutes,
+            staleCallMinutes,
           },
         });
         return json({
@@ -315,6 +366,7 @@ Deno.serve(async (req) => {
           callsToday,
           remainingToday,
           activeGuardMinutes,
+          staleCallMinutes,
         });
       }
     }
@@ -416,10 +468,13 @@ Deno.serve(async (req) => {
         checked: diagnostics?.checked,
         rejectionSummary: diagnostics?.rejectionSummary,
         topReasons: diagnostics?.topReasons,
+        details: details.slice(0, 20),
+        errorSummary: summarizeDetails(details),
         dailyCap,
         callsTodayBeforeRun: callsToday,
         remainingToday: Math.max(0, remainingToday - started),
         activeGuardMinutes,
+        staleCallMinutes,
         forced: force,
         scheduled: !force,
       },
@@ -436,6 +491,7 @@ Deno.serve(async (req) => {
       eligible: candidates.length,
       diagnostics,
       activeGuardMinutes,
+      staleCallMinutes,
       details: details.slice(0, 20),
       timestamp: new Date().toISOString(),
     });
