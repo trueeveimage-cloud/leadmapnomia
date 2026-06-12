@@ -113,7 +113,7 @@ export default function DashboardPage() {
   });
   const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
   const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
-  const [finderBudgetStartDate, setFinderBudgetStartDate] = useState('2026-06-11');
+  const [finderBudgetStartDate, setFinderBudgetStartDate] = useState('2026-06-01');
 
   function connectedCallStatus(status?: string | null) {
     const value = String(status || '').toLowerCase();
@@ -290,7 +290,7 @@ export default function DashboardPage() {
     // Fetch finder stats by country
     (async () => {
       const { data: budgetSetting } = await supabase.from('settings').select('value').eq('key', 'finder_budget_start_date').maybeSingle();
-      const budgetStart = /^\d{4}-\d{2}-\d{2}$/.test(String(budgetSetting?.value || '')) ? String(budgetSetting?.value) : '2026-06-11';
+      const budgetStart = /^\d{4}-\d{2}-\d{2}$/.test(String(budgetSetting?.value || '')) ? String(budgetSetting?.value) : '2026-06-01';
       setFinderBudgetStartDate(budgetStart);
       const budgetStartIso = new Date(`${budgetStart}T00:00:00`).toISOString();
       const { data: runs } = await supabase.from('finder_runs').select('city, stats, created_at').gte('created_at', budgetStartIso);

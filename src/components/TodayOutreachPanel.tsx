@@ -45,7 +45,7 @@ const DEFAULTS: DailyState = {
   finderRuns: 0,
   finderIgnoredRuns: 0,
   finderIgnoredSpend: 0,
-  finderBudgetStartDate: "2026-06-11",
+  finderBudgetStartDate: "2026-06-01",
   latestGmailIssue: "",
   dailyOutreach: [],
 };

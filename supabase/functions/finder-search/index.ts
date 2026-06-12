@@ -9,7 +9,7 @@ const corsHeaders = {
 const HARD_COST_CAP_USD = 280;
 const TEXT_SEARCH_COST = 0.032;
 const DETAIL_COST = 0.017;
-const DEFAULT_BUDGET_START_DATE = '2026-06-11';
+const DEFAULT_BUDGET_START_DATE = '2026-06-01';
 
 type BudgetTracker = {
   cap: number;
