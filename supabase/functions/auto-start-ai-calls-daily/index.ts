@@ -437,18 +437,31 @@ Deno.serve(async (req) => {
         await supabase.from('leads').update({ phone_e164: e164 }).eq('id', lead.id);
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/retell-start-call`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({ leadId: lead.id }),
-      });
-      const payload = await response.json().catch(() => ({}));
+      let response: Response;
+      let payload: any = {};
+      try {
+        response = await fetch(`${supabaseUrl}/functions/v1/retell-start-call`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ leadId: lead.id }),
+        });
+        payload = await response.json().catch(() => ({}));
+      } catch (err) {
+        failed++;
+        const msg = err instanceof Error ? err.message : String(err);
+        details.push({ id: lead.id, name: lead.name, status: 'failed', error: /rate limit/i.test(msg) ? 'rate_limited' : 'fetch_failed', message: msg });
+        break;
+      }
       if (response.ok && payload?.success) {
         started++;
         details.push({ id: lead.id, name: lead.name, status: 'started', retell_call_id: payload.retell_call_id });
+      } else if (response.status === 429 || /rate limit/i.test(String(payload?.error || ''))) {
+        failed++;
+        details.push({ id: lead.id, name: lead.name, status: 'failed', error: 'rate_limited', message: payload?.error });
+        break;
       } else if (payload?.error === 'outreach_locked' || payload?.error === 'call_attempt_limit' || payload?.error === 'duplicate_phone_contacted' || payload?.error === 'duplicate_phone') {
         skipped++;
         details.push({ id: lead.id, name: lead.name, status: 'skipped', reason: payload.error });
