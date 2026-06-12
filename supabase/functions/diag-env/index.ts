@@ -1,4 +1,11 @@
-Deno.serve(() => {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
+Deno.serve((req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const keys = ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY', 'RETELL_AGENT_ID', 'RETELL_API_KEY', 'RETELL_FROM_NUMBER', 'SUPABASE_SERVICE_ROLE_KEY'];
   const out: Record<string, string> = {};
   for (const k of keys) {
@@ -6,6 +13,6 @@ Deno.serve(() => {
     out[k] = v ? `present (len=${v.length})` : 'MISSING';
   }
   return new Response(JSON.stringify(out, null, 2), {
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });

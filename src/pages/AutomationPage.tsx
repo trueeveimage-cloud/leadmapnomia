@@ -14,6 +14,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  AlertTriangle,
   Loader2,
   Mail,
   Play,
@@ -77,6 +78,8 @@ type DailyOutreachStat = {
   aiStarted: number;
   aiConnected: number;
 };
+
+type IntegrationHealth = Record<string, string>;
 
 const DEFAULTS: AutomationSettings = {
   aiEnabled: true,
@@ -361,6 +364,7 @@ export default function AutomationPage() {
   const [previewing, setPreviewing] = useState(false);
   const [history, setHistory] = useState<AppNotification[]>([]);
   const [dailyStats, setDailyStats] = useState<DailyOutreachStat[]>([]);
+  const [integrationHealth, setIntegrationHealth] = useState<IntegrationHealth | null>(null);
 
   const callPercent = useMemo(() => {
     const cap = Number(settings.aiDaily) || 1;
@@ -381,6 +385,10 @@ export default function AutomationPage() {
   const latestGmail = useMemo(() => latestPayload(history, isGmailAutomationNotification), [history]);
   const aiBlockers = useMemo(() => blockerList(latestAi, previewDiagnostics), [latestAi, previewDiagnostics]);
   const gmailBlockers = useMemo(() => blockerList(latestGmail), [latestGmail]);
+  const missingGmailSecrets = useMemo(() => {
+    if (!integrationHealth) return [];
+    return ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY'].filter(key => integrationHealth[key]?.toUpperCase().includes('MISSING'));
+  }, [integrationHealth]);
 
   const aiRunsToday = useMemo(() => {
     const start = new Date(startOfTodayIso());
@@ -539,6 +547,15 @@ export default function AutomationPage() {
     setHistory(rows.filter(item => isAiAutomationNotification(item) || isGmailAutomationNotification(item)).slice(0, 100));
   };
 
+  const loadIntegrationHealth = async () => {
+    const { data, error } = await supabase.functions.invoke('diag-env');
+    if (error) {
+      setIntegrationHealth(null);
+      return;
+    }
+    setIntegrationHealth((data || {}) as IntegrationHealth);
+  };
+
   const loadDailyStats = async () => {
     const since = startOfDaysAgoIso(13);
     const sb = supabase as any;
@@ -589,7 +606,7 @@ export default function AutomationPage() {
     setLoading(true);
     try {
       const next = await loadSettings();
-      await Promise.all([loadStats(next), loadHistory(), loadDailyStats()]);
+      await Promise.all([loadStats(next), loadHistory(), loadDailyStats(), loadIntegrationHealth()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load automation');
     } finally {
@@ -785,7 +802,16 @@ export default function AutomationPage() {
                 <span>{stats.activeCalls ? 'AI call in progress now' : 'No active AI call right now'}</span>
                 <span>Last AI: {lastRunText(history, isAiAutomationNotification)}</span>
                 <span>Last Gmail: {lastRunText(history, isGmailAutomationNotification)}</span>
-                <span>Lovable key: Edge-only via Deno.env</span>
+                <span>
+                  Gmail connector:{' '}
+                  {missingGmailSecrets.length > 0 ? (
+                    <span className="text-destructive">blocked</span>
+                  ) : integrationHealth ? (
+                    <span className="text-emerald-600">ready</span>
+                  ) : (
+                    <span className="text-muted-foreground">checking</span>
+                  )}
+                </span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-muted">
                 <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${dayProgress}%` }} />
@@ -795,6 +821,23 @@ export default function AutomationPage() {
           </div>
         </section>
 
+        {missingGmailSecrets.length > 0 && (
+          <section className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="flex gap-3">
+                <AlertTriangle className="mt-0.5 text-destructive" size={18} />
+                <div>
+                  <h2 className="font-semibold text-foreground">Gmail automation is blocked by missing Supabase secrets</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The schedule is running and leads are available, but the live Gmail sender cannot connect until these edge-function secrets exist in this Supabase project: {missingGmailSecrets.join(', ')}.
+                  </p>
+                </div>
+              </div>
+              <Badge variant="destructive">0 emails can send</Badge>
+            </div>
+          </section>
+        )}
+
         <div className="grid gap-3 md:grid-cols-4">
           <Metric title="AI calls today" value={`${stats.callsToday} / ${settings.aiDaily || 0}`} percent={callPercent} />
           <Metric title="Gmail sent today" value={`${stats.emailsToday} / ${settings.gmailDaily || 0}`} percent={emailPercent} />
@@ -802,7 +845,7 @@ export default function AutomationPage() {
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
 
-        {(stats.callEligible === 0 || stats.emailEligible === 0) && (
+        {(stats.callEligible === 0 || stats.emailEligible === 0 || missingGmailSecrets.length > 0) && (
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {stats.callEligible === 0 && (
               <QueueBlocker
@@ -813,12 +856,16 @@ export default function AutomationPage() {
                 checked={previewDiagnostics?.checked ?? latestAi.checked}
               />
             )}
-            {stats.emailEligible === 0 && (
+            {(stats.emailEligible === 0 || missingGmailSecrets.length > 0) && (
               <QueueBlocker
                 icon={<Mail size={15} />}
                 title="Why no Gmail was sent"
-                message={latestGmail.reason === 'no_candidates' ? 'No eligible Gmail leads in the current queue.' : 'No saved leads with usable emails are available right now.'}
-                reasons={gmailBlockers}
+                message={missingGmailSecrets.length > 0
+                  ? 'Gmail has eligible leads, but the sender is missing required connector secrets in Supabase.'
+                  : latestGmail.reason === 'no_candidates'
+                    ? 'No eligible Gmail leads in the current queue.'
+                    : 'No saved leads with usable emails are available right now.'}
+                reasons={missingGmailSecrets.length > 0 ? missingGmailSecrets.map(secret => `${secret} missing`) : gmailBlockers}
                 checked={latestGmail.checked}
               />
             )}
