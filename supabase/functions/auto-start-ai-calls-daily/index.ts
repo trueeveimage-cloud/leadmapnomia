@@ -398,6 +398,15 @@ Deno.serve(async (req) => {
       ? await getCallEligibilityDiagnostics(supabase, { product, minScore, countries })
       : null;
 
+    // Auto-replenish: when no callable leads remain, kick off a finder search in the background.
+    if (!preview && candidates.length === 0) {
+      fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+        body: JSON.stringify({ trigger: 'ai_calls_empty', findGmailOnly: false }),
+      }).catch(() => {});
+    }
+
     if (preview) {
       return json({
         success: true,

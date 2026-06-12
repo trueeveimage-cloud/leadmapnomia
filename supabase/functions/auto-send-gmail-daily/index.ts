@@ -367,6 +367,15 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+    // Auto-replenish: when no emailable leads remain, kick off a finder search in the background.
+    if (batch.length === 0) {
+      fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+        body: JSON.stringify({ trigger: 'gmail_empty', findGmailOnly: true }),
+      }).catch(() => {});
+    }
+
     let sent = 0;
     let skipped = 0;
     let failed = 0;
