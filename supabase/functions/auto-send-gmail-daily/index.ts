@@ -404,13 +404,21 @@ Deno.serve(async (req) => {
         const data = await resp.json().catch(() => ({}));
         if (data?.success) {
           sent++;
-          details.push({ id: lead.id, status: 'sent', language });
+          details.push({ id: lead.id, status: 'sent', language, gmail_id: data.id });
         } else if (data?.skipped) {
           skipped++;
           details.push({ id: lead.id, status: 'skipped', reason: data.reason, language });
         } else {
           failed++;
-          details.push({ id: lead.id, status: 'failed', error: data?.error, language });
+          details.push({
+            id: lead.id,
+            status: 'failed',
+            error: data?.error || response.statusText || 'send_failed',
+            httpStatus: response.status,
+            providerStatus: data?.status,
+            details: data?.details,
+            language,
+          });
         }
         if (data?.reason === 'daily_cap' || data?.reason === 'send_cooldown') break;
         if (sent > 0 && delaySeconds > 0 && sent < batch.length) {
@@ -445,6 +453,7 @@ Deno.serve(async (req) => {
         slotsLeft,
         delaySeconds,
         remaining: remaining - sent,
+        details: details.slice(0, 20),
         forced: force,
         scheduled: !force,
         startHour,
