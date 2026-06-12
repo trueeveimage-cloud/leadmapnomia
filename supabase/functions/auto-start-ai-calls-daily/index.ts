@@ -138,6 +138,11 @@ function summarizeDetails(details: any[]) {
     .map(([reason, count]) => `${String(reason).replace(/_/g, ' ')} (${count})`);
 }
 
+function connectedCallStatus(status?: string | null) {
+  const value = String(status || '').toLowerCase();
+  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
+}
+
 function callRejectionReasons(lead: any, input: { product: string; minScore: number; countries: string[] }) {
   const reasons: string[] = [];
   const callStatus = String(lead.call_status || '').toLowerCase();
@@ -149,7 +154,7 @@ function callRejectionReasons(lead: any, input: { product: string; minScore: num
   if (lead.do_not_contact === true) reasons.push('do_not_contact');
   if (lead.outreach_state === 'do_not_contact') reasons.push('do_not_contact_state');
   if (lead.call_status === 'Calling') reasons.push('currently_calling');
-  if ((lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) reasons.push('already_contacted');
+  if ((lead.call_connected === true || lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) reasons.push('already_contacted');
   if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) reasons.push('excluded_status');
   if (!normalizeE164(lead.phone_e164 || lead.phone)) reasons.push('bad_phone');
   if (Number(lead.call_attempts || 0) >= 3) reasons.push('attempt_limit');
@@ -220,6 +225,7 @@ Deno.serve(async (req) => {
     const keys = [
       'ai_calls_enabled',
       'ai_calls_daily',
+      'ai_calls_daily_connected_cap',
       'ai_calls_per_run',
       'ai_calls_start_hour',
       'ai_calls_start_minute',
@@ -239,7 +245,7 @@ Deno.serve(async (req) => {
     for (const row of rows || []) settings[row.key] = row.value;
 
     const enabled = settings.ai_calls_enabled === 'true';
-    const dailyCap = intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100);
+    const dailyCap = intSetting(settings, 'ai_calls_daily_connected_cap', intSetting(settings, 'ai_calls_daily', DEFAULT_DAILY_CAP, 1, 100), 1, 100);
     const perRun = intSetting(settings, 'ai_calls_per_run', DEFAULT_PER_RUN, 1, 50);
     const startHour = intSetting(settings, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const startMinute = intSetting(settings, 'ai_calls_start_minute', 0, 0, 59);
@@ -283,6 +289,7 @@ Deno.serve(async (req) => {
         await supabase.from('leads').update({
           call_status: 'No answer',
           outreach_state: 'not_contacted',
+          call_connected: false,
           last_called_at: null,
           last_contacted_at: null,
           call_attempts: Math.max(0, Number(lead.call_attempts || 1) - 1),
@@ -309,15 +316,12 @@ Deno.serve(async (req) => {
     startOfDay.setUTCHours(0, 0, 0, 0);
     const { data: callRows, error: callCountError } = await supabase
       .from('leads')
-      .select('id, call_status')
+      .select('id, call_status, call_connected')
       .eq('last_contact_method', 'AI Call')
       .gte('last_contacted_at', startOfDay.toISOString())
       .limit(1000);
     if (callCountError) throw callCountError;
-    const callsToday = (callRows || []).filter((lead: any) => {
-      const status = String(lead.call_status || '').toLowerCase();
-      return status && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(status);
-    }).length;
+    const callsToday = (callRows || []).filter((lead: any) => lead.call_connected === true || connectedCallStatus(lead.call_status)).length;
 
     const remainingToday = Math.max(0, dailyCap - callsToday);
     if (!preview && remainingToday <= 0) {
@@ -330,7 +334,7 @@ Deno.serve(async (req) => {
       return json({ skipped: true, reason: 'daily_cap_reached', callsToday, dailyCap });
     }
 
-    if (!preview && !force) {
+    if (!preview) {
       const activeSince = new Date(Date.now() - activeGuardMinutes * 60 * 1000).toISOString();
       const { data: activeCall } = await supabase
         .from('leads')
@@ -373,7 +377,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('do_not_contact.is.null,do_not_contact.eq.false')
@@ -414,7 +418,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const limit = Math.min(perRun, remainingToday, candidates.length);
+    const limit = Math.min(1, perRun, remainingToday, candidates.length);
     let started = 0;
     let skipped = 0;
     let failed = 0;

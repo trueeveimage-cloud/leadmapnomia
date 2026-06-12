@@ -485,6 +485,7 @@ export type Database = {
           business_name: string | null
           call_after_at: string | null
           call_attempts: number
+          call_connected: boolean
           call_outcome_last: string | null
           call_status: string | null
           caller_id: string | null
@@ -557,6 +558,7 @@ export type Database = {
           business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
+          call_connected?: boolean
           call_outcome_last?: string | null
           call_status?: string | null
           caller_id?: string | null
@@ -629,6 +631,7 @@ export type Database = {
           business_name?: string | null
           call_after_at?: string | null
           call_attempts?: number
+          call_connected?: boolean
           call_outcome_last?: string | null
           call_status?: string | null
           caller_id?: string | null

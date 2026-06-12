@@ -230,7 +230,7 @@ export default function DashboardPage() {
           .limit(5000),
         supabase
           .from("leads")
-          .select("last_contacted_at, call_status")
+          .select("last_contacted_at, call_status, call_connected")
           .eq("last_contact_method", "AI Call")
           .gte("last_contacted_at", since)
           .limit(5000),
@@ -245,7 +245,7 @@ export default function DashboardPage() {
         if (dayMap[key]) dayMap[key].callsSent++;
       });
       (connectedCalls.data || []).forEach((row: any) => {
-        if (!connectedCallStatus(row.call_status)) return;
+        if (row.call_connected !== true && !connectedCallStatus(row.call_status)) return;
         const key = dayKey(row.last_contacted_at);
         if (dayMap[key]) dayMap[key].connected++;
       });

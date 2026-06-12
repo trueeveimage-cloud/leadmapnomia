@@ -412,6 +412,7 @@ export default function AutomationPage() {
     const keys = [
       'ai_calls_enabled',
       'ai_calls_daily',
+      'ai_calls_daily_connected_cap',
       'ai_calls_per_run',
       'ai_calls_start_hour',
       'ai_calls_start_minute',
@@ -433,7 +434,7 @@ export default function AutomationPage() {
     const next: AutomationSettings = {
       ...DEFAULTS,
       aiEnabled: cfg.ai_calls_enabled === null ? DEFAULTS.aiEnabled : cfg.ai_calls_enabled === 'true',
-      aiDaily: cfg.ai_calls_daily || DEFAULTS.aiDaily,
+      aiDaily: cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily || DEFAULTS.aiDaily,
       aiPerRun: cfg.ai_calls_per_run || DEFAULTS.aiPerRun,
       aiStartHour: cfg.ai_calls_start_hour || DEFAULTS.aiStartHour,
       aiStartMinute: cfg.ai_calls_start_minute || DEFAULTS.aiStartMinute,
@@ -467,7 +468,7 @@ export default function AutomationPage() {
         .gte('created_at', startOfTodayIso()),
       sb
         .from('leads')
-        .select('id, call_status')
+        .select('id, call_status, call_connected')
         .eq('last_contact_method', 'AI Call')
         .gte('last_contacted_at', startOfTodayIso())
         .limit(1000),
@@ -478,18 +479,18 @@ export default function AutomationPage() {
         .gte('last_called_at', activeSince),
       sb
         .from('leads')
-        .select('id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
+        .select('id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, call_connected')
         .not('email', 'is', null)
         .neq('email', '')
         .limit(5000),
       sb
         .from('leads')
-        .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+        .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
         .or('phone.not.is.null,phone_e164.not.is.null')
         .limit(2000),
     ]);
 
-    const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => connectedCallStatus(lead.call_status)).length;
+    const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => lead.call_connected === true || connectedCallStatus(lead.call_status)).length;
 
     const callEligible = (callRowsRes.data || []).filter((lead: any) => {
       const status = String(lead.call_status || '').toLowerCase();
@@ -501,7 +502,7 @@ export default function AutomationPage() {
       if (!nextSettings.aiCountries.includes(detectCountry(lead))) return false;
       if (lead.do_not_contact === true) return false;
       if (lead.call_status === 'Calling') return false;
-      if ((lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) return false;
+      if ((lead.call_connected === true || lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) return false;
       if (lead.outreach_state === 'do_not_contact') return false;
       if (EXCLUDED_CALL_STATUSES.includes(String(lead.status || ''))) return false;
       return !!normalizePhone(lead.phone_e164 || lead.phone);
@@ -518,6 +519,7 @@ export default function AutomationPage() {
       if (!['S', 'A+', 'A'].includes(String(lead.lead_tier || ''))) return false;
       if (lead.last_called_at) return false;
       if ((lead.call_attempts || 0) > 0) return false;
+      if (lead.call_connected === true) return false;
       if (lead.outreach_state === 'called') return false;
       if (lead.last_contact_method === 'AI Call') return false;
       return true;
@@ -557,7 +559,7 @@ export default function AutomationPage() {
         .limit(5000),
       sb
         .from('leads')
-        .select('id, last_contacted_at, call_status')
+        .select('id, last_contacted_at, call_status, call_connected')
         .eq('last_contact_method', 'AI Call')
         .gte('last_contacted_at', since)
         .limit(5000),
@@ -575,7 +577,7 @@ export default function AutomationPage() {
       if (bucket) bucket.aiStarted += 1;
     }
     for (const row of connectedRows || []) {
-      if (!connectedCallStatus(row.call_status)) continue;
+      if (row.call_connected !== true && !connectedCallStatus(row.call_status)) continue;
       const key = dayKey(row.last_contacted_at);
       const bucket = buckets.get(key);
       if (bucket) bucket.aiConnected += 1;
@@ -609,6 +611,7 @@ export default function AutomationPage() {
       await Promise.all([
         setSetting('ai_calls_enabled', next.aiEnabled ? 'true' : 'false'),
         setSetting('ai_calls_daily', next.aiDaily),
+        setSetting('ai_calls_daily_connected_cap', next.aiDaily),
         setSetting('ai_calls_per_run', next.aiPerRun),
         setSetting('ai_calls_start_hour', next.aiStartHour),
         setSetting('ai_calls_start_minute', next.aiStartMinute),

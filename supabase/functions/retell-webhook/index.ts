@@ -76,7 +76,7 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
   const text = `${primary} ${fallback}`;
 
   if (event === 'call_started' || hasAny(text, ['ongoing', 'registered'])) {
-    return { call_status: 'Calling', outreach_state: 'called' };
+    return { call_status: 'Calling' };
   }
   if (hasAny(text, ['do not contact', 'do-not-contact', 'opt out', 'opt-out', 'stop calling'])) {
     return {
@@ -112,6 +112,26 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     return { call_status: 'Interested', outreach_state: 'called', next_step: 'Review transcript and decide next action' };
   }
   return {};
+}
+
+function connectedFromEvent(event: string, call: JsonRecord, payload: JsonRecord, statusUpdate: JsonRecord, isNoAnswer: boolean) {
+  if (event === 'call_started' || isNoAnswer) return false;
+  const analysis = record(call.call_analysis || payload.call_analysis);
+  const custom = record(analysis.custom_analysis_data);
+  const transcript = transcriptToText(call.transcript || payload.transcript || call.transcript_with_tool_calls || payload.transcript_with_tool_calls);
+  const summary = firstString(analysis.call_summary, analysis.summary, custom.short_summary, custom.summary, payload.summary);
+  const reason = firstString(call.disconnection_reason, payload.disconnection_reason).toLowerCase();
+  const status = `${firstString(statusUpdate.call_status)} ${firstString(call.call_status, payload.call_status)} ${reason} ${summary} ${transcript}`.toLowerCase();
+
+  if (hasAny(status, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy', 'failed', 'error'])) {
+    return false;
+  }
+  if (boolish(analysis.call_successful) || boolish(custom.interested) || boolish(custom.demo_requested) || boolish(custom.meeting_requested)) {
+    return true;
+  }
+  if (hasAny(reason, ['user_hangup', 'agent_hangup', 'completed', 'call_transfer'])) return true;
+  if (hasAny(status, ['interested', 'not interested', 'demo requested', 'meeting requested', 'do not contact'])) return true;
+  return event === 'call_analyzed' && !!transcript;
 }
 
 async function verifyRetellSignature(rawBody: string, secret: string, signature: string | null) {
@@ -189,6 +209,7 @@ Deno.serve(async (req) => {
 
   const isNoAnswer = (statusUpdate as JsonRecord).__no_answer === true;
   delete (statusUpdate as JsonRecord).__no_answer;
+  const isConnected = connectedFromEvent(event, call, payload, statusUpdate as JsonRecord, isNoAnswer);
 
   const outreach_history = [
     ...history,
@@ -202,6 +223,7 @@ Deno.serve(async (req) => {
     call_transcript: transcript || lead.call_transcript,
     call_summary: summary || lead.call_summary,
     call_outcome: outcome || lead.call_outcome,
+    call_connected: isConnected,
     demo_delivery_method: demoDeliveryMethod || lead.demo_delivery_method,
     demo_contact_value: demoContactValue || lead.demo_contact_value,
     last_call_attempt_at: new Date().toISOString(),
@@ -220,6 +242,7 @@ Deno.serve(async (req) => {
     updates.last_called_at = null;
     updates.last_contacted_at = null;
     updates.last_contact_method = null;
+    updates.call_connected = false;
     updates.call_attempts = callAttempts;
     updates.outreach_count = Math.max(0, (typeof lead.outreach_count === 'number' ? lead.outreach_count : 1) - 1);
     updates.no_answer_count = naCount;
@@ -231,10 +254,14 @@ Deno.serve(async (req) => {
       updates.next_step = 'Stop calling — 3 no-answers';
       updates.next_call_after = null;
     }
-  } else {
-    // Real call result — stamp last_called_at and last_contacted_at
+  } else if (isConnected) {
     updates.last_called_at = lead.last_called_at || new Date().toISOString();
     updates.last_contacted_at = lead.last_contacted_at || new Date().toISOString();
+    updates.last_contact_method = 'AI Call';
+  } else {
+    updates.last_contacted_at = null;
+    updates.last_contact_method = null;
+    updates.call_connected = false;
   }
 
   const { error: updateError } = await supabase.from('leads').update(updates).eq('id', String(lead.id));
@@ -243,7 +270,7 @@ Deno.serve(async (req) => {
   await supabase.from('activities').insert({
     lead_id: String(lead.id),
     type: 'retell_webhook',
-    payload: { event_id: eventId, event, retell_call_id: callId, outcome },
+    payload: { event_id: eventId, event, retell_call_id: callId, outcome, call_connected: isConnected },
   });
 
   if (['call_ended', 'call_analyzed', 'call_failed'].includes(event)) {
@@ -257,6 +284,7 @@ Deno.serve(async (req) => {
         retell_call_id: callId,
         event,
         outcome,
+        call_connected: isConnected,
       },
     });
   }

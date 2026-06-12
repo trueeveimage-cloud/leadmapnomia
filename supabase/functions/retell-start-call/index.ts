@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   if (lead.do_not_contact || lead.outreach_opt_out) return json({ error: 'do_not_contact' }, 409);
   if (lead.call_status === 'Calling') return json({ error: 'already_calling' }, 409);
   const callAttempts = typeof lead.call_attempts === 'number' ? lead.call_attempts : 0;
-  if (callAttempts >= 2 && !parsed.data.manualUnlock) return json({ error: 'call_attempt_limit' }, 409);
+  if (callAttempts >= 3 && !parsed.data.manualUnlock) return json({ error: 'call_attempt_limit' }, 409);
 
   if (!parsed.data.manualUnlock) {
     const candidates = Array.from(new Set([toNumber, lead.phone_e164, lead.phone].filter(Boolean)));
@@ -124,6 +124,7 @@ Deno.serve(async (req) => {
     retell_call_id: callId,
     retell_agent_id: RETELL_AGENT_ID,
     call_status: 'Calling',
+    call_connected: false,
     outreach_state: String(lead.outreach_state || 'not_contacted'),
     call_attempts: callAttempts + 1,
     outreach_count: (typeof lead.outreach_count === 'number' ? lead.outreach_count : 0) + 1,

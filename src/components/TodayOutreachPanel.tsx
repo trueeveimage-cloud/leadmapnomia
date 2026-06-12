@@ -157,7 +157,7 @@ export default function TodayOutreachPanel() {
     ] = await Promise.all([
       supabase.from("message_logs").select("id", { count: "exact", head: true })
         .eq("channel", "email").eq("direction", "outbound").eq("status", "sent").gte("created_at", iso),
-      supabase.from("leads").select("id, call_status")
+      supabase.from("leads").select("id, call_status, call_connected")
         .eq("last_contact_method", "AI Call").gte("last_contacted_at", iso).limit(1000),
       supabase.from("leads").select("id, call_status")
         .gte("last_call_attempt_at", iso).limit(1000),
@@ -165,19 +165,19 @@ export default function TodayOutreachPanel() {
         .gte("no_answer_count", 3),
       supabase.from("leads").select("id", { count: "exact", head: true })
         .eq("call_status", "Calling"),
-      supabase.from("leads").select("id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts")
+      supabase.from("leads").select("id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, call_connected")
         .not("email", "is", null).neq("email", "").limit(5000),
-      supabase.from("leads").select("id, phone, phone_e164, product, status, call_attempts, no_answer_count, next_call_after, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state")
+      supabase.from("leads").select("id, phone, phone_e164, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state")
         .or("phone.not.is.null,phone_e164.not.is.null").limit(5000),
       supabase.from("finder_runs").select("id, stats, created_at"),
       supabase.from("message_logs").select("id, created_at")
         .eq("channel", "email").eq("direction", "outbound").eq("status", "sent").gte("created_at", startOfDaysAgoIso(6)).limit(5000),
       (supabase as any).from("activities").select("id, created_at")
         .eq("type", "ai_call_started").gte("created_at", startOfDaysAgoIso(6)).limit(5000),
-      supabase.from("leads").select("id, last_contacted_at, call_status")
+      supabase.from("leads").select("id, last_contacted_at, call_status, call_connected")
         .eq("last_contact_method", "AI Call").gte("last_contacted_at", startOfDaysAgoIso(6)).limit(5000),
       supabase.from("settings").select("key, value")
-        .in("key", ["gmail_autosend_daily", "ai_calls_daily", "finder_spend_cap_usd", "finder_budget_start_date"]),
+        .in("key", ["gmail_autosend_daily", "ai_calls_daily", "ai_calls_daily_connected_cap", "finder_spend_cap_usd", "finder_budget_start_date"]),
       supabase.from("app_notifications").select("title, message, payload, created_at")
         .eq("type", "gmail_batch_done").order("created_at", { ascending: false }).limit(3),
     ]);
@@ -185,7 +185,7 @@ export default function TodayOutreachPanel() {
     const cfg: Record<string, string> = {};
     (settings.data || []).forEach((row: any) => { cfg[row.key] = row.value; });
 
-    const connectedCalls = (connectedCallRows.data || []).filter((lead: any) => connectedCallStatus(lead.call_status)).length;
+    const connectedCalls = (connectedCallRows.data || []).filter((lead: any) => lead.call_connected === true || connectedCallStatus(lead.call_status)).length;
     const noAnswerToday = (attemptedCallRows.data || []).filter((lead: any) => {
       const status = String(lead.call_status || "").toLowerCase();
       return status.includes("no answer") || status.includes("dead");
@@ -200,7 +200,7 @@ export default function TodayOutreachPanel() {
       if (lead.outreach_stage === "email_sent" || lead.outreach_state === "email_sent") return false;
       if (lead.outreach_state === "do_not_contact") return false;
       if (!["S", "A+", "A"].includes(String(lead.lead_tier || ""))) return false;
-      if (lead.last_called_at || (lead.call_attempts || 0) > 0 || lead.last_contact_method === "AI Call") return false;
+      if (lead.call_connected === true || lead.last_called_at || (lead.call_attempts || 0) > 0 || lead.last_contact_method === "AI Call") return false;
       return true;
     }).length;
 
@@ -211,7 +211,7 @@ export default function TodayOutreachPanel() {
       if (lead.product !== "leadmap") return false;
       if (lead.outreach_opt_out || lead.do_not_contact || lead.outreach_state === "do_not_contact") return false;
       if (lead.call_status === "Calling") return false;
-      if ((lead.last_contacted_at || lead.outreach_state === "called") && !isNoAnswer) return false;
+      if ((lead.call_connected === true || lead.last_contacted_at || lead.outreach_state === "called") && !isNoAnswer) return false;
       if (Number(lead.call_attempts || 0) >= 2 || Number(lead.no_answer_count || 0) >= 3) return false;
       if (lead.next_call_after && String(lead.next_call_after) > nowIso) return false;
       return !!normalizePhone(lead.phone_e164 || lead.phone);
@@ -240,7 +240,7 @@ export default function TodayOutreachPanel() {
       if (bucket) bucket.callsStarted += 1;
     }
     for (const row of recentConnectedCalls.data || []) {
-      if (!connectedCallStatus(row.call_status)) continue;
+      if (row.call_connected !== true && !connectedCallStatus(row.call_status)) continue;
       const bucket = dailyBuckets.get(dayKey(row.last_contacted_at));
       if (bucket) bucket.callsConnected += 1;
     }
@@ -250,7 +250,7 @@ export default function TodayOutreachPanel() {
       emailsCap: parseInt(cfg.gmail_autosend_daily || "100", 10),
       emailsEligible,
       callsConnected: connectedCalls,
-      callsCap: parseInt(cfg.ai_calls_daily || "15", 10),
+      callsCap: parseInt(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily || "15", 10),
       callsEligible,
       activeCalls: activeCalls.count || 0,
       noAnswerToday,

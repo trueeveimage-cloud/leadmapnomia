@@ -75,6 +75,7 @@ export interface Lead {
   last_message_status: string | null;
   // Contact tracking
   call_attempts: number;
+  call_connected?: boolean | null;
   last_contacted_at: string | null;
   last_contact_method: string | null;
   outreach_state?: string | null;
