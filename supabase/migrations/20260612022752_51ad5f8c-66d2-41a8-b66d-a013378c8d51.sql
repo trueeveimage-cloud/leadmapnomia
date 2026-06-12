@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS call_connected boolean, ADD COLUMN IF NOT EXISTS call_outcome text;
