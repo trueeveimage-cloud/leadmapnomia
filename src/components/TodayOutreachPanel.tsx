@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, Mail, Phone, Play, Search } from "lucide-react";
+import { AlertTriangle, Mail, Phone, Play, Search, CalendarOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface DailyState {
