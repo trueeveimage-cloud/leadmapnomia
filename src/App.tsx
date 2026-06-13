@@ -8,6 +8,7 @@ import { ProductProvider } from "@/context/ProductContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { lazy, Suspense, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import OutreachTimerWidget from "@/components/OutreachTimerWidget";
 
 // Eager: auth + small pages on critical path
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -37,6 +38,7 @@ const GuidePage = lazy(() => import("./pages/GuidePage"));
 const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const AutomationPage = lazy(() => import("./pages/AutomationPage"));
+const OutreachProgressPage = lazy(() => import("./pages/OutreachProgressPage"));
 const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
@@ -167,6 +169,7 @@ const App = () => (
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/automation" element={<AutomationPage />} />
+                      <Route path="/outreach-progress" element={<OutreachProgressPage />} />
                       <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
@@ -221,6 +224,7 @@ const App = () => (
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
+                  <OutreachTimerWidget />
                   </ProductProvider>
                 </CRMProvider>
               </AuthGate>
