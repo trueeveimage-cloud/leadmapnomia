@@ -140,6 +140,19 @@ Deno.serve(async (req) => {
             status: 'failed',
             stats: { error: 'replenish_invoke_failed', status: r.status, body: text.slice(0, 500) },
           } as any).eq('id', (run as any).id);
+          return;
+        }
+        // Once finder-search returns, immediately re-queue the originating job
+        // so newly discovered leads get used right away instead of waiting for cron.
+        const requeueTarget = trigger === 'ai_calls_empty'
+          ? 'auto-start-ai-calls-daily'
+          : (trigger === 'gmail_empty' ? 'auto-send-gmail-daily' : null);
+        if (requeueTarget) {
+          await fetch(`${supabaseUrl}/functions/v1/${requeueTarget}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ source: 'auto-replenish-requeue' }),
+          }).catch(() => {});
         }
       })
       .catch(async (e) => {

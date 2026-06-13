@@ -413,8 +413,8 @@ Deno.serve(async (req) => {
           details.push({
             id: lead.id,
             status: 'failed',
-            error: data?.error || response.statusText || 'send_failed',
-            httpStatus: response.status,
+            error: data?.error || resp.statusText || 'send_failed',
+            httpStatus: resp.status,
             providerStatus: data?.status,
             details: data?.details,
             language,
