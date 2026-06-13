@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, Mail, Phone, Play, Search } from "lucide-react";
+import { AlertTriangle, Mail, Phone, Play, Search, CalendarOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface DailyState {
@@ -295,8 +295,24 @@ export default function TodayOutreachPanel() {
 
   const finderPct = state.finderCap > 0 ? Math.min(100, (state.finderSpend / state.finderCap) * 100) : 0;
 
+  const today = new Date();
+  const isWeekend = today.getDay() === 0 || today.getDay() === 6;
+  const daysUntilMonday = today.getDay() === 0 ? 1 : today.getDay() === 6 ? 2 : 0;
+
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+      {isWeekend && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+          <CalendarOff size={22} className="text-amber-500 shrink-0" />
+          <div>
+            <div className="text-sm font-semibold text-amber-200">Weekend pause</div>
+            <div className="text-xs text-amber-200/80">
+              No emails or calls are sent on weekends. Automation resumes Monday{daysUntilMonday === 1 ? " (tomorrow)" : daysUntilMonday === 2 ? " (in 2 days)" : ""}.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground">Today's automation</h3>
         <span className="text-xs text-muted-foreground">Runs automatically during the weekday window. Calls stay one-by-one.</span>
