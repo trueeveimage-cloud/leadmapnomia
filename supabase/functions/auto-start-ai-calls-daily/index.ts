@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chooseNichePlan, filterCandidatesByNiche } from "../_shared/outreach-niches.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -238,6 +239,11 @@ Deno.serve(async (req) => {
       'ai_calls_timezone',
       'ai_calls_active_guard_minutes',
       'ai_calls_stale_call_minutes',
+      'outreach_niche_rotation_enabled',
+      'outreach_niche_rotation_plan',
+      'outreach_niche_priority',
+      'outreach_niche_adaptive_enabled',
+      'outreach_niche_adaptive_min_contacts',
     ];
     const { data: rows, error: settingsError } = await supabase.from('settings').select('key, value').in('key', keys);
     if (settingsError) throw settingsError;
@@ -259,6 +265,7 @@ Deno.serve(async (req) => {
     const product = settings.ai_calls_product || 'leadmap';
     const timeZone = settings.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
+    const initialNichePlan = await chooseNichePlan(supabase, settings, nowLocal.day);
 
     if (!enabled && !force && !preview) return json({ skipped: true, reason: 'disabled' });
     if (!force && !preview && !days.includes(nowLocal.day)) return json({ skipped: true, reason: 'day_blocked', day: nowLocal.day });
@@ -377,7 +384,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, country, product, status, category, niche_label, detected_niche, business_type, website, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('do_not_contact.is.null,do_not_contact.eq.false')
@@ -393,7 +400,10 @@ Deno.serve(async (req) => {
     const { data: rawCandidates, error: leadsError } = await query;
     if (leadsError) throw leadsError;
 
-    const candidates = (rawCandidates || []).filter((lead: any) => callRejectionReasons(lead, { product, minScore, countries }).length === 0);
+    const eligibleCandidates = (rawCandidates || []).filter((lead: any) => callRejectionReasons(lead, { product, minScore, countries }).length === 0);
+    const routed = filterCandidatesByNiche(eligibleCandidates, initialNichePlan, settings);
+    const nichePlan = routed.plan;
+    const candidates = routed.candidates;
     const diagnostics = candidates.length === 0
       ? await getCallEligibilityDiagnostics(supabase, { product, minScore, countries })
       : null;
@@ -416,6 +426,12 @@ Deno.serve(async (req) => {
         remainingToday,
         eligible: candidates.length,
         diagnostics,
+        niche: nichePlan.selectedKey,
+        nicheLabel: nichePlan.selectedLabel,
+        nicheMode: nichePlan.mode,
+        plannedNiche: nichePlan.plannedKey,
+        plannedNicheLabel: nichePlan.plannedLabel,
+        nicheReason: nichePlan.reason,
         leads: candidates.slice(0, 15).map((lead: any) => ({
           id: lead.id,
           name: lead.name,
@@ -423,6 +439,7 @@ Deno.serve(async (req) => {
           score: lead.potential_score,
           tier: lead.lead_tier,
           country: detectCountry(lead),
+          niche: nichePlan.selectedKey,
         })),
       });
     }
@@ -501,6 +518,13 @@ Deno.serve(async (req) => {
         remainingToday: Math.max(0, remainingToday - started),
         activeGuardMinutes,
         staleCallMinutes,
+        niche: nichePlan.selectedKey,
+        nicheLabel: nichePlan.selectedLabel,
+        nicheMode: nichePlan.mode,
+        plannedNiche: nichePlan.plannedKey,
+        plannedNicheLabel: nichePlan.plannedLabel,
+        nicheReason: nichePlan.reason,
+        nicheStats: nichePlan.stats?.slice(0, 5),
         forced: force,
         scheduled: !force,
       },
@@ -518,6 +542,12 @@ Deno.serve(async (req) => {
       diagnostics,
       activeGuardMinutes,
       staleCallMinutes,
+      niche: nichePlan.selectedKey,
+      nicheLabel: nichePlan.selectedLabel,
+      nicheMode: nichePlan.mode,
+      plannedNiche: nichePlan.plannedKey,
+      plannedNicheLabel: nichePlan.plannedLabel,
+      nicheReason: nichePlan.reason,
       details: details.slice(0, 20),
       timestamp: new Date().toISOString(),
     });

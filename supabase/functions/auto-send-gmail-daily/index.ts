@@ -1,6 +1,7 @@
 // Daily Gmail auto-sender for cold outreach.
 // Sends small batches only. send-gmail enforces daily caps, suppression, dedupe and opt-out checks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chooseNichePlan, filterCandidatesByNiche } from "../_shared/outreach-niches.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -265,6 +266,11 @@ Deno.serve(async (req) => {
       'ai_calls_end_minute',
       'ai_calls_days',
       'ai_calls_timezone',
+      'outreach_niche_rotation_enabled',
+      'outreach_niche_rotation_plan',
+      'outreach_niche_priority',
+      'outreach_niche_adaptive_enabled',
+      'outreach_niche_adaptive_min_contacts',
     ];
     const { data: rows } = await supabase.from('settings').select('key, value').in('key', keys);
     const cfg: Record<string, string> = {};
@@ -282,6 +288,7 @@ Deno.serve(async (req) => {
     const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
+    const initialNichePlan = await chooseNichePlan(supabase, cfg, nowLocal.day);
 
     if (!enabled && !force) {
       await recordNotification(supabase, {
@@ -340,7 +347,7 @@ Deno.serve(async (req) => {
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
-      .select('id, name, owner_name, email, address, city, country, category, niche_label, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
+      .select('id, name, owner_name, email, address, city, country, category, niche_label, detected_niche, business_type, website, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
       .not('email', 'is', null)
       .neq('email', '')
       .in('lead_tier', ['S', 'A+', 'A'])
@@ -349,10 +356,22 @@ Deno.serve(async (req) => {
       .order('potential_score', { ascending: false, nullsFirst: false })
       .limit(1000);
     console.log('[gmail-auto] candidates', { count: candidates?.length, error: candErr?.message });
+    if (candErr) throw candErr;
+
+    const routed = filterCandidatesByNiche(candidates || [], initialNichePlan, cfg);
+    const nichePlan = routed.plan;
+    const routedCandidates = routed.candidates;
+    console.log('[gmail-auto] niche route', {
+      selected: nichePlan.selectedKey,
+      mode: nichePlan.mode,
+      planned: nichePlan.plannedKey,
+      before: candidates?.length || 0,
+      after: routedCandidates.length,
+    });
 
     const seenEmails = new Set<string>();
     const rejectionTrace: ReasonSummary = {};
-    const batch = (candidates || [])
+    const batch = routedCandidates
       .filter((lead: any) => {
         const email = String(lead.email || '').trim().toLowerCase();
         const reasons = emailRejectionReasons(lead, seenEmails);
@@ -461,6 +480,13 @@ Deno.serve(async (req) => {
         endHour,
         endMinute,
         timeZone,
+        niche: nichePlan.selectedKey,
+        nicheLabel: nichePlan.selectedLabel,
+        nicheMode: nichePlan.mode,
+        plannedNiche: nichePlan.plannedKey,
+        plannedNicheLabel: nichePlan.plannedLabel,
+        nicheReason: nichePlan.reason,
+        nicheStats: nichePlan.stats?.slice(0, 5),
       },
     });
 
@@ -478,6 +504,12 @@ Deno.serve(async (req) => {
       catchUpBatchSize,
       slotsLeft,
       delaySeconds,
+      niche: nichePlan.selectedKey,
+      nicheLabel: nichePlan.selectedLabel,
+      nicheMode: nichePlan.mode,
+      plannedNiche: nichePlan.plannedKey,
+      plannedNicheLabel: nichePlan.plannedLabel,
+      nicheReason: nichePlan.reason,
       timestamp: new Date().toISOString(),
       details: details.slice(0, 20),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

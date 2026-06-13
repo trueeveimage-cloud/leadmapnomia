@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Zap,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
@@ -45,6 +47,8 @@ type AutomationSettings = {
   gmailDelaySeconds: string;
   gmailSubject: string;
   gmailBody: string;
+  nicheRotationEnabled: boolean;
+  nicheAdaptiveEnabled: boolean;
 };
 
 type Stats = {
@@ -99,6 +103,8 @@ const DEFAULTS: AutomationSettings = {
   gmailDelaySeconds: '120',
   gmailSubject: LEADMAP_EMAIL_SUBJECT_SV,
   gmailBody: LEADMAP_EMAIL_BODY_SV,
+  nicheRotationEnabled: true,
+  nicheAdaptiveEnabled: true,
 };
 
 const WEEKDAYS = [
@@ -114,6 +120,21 @@ const WEEKDAYS = [
 const COUNTRIES = ['SE', 'NO', 'DK', 'UK', 'ES'];
 const EXCLUDED_CALL_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 const AUTOMATION_INTERVAL_MINUTES = 5;
+const NICHE_ROTATION_PLAN: Record<string, { key: string; day: string; label: string; shortLabel: string }> = {
+  '1': { key: 'emergency_trades', day: 'Monday', label: 'VVS and emergency trades', shortLabel: 'VVS / emergency' },
+  '2': { key: 'dental', day: 'Tuesday', label: 'Dental clinics', shortLabel: 'Dental' },
+  '3': { key: 'electricians', day: 'Wednesday', label: 'Electricians', shortLabel: 'Electricians' },
+  '4': { key: 'auto_services', day: 'Thursday', label: 'Auto workshops', shortLabel: 'Auto' },
+  '5': { key: 'cleaning', day: 'Friday', label: 'Cleaning companies', shortLabel: 'Cleaning' },
+};
+const NICHE_ROTATION_JSON = JSON.stringify({
+  '1': 'emergency_trades',
+  '2': 'dental',
+  '3': 'electricians',
+  '4': 'auto_services',
+  '5': 'cleaning',
+});
+const NICHE_PRIORITY = 'emergency_trades,dental,electricians,auto_services,cleaning';
 
 function csv(values: string[]) {
   return values.join(',');
@@ -255,6 +276,22 @@ function formatWindow(settings: AutomationSettings) {
   return `${pad(settings.aiStartHour)}:${pad(settings.aiStartMinute)}-${pad(settings.aiEndHour)}:${pad(settings.aiEndMinute)} Stockholm`;
 }
 
+function todayRotation() {
+  const day = String(new Date().getDay());
+  return NICHE_ROTATION_PLAN[day] || null;
+}
+
+function nextRotationDay(days: string[]) {
+  const now = new Date();
+  for (let offset = 0; offset < 14; offset++) {
+    const candidate = new Date(now);
+    candidate.setDate(now.getDate() + offset);
+    const day = String(candidate.getDay());
+    if (days.includes(day) && NICHE_ROTATION_PLAN[day]) return NICHE_ROTATION_PLAN[day];
+  }
+  return null;
+}
+
 function roundUpToInterval(date: Date, intervalMinutes: number) {
   const next = new Date(date);
   next.setSeconds(0, 0);
@@ -385,6 +422,10 @@ export default function AutomationPage() {
   const latestGmail = useMemo(() => latestPayload(history, isGmailAutomationNotification), [history]);
   const aiBlockers = useMemo(() => blockerList(latestAi, previewDiagnostics), [latestAi, previewDiagnostics]);
   const gmailBlockers = useMemo(() => blockerList(latestGmail), [latestGmail]);
+  const todaysNiche = useMemo(() => todayRotation(), []);
+  const nextNiche = useMemo(() => nextRotationDay(settings.aiDays), [settings.aiDays]);
+  const activeNicheLabel = latestAi.nicheLabel || latestGmail.nicheLabel || todaysNiche?.label || nextNiche?.label || 'Launch niches';
+  const activeNicheMode = latestAi.nicheMode || latestGmail.nicheMode || (settings.nicheAdaptiveEnabled ? 'scheduled + adaptive' : 'scheduled');
   const missingGmailSecrets = useMemo(() => {
     if (!integrationHealth) return [];
     return ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY'].filter(key => integrationHealth[key]?.toUpperCase().includes('MISSING'));
@@ -436,6 +477,8 @@ export default function AutomationPage() {
       'gmail_autosend_batch_size',
       'gmail_autosend_subject',
       'gmail_autosend_body',
+      'outreach_niche_rotation_enabled',
+      'outreach_niche_adaptive_enabled',
     ];
     const values = await Promise.all(keys.map(key => getSetting(key)));
     const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
@@ -458,6 +501,8 @@ export default function AutomationPage() {
       gmailDelaySeconds: cfg.gmail_autosend_delay_seconds || DEFAULTS.gmailDelaySeconds,
       gmailSubject: cfg.gmail_autosend_subject || DEFAULTS.gmailSubject,
       gmailBody: cfg.gmail_autosend_body || DEFAULTS.gmailBody,
+      nicheRotationEnabled: cfg.outreach_niche_rotation_enabled === null ? DEFAULTS.nicheRotationEnabled : cfg.outreach_niche_rotation_enabled !== 'false',
+      nicheAdaptiveEnabled: cfg.outreach_niche_adaptive_enabled === null ? DEFAULTS.nicheAdaptiveEnabled : cfg.outreach_niche_adaptive_enabled !== 'false',
     };
     setSettings(next);
     return next;
@@ -648,6 +693,11 @@ export default function AutomationPage() {
         setSetting('gmail_autosend_body', next.gmailBody),
         setSetting('gmail_autosend_subject_sv', next.gmailSubject),
         setSetting('gmail_autosend_body_sv', next.gmailBody),
+        setSetting('outreach_niche_rotation_enabled', next.nicheRotationEnabled ? 'true' : 'false'),
+        setSetting('outreach_niche_adaptive_enabled', next.nicheAdaptiveEnabled ? 'true' : 'false'),
+        setSetting('outreach_niche_adaptive_min_contacts', '20'),
+        setSetting('outreach_niche_rotation_plan', NICHE_ROTATION_JSON),
+        setSetting('outreach_niche_priority', NICHE_PRIORITY),
       ]);
       toast.success('Automation saved');
       await Promise.all([loadStats(next), loadHistory(), loadDailyStats()]);
@@ -674,6 +724,8 @@ export default function AutomationPage() {
       gmailDaily: '100',
       gmailBatchSize: '10',
       gmailDelaySeconds: '120',
+      nicheRotationEnabled: true,
+      nicheAdaptiveEnabled: true,
     };
     setSettings(next);
     await save(next);
@@ -818,6 +870,70 @@ export default function AutomationPage() {
               </div>
               <div className="mt-1 text-[11px] text-muted-foreground">Window progress today</div>
             </div>
+          </div>
+        </section>
+
+        <section className="mb-5 rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <Target size={17} className="text-primary" />
+                <h2 className="font-semibold text-foreground">Niche rotation for next week</h2>
+                <Badge variant={settings.nicheRotationEnabled ? 'default' : 'outline'}>
+                  {settings.nicheRotationEnabled ? 'Active' : 'Paused'}
+                </Badge>
+                <Badge variant={settings.nicheAdaptiveEnabled ? 'secondary' : 'outline'}>
+                  {settings.nicheAdaptiveEnabled ? 'Adaptive focus on' : 'Fixed weekdays'}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Gmail and AI calls use the same daily niche: 100 emails and 15 connected calls target one market each weekday. After enough contacts, the highest-success niche gets priority automatically.
+              </p>
+            </div>
+            <div className="grid min-w-[17rem] gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/40 px-3 py-2">
+                <div>
+                  <div className="text-xs text-muted-foreground">Use niche routing</div>
+                  <div className="text-sm font-medium text-foreground">One niche per weekday</div>
+                </div>
+                <Switch checked={settings.nicheRotationEnabled} onCheckedChange={checked => update('nicheRotationEnabled', checked)} />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-background/40 px-3 py-2">
+                <div>
+                  <div className="text-xs text-muted-foreground">Winner focus</div>
+                  <div className="text-sm font-medium text-foreground">Favor best success rate</div>
+                </div>
+                <Switch checked={settings.nicheAdaptiveEnabled} onCheckedChange={checked => update('nicheAdaptiveEnabled', checked)} />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-5">
+            {Object.entries(NICHE_ROTATION_PLAN).map(([day, niche]) => {
+              const isToday = todaysNiche?.key === niche.key;
+              const isNext = !todaysNiche && nextNiche?.key === niche.key;
+              return (
+                <div
+                  key={day}
+                  className={cn(
+                    'rounded-md border px-3 py-3',
+                    isToday || isNext ? 'border-primary bg-primary/5' : 'border-border bg-background/40'
+                  )}
+                >
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{niche.day}</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">{niche.shortLabel}</div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    100 Gmail + 15 connected calls
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <StatusTile icon={<Target size={15} />} label="Current focus" value={activeNicheLabel} />
+            <StatusTile icon={<TrendingUp size={15} />} label="Focus mode" value={String(activeNicheMode).replace(/_/g, ' ')} />
+            <StatusTile icon={<ShieldCheck size={15} />} label="Fallback rule" value="If a niche runs empty, use the next launch niche" />
           </div>
         </section>
 
@@ -1097,7 +1213,14 @@ export default function AutomationPage() {
                             <div className="truncate text-sm font-medium text-foreground">{item.title}</div>
                             <div className="mt-0.5 text-xs text-muted-foreground">{formatShortDate(item.created_at)} at {formatShortTime(item.created_at)}</div>
                           </div>
-                          <Badge variant={payload.forced ? 'secondary' : 'outline'}>{isGmail ? 'Gmail' : 'Calls'}</Badge>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <Badge variant={payload.forced ? 'secondary' : 'outline'}>{isGmail ? 'Gmail' : 'Calls'}</Badge>
+                            {payload.nicheLabel && (
+                              <Badge variant="secondary" className="max-w-32 truncate text-[10px]">
+                                {payload.nicheLabel}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         {item.message && <div className="mt-2 text-xs text-muted-foreground">{item.message}</div>}
                         {Array.isArray(payload.topReasons) && payload.topReasons.length > 0 && (
