@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.acquire_outreach_lock(uuid, text, boolean) FROM anon, authenticated, public;
+GRANT EXECUTE ON FUNCTION public.acquire_outreach_lock(uuid, text, boolean) TO service_role;
