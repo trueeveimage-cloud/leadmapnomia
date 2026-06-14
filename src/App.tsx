@@ -2,9 +2,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { CRMProvider } from "@/context/CRMContext";
-import { ProductProvider } from "@/context/ProductContext";
+import { ProductProvider, useProduct } from "@/context/ProductContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { lazy, Suspense, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -120,6 +120,40 @@ function GlobalHotkeys() {
   return null;
 }
 
+function productForPath(pathname: string) {
+  if (
+    pathname.startsWith('/nomia')
+    || pathname === '/nomia-crm'
+    || pathname === '/next'
+  ) return 'nomia' as const;
+
+  if (
+    pathname.startsWith('/leadmap')
+    || pathname.startsWith('/automation')
+    || pathname.startsWith('/outreach-progress')
+    || pathname.startsWith('/lead-finder')
+    || pathname.startsWith('/email-finder')
+    || pathname.startsWith('/finder')
+    || pathname.startsWith('/cold-call')
+    || pathname.startsWith('/ai-calls')
+    || pathname === '/next-leadline'
+  ) return 'leadmap' as const;
+
+  return null;
+}
+
+function ProductRouteSync() {
+  const { pathname } = useLocation();
+  const { product, setProduct } = useProduct();
+
+  useEffect(() => {
+    const next = productForPath(pathname);
+    if (next && next !== product) setProduct(next);
+  }, [pathname, product, setProduct]);
+
+  return null;
+}
+
 function activateEasterEgg() {
   const messages = [
     "💰 You're destined for greatness. Keep grinding.",
@@ -162,6 +196,7 @@ const App = () => (
               <AuthGate>
                 <CRMProvider>
                   <ProductProvider>
+                  <ProductRouteSync />
                   <GlobalHotkeys />
                   <ScoringWeightsBootstrap />
                   <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>}>

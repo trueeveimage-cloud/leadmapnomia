@@ -3,10 +3,10 @@ import { detectLeadCountry, shouldNeedCall } from "@/lib/countryRouting";
 
 export type Product = 'nomia' | 'leadmap';
 
-/** Read currently active product from localStorage (set by ProductContext). Defaults to nomia. */
+/** Read currently active product from localStorage (set by ProductContext). Defaults to Leadmap. */
 export function getActiveProduct(): Product {
-  if (typeof window === 'undefined') return 'nomia';
-  return ((localStorage.getItem('crm.activeProduct') as Product) || 'nomia');
+  if (typeof window === 'undefined') return 'leadmap';
+  return ((localStorage.getItem('crm.activeProduct') as Product) || 'leadmap');
 }
 
 const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;

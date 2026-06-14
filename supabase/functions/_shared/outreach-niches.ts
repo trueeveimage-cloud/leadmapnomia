@@ -64,7 +64,7 @@ export const LAUNCH_NICHES: NicheDefinition[] = [
     shortLabel: 'Auto',
     keywords: [
       'auto', 'car', 'vehicle', 'bil', 'verkstad', 'mechanic', 'garage',
-      'dack', 'rekond', 'detailing', 'service', 'repair',
+      'dack', 'rekond', 'detailing', 'repair',
     ],
   },
   {
@@ -209,14 +209,31 @@ function connectedCallStatus(status?: unknown) {
   return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
 }
 
-function leadAttempted(lead: Record<string, unknown>) {
-  return !!lead.last_contacted_at
+function timestampMs(value: unknown) {
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function lastAttemptMs(lead: Record<string, unknown>) {
+  const times = [
+    timestampMs(lead.last_contacted_at),
+    timestampMs(lead.last_called_at),
+  ].filter((time): time is number => time !== null);
+  return times.length ? Math.max(...times) : null;
+}
+
+function leadAttempted(lead: Record<string, unknown>, sinceMs: number | null) {
+  const attempted = !!lead.last_contacted_at
     || !!lead.last_called_at
     || Number(lead.call_attempts || 0) > 0
     || ATTEMPT_STATES.includes(String(lead.outreach_state || '').toLowerCase())
     || String(lead.outreach_stage || '').toLowerCase() === 'email_sent'
     || String(lead.last_contact_method || '').toLowerCase() === 'email'
     || String(lead.last_contact_method || '').toLowerCase() === 'ai call';
+  if (!attempted) return false;
+  if (!sinceMs) return true;
+  const attemptMs = lastAttemptMs(lead);
+  return attemptMs !== null && attemptMs >= sinceMs;
 }
 
 function leadSucceeded(lead: Record<string, unknown>) {
@@ -249,6 +266,7 @@ export async function chooseNichePlan(
   if (!enabled || !adaptiveEnabled) return base;
 
   const minContacts = Math.max(1, Math.min(500, Number.parseInt(settings.outreach_niche_adaptive_min_contacts || '', 10) || 20));
+  const adaptiveSinceMs = timestampMs(settings.outreach_niche_adaptive_since);
   const { data } = await supabase
     .from('leads')
     .select('id, name, category, niche_label, detected_niche, business_type, website, status, call_status, call_connected, call_attempts, outreach_state, outreach_stage, last_contacted_at, last_called_at, last_contact_method')
@@ -256,7 +274,7 @@ export async function chooseNichePlan(
 
   const rows = (data || []) as Record<string, unknown>[];
   const stats = LAUNCH_NICHES.map((niche) => {
-    const matching = rows.filter((lead) => matchesNiche(lead, niche.key) && leadAttempted(lead));
+    const matching = rows.filter((lead) => matchesNiche(lead, niche.key) && leadAttempted(lead, adaptiveSinceMs));
     const successes = matching.filter(leadSucceeded).length;
     const connectedCalls = matching.filter((lead) => Boolean(lead.call_connected) || connectedCallStatus(lead.call_status)).length;
     const attempts = matching.length;

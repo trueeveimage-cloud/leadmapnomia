@@ -271,6 +271,7 @@ Deno.serve(async (req) => {
       'outreach_niche_priority',
       'outreach_niche_adaptive_enabled',
       'outreach_niche_adaptive_min_contacts',
+      'outreach_niche_adaptive_since',
     ];
     const { data: rows } = await supabase.from('settings').select('key, value').in('key', keys);
     const cfg: Record<string, string> = {};

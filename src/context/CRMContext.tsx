@@ -130,6 +130,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     refreshNotifications();
     // Refresh notifications every 60 seconds
     const interval = setInterval(refreshNotifications, 15000);
+    window.addEventListener('crm-product-change', refreshCounts);
     const channel = supabase
       .channel('app-notifications-realtime')
       .on(
@@ -144,6 +145,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       .subscribe();
     return () => {
       clearInterval(interval);
+      window.removeEventListener('crm-product-change', refreshCounts);
       supabase.removeChannel(channel);
     };
   }, [refreshCounts, refreshNotifications]);
