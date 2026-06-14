@@ -389,8 +389,8 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     {
       key: 'schedule',
       label: 'Schedule',
-      value: schedule.open ? 'Open now' : 'Waiting',
-      detail: `Mon-Fri ${schedule.label} Stockholm, ${schedule.nextLabel}.`,
+      value: schedule.open ? 'Open now' : schedule.isWeekend ? 'Weekend pause' : 'Waiting',
+      detail: `Mon-Fri ${schedule.label} Stockholm — ${schedule.nextLabel}.`,
       status: settings.ai_calls_enabled === 'true' || settings.gmail_autosend_enabled === 'true' ? 'ready' : 'blocked',
     },
     {
@@ -404,7 +404,8 @@ async function loadDiagnostics(): Promise<Diagnostics> {
 
   const blockers = items.filter(item => item.status === 'blocked').map(item => `${item.label}: ${item.detail}`);
   const warnings = items.filter(item => item.status === 'warning').map(item => `${item.label}: ${item.detail}`);
-  if (!schedule.open) warnings.push(`Automation is not in the active sending window right now (${schedule.label} Stockholm).`);
+  // Only flag the window as a warning during a weekday — weekends are an intentional pause shown in the banner.
+  if (!schedule.open && !schedule.isWeekend) warnings.push(`Automation is not in the active sending window right now (${schedule.label} Stockholm).`);
   if (emailSentToday >= emailCap) warnings.push('Gmail daily cap is already reached.');
   if (connectedCallsToday >= callCap) warnings.push('Connected-call daily cap is already reached.');
 
