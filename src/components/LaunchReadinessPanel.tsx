@@ -170,16 +170,26 @@ function scheduleStatus(settings: Record<string, string>) {
   const end = minutesOfDay(endHour, endMinute);
   const activeDay = days.includes(now.getDay());
   const open = activeDay && current >= start && current < end;
+  const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const next = new Date(now);
   next.setSeconds(0, 0);
   const rounded = Math.ceil(next.getMinutes() / 5) * 5;
   next.setMinutes(rounded === 60 ? 0 : rounded);
   if (rounded === 60) next.setHours(next.getHours() + 1);
+  let nextLabel: string;
+  if (open) nextLabel = `next cron check around ${formatTime(next.toISOString())}`;
+  else if (isWeekend) {
+    const daysUntilMonday = now.getDay() === 0 ? 1 : 2;
+    nextLabel = `weekend pause — resumes ${daysUntilMonday === 1 ? 'tomorrow' : `in ${daysUntilMonday} days`} at ${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}`;
+  }
+  else if (activeDay) nextLabel = 'waiting for the work window';
+  else nextLabel = 'paused until the next selected weekday';
   return {
     open,
     activeDay,
+    isWeekend,
     label: `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}-${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-    nextLabel: open ? `next cron check around ${formatTime(next.toISOString())}` : activeDay ? 'waiting for the work window' : 'paused until the next selected weekday',
+    nextLabel,
   };
 }
 
