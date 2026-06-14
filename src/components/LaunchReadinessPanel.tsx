@@ -170,16 +170,26 @@ function scheduleStatus(settings: Record<string, string>) {
   const end = minutesOfDay(endHour, endMinute);
   const activeDay = days.includes(now.getDay());
   const open = activeDay && current >= start && current < end;
+  const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const next = new Date(now);
   next.setSeconds(0, 0);
   const rounded = Math.ceil(next.getMinutes() / 5) * 5;
   next.setMinutes(rounded === 60 ? 0 : rounded);
   if (rounded === 60) next.setHours(next.getHours() + 1);
+  let nextLabel: string;
+  if (open) nextLabel = `next cron check around ${formatTime(next.toISOString())}`;
+  else if (isWeekend) {
+    const daysUntilMonday = now.getDay() === 0 ? 1 : 2;
+    nextLabel = `weekend pause — resumes ${daysUntilMonday === 1 ? 'tomorrow' : `in ${daysUntilMonday} days`} at ${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}`;
+  }
+  else if (activeDay) nextLabel = 'waiting for the work window';
+  else nextLabel = 'paused until the next selected weekday';
   return {
     open,
     activeDay,
+    isWeekend,
     label: `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}-${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-    nextLabel: open ? `next cron check around ${formatTime(next.toISOString())}` : activeDay ? 'waiting for the work window' : 'paused until the next selected weekday',
+    nextLabel,
   };
 }
 
@@ -379,8 +389,8 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     {
       key: 'schedule',
       label: 'Schedule',
-      value: schedule.open ? 'Open now' : 'Waiting',
-      detail: `Mon-Fri ${schedule.label} Stockholm, ${schedule.nextLabel}.`,
+      value: schedule.open ? 'Open now' : schedule.isWeekend ? 'Weekend pause' : 'Waiting',
+      detail: `Mon-Fri ${schedule.label} Stockholm — ${schedule.nextLabel}.`,
       status: settings.ai_calls_enabled === 'true' || settings.gmail_autosend_enabled === 'true' ? 'ready' : 'blocked',
     },
     {
@@ -394,7 +404,8 @@ async function loadDiagnostics(): Promise<Diagnostics> {
 
   const blockers = items.filter(item => item.status === 'blocked').map(item => `${item.label}: ${item.detail}`);
   const warnings = items.filter(item => item.status === 'warning').map(item => `${item.label}: ${item.detail}`);
-  if (!schedule.open) warnings.push(`Automation is not in the active sending window right now (${schedule.label} Stockholm).`);
+  // Only flag the window as a warning during a weekday — weekends are an intentional pause shown in the banner.
+  if (!schedule.open && !schedule.isWeekend) warnings.push(`Automation is not in the active sending window right now (${schedule.label} Stockholm).`);
   if (emailSentToday >= emailCap) warnings.push('Gmail daily cap is already reached.');
   if (connectedCallsToday >= callCap) warnings.push('Connected-call daily cap is already reached.');
 
