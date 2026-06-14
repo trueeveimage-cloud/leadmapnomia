@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -872,6 +873,10 @@ export default function AutomationPage() {
             </div>
           </div>
         </section>
+
+        <div className="mb-5">
+          <LaunchReadinessPanel />
+        </div>
 
         <section className="mb-5 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

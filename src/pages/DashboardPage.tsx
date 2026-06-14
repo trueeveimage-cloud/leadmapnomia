@@ -1,4 +1,5 @@
 import AppLayout from "@/components/AppLayout";
+import LaunchReadinessPanel from "@/components/LaunchReadinessPanel";
 import TodayOutreachPanel from "@/components/TodayOutreachPanel";
 import { useCRM } from "@/context/CRMContext";
 import { useEffect, useState, useMemo } from "react";
@@ -377,6 +378,8 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-foreground">Statistics</h1>
           <p className="text-sm text-muted-foreground">Overview of your outreach pipeline</p>
         </div>
+
+        <LaunchReadinessPanel compact />
 
         <TodayOutreachPanel />
 
