@@ -71,11 +71,21 @@ function personalize(template: string, lead: any) {
     .replace(/\{city\}/g, city);
 }
 
+type CountryBucket = 'SE' | 'UK' | 'ES' | 'OTHER';
+
+function detectLeadCountryBucket(lead: any): CountryBucket {
+  const country = String(lead?.country || '').trim().toUpperCase();
+  const text = `${lead?.address || ''} ${lead?.city || ''} ${lead?.phone || ''} ${lead?.phone_e164 || ''}`.toLowerCase();
+  if (country === 'ES' || text.includes('+34') || text.includes('spain') || text.includes('españa') || text.includes('espana')) return 'ES';
+  if (country === 'UK' || country === 'GB' || text.includes('+44') || text.includes('united kingdom') || text.includes('england') || text.includes('scotland') || text.includes('wales') || text.includes(' uk')) return 'UK';
+  if (country === 'SE' || text.includes('+46') || text.includes('sweden') || text.includes('sverige')) return 'SE';
+  return 'OTHER';
+}
+
 function detectLeadLanguage(lead: any) {
-  const country = String(lead.country || '').trim().toUpperCase();
-  const text = `${lead.address || ''} ${lead.city || ''} ${lead.phone || ''} ${lead.phone_e164 || ''}`.toLowerCase();
-  if (country === 'ES' || text.includes('+34') || text.includes('spain') || text.includes('españa') || text.includes('espana')) return 'es';
-  if (country === 'SE' || text.includes('+46') || text.includes('sweden') || text.includes('sverige')) return 'sv';
+  const bucket = detectLeadCountryBucket(lead);
+  if (bucket === 'ES') return 'es';
+  if (bucket === 'SE') return 'sv';
   return 'en';
 }
 
