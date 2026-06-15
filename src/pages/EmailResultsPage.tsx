@@ -247,6 +247,14 @@ export default function EmailResultsPage() {
             <RefreshCw size={22} className="mx-auto mb-3 animate-spin text-muted-foreground" />
             <div className="text-sm text-muted-foreground">Loading email results...</div>
           </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-md border border-border bg-muted/20 px-6 py-14 text-center">
+            <Mail size={34} className="mx-auto mb-3 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">No Gmail results logged in this Supabase project yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Manual or automated Gmail sends will appear here after `send-gmail` writes to message_logs.
+            </p>
+          </div>
         ) : visibleRows.length === 0 ? (
           <div className="rounded-md border border-border bg-muted/20 px-6 py-14 text-center">
             <Mail size={34} className="mx-auto mb-3 text-muted-foreground" />

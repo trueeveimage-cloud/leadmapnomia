@@ -67,6 +67,13 @@ export default function PartnerAcquisitionPage() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<'all' | PartnerStatus>('all');
+  const [searchProgress, setSearchProgress] = useState<{
+    step: string;
+    detail: string;
+    percent: number;
+    runId?: string;
+    error?: string;
+  } | null>(null);
 
   const cities = useMemo(() => getCitiesByCountry(country).slice(0, 24), [country]);
 
@@ -126,8 +133,18 @@ export default function PartnerAcquisitionPage() {
       return;
     }
     setRunning(true);
+    setSearchProgress({
+      step: 'Preparing partner search',
+      detail: `${targets.length} partner types selected in ${city}, ${COUNTRY_LABELS[country]}.`,
+      percent: 8,
+    });
     try {
       const keywords = unique(targets.flatMap(item => item.keywords[country] || item.keywords.SE)).slice(0, 18);
+      setSearchProgress({
+        step: 'Creating finder run',
+        detail: `${keywords.length} search phrases ready. Saving run before calling Maps.`,
+        percent: 16,
+      });
       const run = await createFinderRun({
         city,
         mode: 'partner_acquisition',
@@ -141,6 +158,12 @@ export default function PartnerAcquisitionPage() {
         requirePhone: false,
         batchLabel: `Partner Finder - ${COUNTRY_LABELS[country]} - ${city}`,
       });
+      setSearchProgress({
+        step: 'Searching Google Maps',
+        detail: 'Fetching partner companies and place details. This can take 1-3 minutes on larger searches.',
+        percent: 34,
+        runId: run.id,
+      });
       await runFinderSearch(run.id, {
         city,
         keywords,
@@ -152,17 +175,55 @@ export default function PartnerAcquisitionPage() {
         minReviews: 0,
         requirePhone: false,
       });
+      setSearchProgress({
+        step: 'Loading candidates',
+        detail: 'Maps search finished. Reading candidate companies from the finder run.',
+        percent: 58,
+        runId: run.id,
+      });
       let candidates = await fetchFinderCandidates(run.id);
+      setSearchProgress({
+        step: 'Saving partner prospects',
+        detail: `${candidates.length} candidates found. Saving names, websites, phone numbers and partner types.`,
+        percent: 70,
+        runId: run.id,
+      });
       const firstPass = await savePartnerCandidates(candidates, { city, country });
+      setSearchProgress({
+        step: 'Finding public emails',
+        detail: 'Checking saved partner websites for public business emails in small batches.',
+        percent: 82,
+        runId: run.id,
+      });
       candidates = await scrapePartnerEmails(candidates);
+      setSearchProgress({
+        step: 'Final enrichment save',
+        detail: 'Saving discovered emails and moving reachable partners into the contact queue.',
+        percent: 92,
+        runId: run.id,
+      });
       const secondPass = await savePartnerCandidates(candidates, { city, country });
       const totalCreated = firstPass.saved + secondPass.saved;
       const totalUpdated = firstPass.updated + secondPass.updated;
+      setSearchProgress({
+        step: 'Partner search complete',
+        detail: `Saved ${totalCreated} new partners and updated ${totalUpdated}.`,
+        percent: 100,
+        runId: run.id,
+      });
       toast.success(`Saved ${totalCreated} new partners and updated ${totalUpdated} existing prospects`);
       setActiveTab('contact');
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Partner Finder failed');
+      const message = error instanceof Error ? error.message : 'Partner Finder failed';
+      setSearchProgress(prev => ({
+        step: 'Partner search stopped',
+        detail: message,
+        percent: prev?.percent || 0,
+        runId: prev?.runId,
+        error: message,
+      }));
+      toast.error(message);
     } finally {
       setRunning(false);
     }
@@ -383,6 +444,41 @@ export default function PartnerAcquisitionPage() {
                     {emailScraping ? 'Finding emails...' : 'Find emails for saved partners'}
                   </Button>
                 </div>
+                {searchProgress && (
+                  <div className={cn(
+                    'mt-4 rounded-md border p-4',
+                    searchProgress.error
+                      ? 'border-red-500/30 bg-red-500/10'
+                      : searchProgress.percent >= 100
+                        ? 'border-emerald-500/30 bg-emerald-500/10'
+                        : 'border-border bg-background/50',
+                  )}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{searchProgress.step}</div>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{searchProgress.detail}</p>
+                        {searchProgress.runId && (
+                          <a
+                            href={`/finder/runs/${searchProgress.runId}`}
+                            className="mt-2 inline-flex text-xs font-medium text-primary hover:underline"
+                          >
+                            Open finder run history
+                          </a>
+                        )}
+                      </div>
+                      <div className="text-sm font-semibold text-foreground">{searchProgress.percent}%</div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all duration-500',
+                          searchProgress.error ? 'bg-red-500' : 'bg-primary',
+                        )}
+                        style={{ width: `${Math.max(4, searchProgress.percent)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="rounded-md border border-border bg-background/40 p-4">
                 <div className="text-sm font-medium text-foreground">What this search saves</div>
