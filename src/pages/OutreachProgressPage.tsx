@@ -195,6 +195,9 @@ export default function OutreachProgressPage() {
     try {
       const keys = [
         'gmail_autosend_daily',
+        'gmail_autosend_daily_se',
+        'gmail_autosend_daily_uk',
+        'gmail_autosend_daily_es',
         'ai_calls_daily_connected_cap',
         'ai_calls_daily',
         'ai_calls_start_hour',
@@ -206,7 +209,10 @@ export default function OutreachProgressPage() {
       const values = await Promise.all(keys.map(key => getSetting(key)));
       const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
       const nextSettings: Settings = {
-        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 100),
+        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 200),
+        gmailDailySe: intValue(cfg.gmail_autosend_daily_se, DEFAULT_SETTINGS.gmailDailySe, 0, 200),
+        gmailDailyUk: intValue(cfg.gmail_autosend_daily_uk, DEFAULT_SETTINGS.gmailDailyUk, 0, 200),
+        gmailDailyEs: intValue(cfg.gmail_autosend_daily_es, DEFAULT_SETTINGS.gmailDailyEs, 0, 200),
         callDaily: intValue(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily, DEFAULT_SETTINGS.callDaily, 1, 100),
         startHour: intValue(cfg.ai_calls_start_hour, DEFAULT_SETTINGS.startHour, 0, 23),
         startMinute: intValue(cfg.ai_calls_start_minute, DEFAULT_SETTINGS.startMinute, 0, 59),
