@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { Lead } from '@/lib/supabase';
-import { AlertCircle, Bot, Clock, FileText, Phone, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, Clock, FileText, Phone, RefreshCw, Search, SlidersHorizontal, Target, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 const statusTone: Record<string, string> = {
   Calling: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+  Answered: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400',
   'Demo requested': 'border-green-500/30 bg-green-500/10 text-green-400',
   'Meeting requested': 'border-green-500/30 bg-green-500/10 text-green-400',
   Interested: 'border-green-500/30 bg-green-500/10 text-green-400',
@@ -21,11 +22,14 @@ const statusTone: Record<string, string> = {
 
 const statusGroups = [
   { key: 'all', label: 'All' },
-  { key: 'interested', label: 'Interested' },
   { key: 'demo', label: 'Demo / meeting' },
+  { key: 'interested', label: 'Interested' },
+  { key: 'answered', label: 'Answered review' },
   { key: 'not_interested', label: 'Not interested' },
+  { key: 'do_not_contact', label: 'Do not contact' },
   { key: 'no_answer', label: 'No answer' },
-  { key: 'needs_review', label: 'Needs review' },
+  { key: 'error', label: 'Failed / error' },
+  { key: 'active', label: 'Active now' },
   { key: 'summary', label: 'Has summary' },
 ] as const;
 
@@ -39,7 +43,7 @@ function dateLabel(value?: string | null) {
 
 function hasAiCallResult(lead: Lead) {
   return (
-    !!(lead.retell_call_id || lead.last_called_at || lead.call_summary || lead.call_transcript)
+    !!(lead.retell_call_id || lead.last_called_at || lead.last_call_attempt_at || lead.call_summary || lead.call_transcript)
     || (!!lead.call_status && lead.call_status !== 'New')
   );
 }
@@ -50,13 +54,18 @@ function normalizedStatus(lead: Lead) {
 
 function statusBucket(lead: Lead): StatusGroup {
   const status = normalizedStatus(lead).toLowerCase();
+  const leadStatus = String(lead.status || '').toLowerCase();
+  if (status.includes('do not contact') || lead.outreach_state === 'do_not_contact' || lead.do_not_contact) return 'do_not_contact';
+  if (status.includes('not interested') || leadStatus === 'not_interested') return 'not_interested';
   if (status.includes('demo') || status.includes('meeting')) return 'demo';
-  if (status.includes('interested')) return 'interested';
-  if (status.includes('not interested')) return 'not_interested';
+  if (leadStatus === 'demo' || leadStatus === 'making_demo') return 'demo';
+  if (status.includes('interested') || leadStatus === 'interested' || leadStatus === 'callback') return 'interested';
+  if (status.includes('answered') || leadStatus === 'answered') return 'answered';
   if (status.includes('no answer') || status.includes('voicemail') || status.includes('busy')) return 'no_answer';
-  if (status.includes('calling') || status.includes('error') || status === 'new') return 'needs_review';
+  if (status.includes('error') || status.includes('failed')) return 'error';
+  if (status.includes('calling')) return 'active';
   if (lead.call_summary) return 'summary';
-  return 'needs_review';
+  return 'answered';
 }
 
 function statusGroupLabel(key: StatusGroup) {
@@ -78,9 +87,10 @@ export default function CallListPage() {
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
 
   const totalWithSummary = leads.filter((lead) => !!lead.call_summary).length;
-  const totalInterested = leads.filter((lead) => ['Interested', 'Demo requested', 'Meeting requested'].includes(lead.call_status || '')).length;
-  const totalNeedsReview = leads.filter((lead) => ['Calling', 'No answer', 'Error'].includes(lead.call_status || '')).length;
+  const totalInterested = leads.filter((lead) => ['interested', 'demo'].includes(statusBucket(lead))).length;
+  const totalNeedsReview = leads.filter((lead) => ['answered', 'summary'].includes(statusBucket(lead))).length;
   const totalNoAnswer = leads.filter((lead) => statusBucket(lead) === 'no_answer').length;
+  const totalBadFit = leads.filter((lead) => ['not_interested', 'do_not_contact'].includes(statusBucket(lead))).length;
 
   const load = async () => {
     toast.dismiss();
@@ -162,7 +172,7 @@ export default function CallListPage() {
   }, [leads, query, sortMode, statusFilter]);
 
   const groupedLeads = useMemo(() => {
-    const order: StatusGroup[] = ['demo', 'interested', 'needs_review', 'no_answer', 'not_interested', 'summary'];
+    const order: StatusGroup[] = ['demo', 'interested', 'answered', 'summary', 'active', 'no_answer', 'not_interested', 'do_not_contact', 'error'];
     const groups = new Map<StatusGroup, Lead[]>();
     for (const lead of filteredLeads) {
       const key = statusFilter === 'all' ? statusBucket(lead) : statusFilter;
@@ -198,24 +208,29 @@ export default function CallListPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4 mb-4">
+        <div className="grid gap-3 md:grid-cols-5 mb-4">
           <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
             <div className="text-xs text-muted-foreground">AI calls</div>
             <div className="mt-1 text-2xl font-semibold text-foreground">{leads.length}</div>
           </div>
           <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
-            <div className="text-xs text-muted-foreground">With summary</div>
-            <div className="mt-1 text-2xl font-semibold text-foreground">{totalWithSummary}</div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><Target size={12} /> Interested/demo</div>
+            <div className="mt-1 text-2xl font-semibold text-green-400">{totalInterested}</div>
           </div>
           <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
-            <div className="text-xs text-muted-foreground">Needs review</div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><CheckCircle2 size={12} /> Review answered</div>
             <div className="mt-1 text-2xl font-semibold text-foreground">{totalNeedsReview}</div>
-            {totalInterested > 0 && <div className="mt-1 text-xs text-primary">{totalInterested} interested</div>}
+            <div className="mt-1 text-xs text-muted-foreground">{totalWithSummary} with summaries</div>
           </div>
           <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
             <div className="text-xs text-muted-foreground">No answer</div>
             <div className="mt-1 text-2xl font-semibold text-foreground">{totalNoAnswer}</div>
             <div className="mt-1 text-xs text-muted-foreground">Separated from connected calls</div>
+          </div>
+          <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><XCircle size={12} /> Not a fit</div>
+            <div className="mt-1 text-2xl font-semibold text-red-400">{totalBadFit}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Not interested / DNC</div>
           </div>
         </div>
 

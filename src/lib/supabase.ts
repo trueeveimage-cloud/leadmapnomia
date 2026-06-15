@@ -90,6 +90,7 @@ export interface Lead {
   lead_score?: number | null;
   call_status?: string | null;
   last_called_at?: string | null;
+  last_call_attempt_at?: string | null;
   retell_call_id?: string | null;
   retell_agent_id?: string | null;
   call_outcome?: string | null;
