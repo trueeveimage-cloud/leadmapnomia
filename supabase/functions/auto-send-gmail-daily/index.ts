@@ -259,6 +259,9 @@ Deno.serve(async (req) => {
     const keys = [
       'gmail_autosend_enabled',
       'gmail_autosend_daily',
+      'gmail_autosend_daily_se',
+      'gmail_autosend_daily_uk',
+      'gmail_autosend_daily_es',
       'gmail_autosend_subject',
       'gmail_autosend_body',
       'gmail_autosend_subject_sv',
