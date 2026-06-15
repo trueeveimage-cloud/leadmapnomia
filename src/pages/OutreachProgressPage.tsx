@@ -488,6 +488,18 @@ function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function CountryCap({ flag, label, cap, note }: { flag: string; label: string; cap: number; note: string }) {
+  return (
+    <div className="rounded-md border border-border bg-background/60 p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-lg">{flag}</span>
+        <div className="font-semibold text-foreground">{label}</div>
+        <Badge variant="outline" className="ml-auto">{cap}/day</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{note}</p>
+    </div>
+  );
+
 function ProgressLine({ label, value, target, percent }: { label: string; value: number; target: number; percent: number }) {
   return (
     <div>
