@@ -45,6 +45,9 @@ type DayStats = {
 
 type Settings = {
   gmailDaily: number;
+  gmailDailySe: number;
+  gmailDailyUk: number;
+  gmailDailyEs: number;
   callDaily: number;
   startHour: number;
   startMinute: number;
@@ -54,7 +57,10 @@ type Settings = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  gmailDaily: DEFAULT_GMAIL_DAILY,
+  gmailDaily: 120,
+  gmailDailySe: 100,
+  gmailDailyUk: 10,
+  gmailDailyEs: 10,
   callDaily: DEFAULT_CONNECTED_CALL_DAILY,
   startHour: DEFAULT_OUTREACH_START_HOUR,
   startMinute: DEFAULT_OUTREACH_START_MINUTE,
