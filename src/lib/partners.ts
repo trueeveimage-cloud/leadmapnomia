@@ -62,6 +62,13 @@ export type PartnerOutreachLog = {
   created_at: string;
 };
 
+export type SavePartnerCandidatesResult = {
+  saved: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+};
+
 export const PARTNER_SEARCH_PRESETS: Array<{
   type: PartnerType;
   label: string;
@@ -128,6 +135,23 @@ export function partnerTypeLabel(type: PartnerType | string) {
   return PARTNER_SEARCH_PRESETS.find(item => item.type === type)?.label || String(type).replace(/_/g, ' ');
 }
 
+function normalizeEmail(value?: string | null) {
+  return String(value || '').trim().toLowerCase() || null;
+}
+
+function normalizeWebsite(value?: string | null) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return null;
+  return raw
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/+$/, '');
+}
+
+function normalizeName(value?: string | null) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ') || null;
+}
+
 export function classifyPartner(candidate: Partial<FinderCandidate>, fallback?: PartnerType): { type: PartnerType; score: number; reason: string } {
   const text = [candidate.name, candidate.category, candidate.website, candidate.address].filter(Boolean).join(' ').toLowerCase();
   const signals: Array<[PartnerType, string[], string]> = [
@@ -165,26 +189,55 @@ export async function fetchPartnerLogs(): Promise<PartnerOutreachLog[]> {
 }
 
 export async function upsertPartnerProspect(input: Partial<PartnerProspect>) {
+  const normalizedEmail = normalizeEmail(input.email);
+  const normalizedWebsite = normalizeWebsite(input.website);
+  const normalizedName = normalizeName(input.name);
+  const normalizedCity = normalizeName(input.city);
   const payload = {
     ...input,
+    email: normalizedEmail,
+    website: normalizedWebsite,
     updated_at: new Date().toISOString(),
   };
   const sb = supabase as any;
   let existing: PartnerProspect | null = null;
-  if (input.email) {
-    const { data } = await sb.from('partner_prospects').select('*').ilike('email', input.email).maybeSingle();
+  if (normalizedEmail) {
+    const { data } = await sb.from('partner_prospects').select('*').eq('email', normalizedEmail).maybeSingle();
     existing = data || null;
   }
-  if (!existing && input.website) {
-    const { data } = await sb.from('partner_prospects').select('*').ilike('website', input.website).maybeSingle();
+  if (!existing && normalizedWebsite) {
+    const { data } = await sb.from('partner_prospects').select('*').eq('website', normalizedWebsite).maybeSingle();
+    existing = data || null;
+  }
+  if (!existing && normalizedName && normalizedCity) {
+    const { data } = await sb
+      .from('partner_prospects')
+      .select('*')
+      .ilike('name', normalizedName)
+      .ilike('city', normalizedCity)
+      .maybeSingle();
     existing = data || null;
   }
   const query = existing
     ? sb.from('partner_prospects').update(payload).eq('id', existing.id).select().single()
     : sb.from('partner_prospects').insert(payload).select().single();
   const { data, error } = await query;
-  if (error) throw error;
-  return data as PartnerProspect;
+  if (error) {
+    const duplicateConflict = String(error.message || '').toLowerCase().includes('duplicate key');
+    if (!duplicateConflict) throw error;
+
+    const retry = normalizedEmail
+      ? await sb.from('partner_prospects').select('*').eq('email', normalizedEmail).maybeSingle()
+      : normalizedWebsite
+        ? await sb.from('partner_prospects').select('*').eq('website', normalizedWebsite).maybeSingle()
+        : await sb.from('partner_prospects').select('*').ilike('name', normalizedName || '').ilike('city', normalizedCity || '').maybeSingle();
+    const retryExisting = retry.data || null;
+    if (!retryExisting) throw error;
+    const second = await sb.from('partner_prospects').update(payload).eq('id', retryExisting.id).select().single();
+    if (second.error) throw second.error;
+    return { prospect: second.data as PartnerProspect, created: false };
+  }
+  return { prospect: data as PartnerProspect, created: !existing };
 }
 
 export async function updatePartnerProspect(id: string, patch: Partial<PartnerProspect>) {
@@ -202,28 +255,36 @@ export async function savePartnerCandidates(
   candidates: FinderCandidate[],
   input: { city: string; country: string; fallbackType?: PartnerType },
 ) {
-  let saved = 0;
+  const result: SavePartnerCandidatesResult = { saved: 0, updated: 0, skipped: 0, errors: 0 };
   for (const candidate of candidates) {
-    if (!candidate.website && !candidate.email && !candidate.phone) continue;
+    if (!candidate.website && !candidate.email && !candidate.phone) {
+      result.skipped += 1;
+      continue;
+    }
     const fit = classifyPartner(candidate, input.fallbackType);
-    await upsertPartnerProspect({
-      name: candidate.name,
-      website: candidate.website,
-      email: candidate.email,
-      phone: candidate.phone,
-      country: input.country,
-      city: input.city,
-      address: candidate.address,
-      partner_type: fit.type,
-      status: candidate.email ? 'ready_to_contact' : 'researching',
-      fit_score: fit.score,
-      fit_reason: fit.reason,
-      source_url: candidate.maps_url,
-      source: 'partner_finder',
-    });
-    saved++;
+    try {
+      const upserted = await upsertPartnerProspect({
+        name: candidate.name,
+        website: candidate.website,
+        email: candidate.email,
+        phone: candidate.phone,
+        country: input.country,
+        city: input.city,
+        address: candidate.address,
+        partner_type: fit.type,
+        status: candidate.email ? 'ready_to_contact' : 'researching',
+        fit_score: fit.score,
+        fit_reason: fit.reason,
+        source_url: candidate.maps_url,
+        source: 'partner_finder',
+      });
+      if (upserted.created) result.saved += 1;
+      else result.updated += 1;
+    } catch {
+      result.errors += 1;
+    }
   }
-  return saved;
+  return result;
 }
 
 export function buildPartnerEmail(prospect: PartnerProspect) {

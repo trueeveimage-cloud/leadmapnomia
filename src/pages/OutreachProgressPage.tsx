@@ -208,6 +208,11 @@ export default function OutreachProgressPage() {
     ? days.reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0)
     : Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs) * Math.max(1, weekDays.length);
   const callTarget = settings.callDaily * Math.max(1, weekDays.length);
+  const elapsedDays = Math.max(1, days.filter(day => now >= new Date(`${day.dateKey}T00:00:00`)).length);
+  const elapsedEmailTarget = days
+    .slice(0, elapsedDays)
+    .reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0) || Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
+  const elapsedCallTarget = settings.callDaily * elapsedDays;
   const monday = days.find(day => day.dateKey === weekDays[0]?.dateKey);
   const tuesday = days.find(day => day.dateKey === weekDays[1]?.dateKey);
   const normalEmailTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
@@ -387,8 +392,8 @@ export default function OutreachProgressPage() {
               This timer tracks the next automation checkpoint. Calls remain one-by-one, Gmail keeps the daily cap, and both channels follow the same niche for that day.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <Metric icon={<Mail size={15} />} label="Week Gmail" value={`${report.totals.gmailSent} / ${emailTarget}`} />
-              <Metric icon={<Bot size={15} />} label="Connected calls" value={`${report.totals.aiConnected} / ${callTarget}`} />
+              <Metric icon={<Mail size={15} />} label="Gmail so far" value={`${report.totals.gmailSent} / ${elapsedEmailTarget}`} />
+              <Metric icon={<Bot size={15} />} label="Connected so far" value={`${report.totals.aiConnected} / ${elapsedCallTarget}`} />
               <Metric icon={<Activity size={15} />} label="Week completion" value={`${Math.min(100, report.completion)}%`} />
             </div>
           </div>

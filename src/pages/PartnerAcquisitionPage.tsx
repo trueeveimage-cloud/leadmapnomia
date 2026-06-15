@@ -16,6 +16,7 @@ import {
   PARTNER_SEARCH_PRESETS,
   PARTNER_STATUSES,
   PartnerProspect,
+  PartnerOutreachLog,
   PartnerStatus,
   PartnerType,
   savePartnerCandidates,
@@ -53,13 +54,16 @@ function statusLabel(status: string) {
 }
 
 export default function PartnerAcquisitionPage() {
+  const [activeTab, setActiveTab] = useState<'search' | 'contact'>('search');
   const [country, setCountry] = useState<Country>('SE');
   const [city, setCity] = useState('Stockholm');
   const [selectedTypes, setSelectedTypes] = useState<PartnerType[]>(PARTNER_SEARCH_PRESETS.map(item => item.type));
   const [prospects, setProspects] = useState<PartnerProspect[]>([]);
+  const [logs, setLogs] = useState<PartnerOutreachLog[]>([]);
   const [logCount, setLogCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [emailScraping, setEmailScraping] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<'all' | PartnerStatus>('all');
@@ -69,9 +73,10 @@ export default function PartnerAcquisitionPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [nextProspects, logs] = await Promise.all([fetchPartnerProspects(), fetchPartnerLogs()]);
+      const [nextProspects, nextLogs] = await Promise.all([fetchPartnerProspects(), fetchPartnerLogs()]);
       setProspects(nextProspects);
-      setLogCount(logs.filter(log => log.status === 'sent').length);
+      setLogs(nextLogs);
+      setLogCount(nextLogs.filter(log => log.status === 'sent').length);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load partners');
     } finally {
@@ -148,9 +153,13 @@ export default function PartnerAcquisitionPage() {
         requirePhone: false,
       });
       let candidates = await fetchFinderCandidates(run.id);
+      const firstPass = await savePartnerCandidates(candidates, { city, country });
       candidates = await scrapePartnerEmails(candidates);
-      const saved = await savePartnerCandidates(candidates, { city, country });
-      toast.success(`Partner Finder saved ${saved} partner prospect${saved === 1 ? '' : 's'}`);
+      const secondPass = await savePartnerCandidates(candidates, { city, country });
+      const totalCreated = firstPass.saved + secondPass.saved;
+      const totalUpdated = firstPass.updated + secondPass.updated;
+      toast.success(`Saved ${totalCreated} new partners and updated ${totalUpdated} existing prospects`);
+      setActiveTab('contact');
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Partner Finder failed');
@@ -183,6 +192,46 @@ export default function PartnerAcquisitionPage() {
       }
     }
     return candidates;
+  };
+
+  const scrapeSavedPartnerEmails = async () => {
+    const targets = visible.filter(prospect => prospect.website && !prospect.email).slice(0, 24);
+    if (!targets.length) {
+      toast.message('No saved partner websites need email scraping');
+      return;
+    }
+    setEmailScraping(true);
+    try {
+      let found = 0;
+      for (let i = 0; i < targets.length; i += 4) {
+        const slice = targets.slice(i, i + 4);
+        const { data, error } = await supabase.functions.invoke('scrape-emails', {
+          body: {
+            urls: slice.map(prospect => ({
+              leadId: prospect.id,
+              website: prospect.website,
+              businessName: prospect.name,
+            })),
+          },
+        });
+        if (error) throw error;
+        for (const result of data?.results || []) {
+          const email = result?.email || result?.emails?.[0];
+          if (!email) continue;
+          found += 1;
+          await updatePartnerProspect(result.leadId, {
+            email,
+            status: 'ready_to_contact',
+          });
+        }
+      }
+      toast.success(found ? `Found ${found} new partner email${found === 1 ? '' : 's'}` : 'No public partner emails found');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Partner email scrape failed');
+    } finally {
+      setEmailScraping(false);
+    }
   };
 
   const sendPartnerEmail = async (prospect: PartnerProspect) => {
@@ -246,98 +295,163 @@ export default function PartnerAcquisitionPage() {
           <Metric icon={<Users size={15} />} label="Prospects" value={prospects.length} />
           <Metric icon={<Mail size={15} />} label="Ready" value={metrics.ready} />
           <Metric icon={<Send size={15} />} label="Sent" value={logCount} />
+          <Metric icon={<Mail size={15} />} label="Replied" value={metrics.replied} tone="good" />
           <Metric icon={<CheckCircle2 size={15} />} label="Partner calls" value={metrics.calls} tone="good" />
           <Metric icon={<ShieldCheck size={15} />} label="Qualified" value={metrics.qualified} tone="good" />
         </section>
 
         <section className="mb-5 rounded-lg border border-border bg-card p-4">
-          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-            <div>
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-                <Search size={16} className="text-primary" /> Partner Finder
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs text-muted-foreground">
-                  Country
-                  <select
-                    value={country}
-                    onChange={event => setCountry(event.target.value as Country)}
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                  >
-                    {COUNTRIES.map(item => <option key={item} value={item}>{COUNTRY_LABELS[item]}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  City
-                  <select
-                    value={city}
-                    onChange={event => setCity(event.target.value)}
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                  >
-                    {cities.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {PARTNER_SEARCH_PRESETS.map(item => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => toggleType(item.type)}
-                    className={cn(
-                      'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                      selectedTypes.includes(item.type)
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-background text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <Button onClick={runPartnerFinder} disabled={running} className="mt-4 gap-2">
-                {running ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                {running ? 'Searching partners...' : 'Run partner search'}
-              </Button>
-            </div>
-            <div className="rounded-md border border-border bg-background/40 p-4">
-              <div className="text-sm font-medium text-foreground">Partner pitch default</div>
-              <Textarea
-                readOnly
-                value={buildPartnerEmail({
-                  id: 'preview',
-                  name: 'Partner Company',
-                  website: null,
-                  email: null,
-                  phone: null,
-                  country,
-                  city,
-                  address: null,
-                  partner_type: 'telecom',
-                  status: 'ready_to_contact',
-                  fit_score: 70,
-                  fit_reason: null,
-                  source_url: null,
-                  source: 'preview',
-                  notes: null,
-                  do_not_contact: false,
-                  last_contacted_at: null,
-                  last_reply_at: null,
-                  created_at: '',
-                  updated_at: '',
-                }).body}
-                className="mt-3 min-h-48 resize-none font-mono text-xs"
-              />
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('search')}
+              className={cn(
+                'rounded-full border px-4 py-2 text-sm transition-colors',
+                activeTab === 'search'
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Search partners
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('contact')}
+              className={cn(
+                'rounded-full border px-4 py-2 text-sm transition-colors',
+                activeTab === 'contact'
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Contact partners
+            </button>
           </div>
+
+          {activeTab === 'search' ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+              <div>
+                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Search size={16} className="text-primary" /> Search for partner prospects
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs text-muted-foreground">
+                    Country
+                    <select
+                      value={country}
+                      onChange={event => setCountry(event.target.value as Country)}
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    >
+                      {COUNTRIES.map(item => <option key={item} value={item}>{COUNTRY_LABELS[item]}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs text-muted-foreground">
+                    City
+                    <select
+                      value={city}
+                      onChange={event => setCity(event.target.value)}
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    >
+                      {cities.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {PARTNER_SEARCH_PRESETS.map(item => (
+                    <button
+                      key={item.type}
+                      type="button"
+                      onClick={() => toggleType(item.type)}
+                      className={cn(
+                        'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                        selectedTypes.includes(item.type)
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button onClick={runPartnerFinder} disabled={running} className="gap-2">
+                    {running ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                    {running ? 'Searching partners...' : 'Run partner search'}
+                  </Button>
+                  <Button variant="outline" onClick={scrapeSavedPartnerEmails} disabled={emailScraping} className="gap-2">
+                    {emailScraping ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                    {emailScraping ? 'Finding emails...' : 'Find emails for saved partners'}
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-background/40 p-4">
+                <div className="text-sm font-medium text-foreground">What this search saves</div>
+                <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">Company name, website, phone, city, country and partner type</div>
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">Emails get scraped after the search and moved into the contact queue</div>
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">Saved prospects stay separate from customer leads, AI calls and Gmail rotation</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
+              <div className="rounded-md border border-border bg-background/40 p-4">
+                <div className="text-sm font-medium text-foreground">Partner pitch default</div>
+                <Textarea
+                  readOnly
+                  value={buildPartnerEmail({
+                    id: 'preview',
+                    name: 'Partner Company',
+                    website: null,
+                    email: null,
+                    phone: null,
+                    country,
+                    city,
+                    address: null,
+                    partner_type: 'telecom',
+                    status: 'ready_to_contact',
+                    fit_score: 70,
+                    fit_reason: null,
+                    source_url: null,
+                    source: 'preview',
+                    notes: null,
+                    do_not_contact: false,
+                    last_contacted_at: null,
+                    last_reply_at: null,
+                    created_at: '',
+                    updated_at: '',
+                  }).body}
+                  className="mt-3 min-h-48 resize-none font-mono text-xs"
+                />
+              </div>
+              <div className="rounded-md border border-border bg-background/40 p-4">
+                <div className="text-sm font-medium text-foreground">Recent partner outreach</div>
+                <div className="mt-3 space-y-2">
+                  {logs.slice(0, 6).map(log => (
+                    <div key={log.id} className="rounded-md border border-border bg-card/60 px-3 py-2">
+                      <div className="text-xs font-medium text-foreground">{log.subject || log.status}</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {log.to_email || 'No recipient'} • {new Date(log.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                  {!logs.length && <div className="text-xs text-muted-foreground">No partner messages logged yet.</div>}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="rounded-lg border border-border bg-card">
           <div className="border-b border-border p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="font-semibold text-foreground">Partner pipeline</h2>
-                <p className="text-sm text-muted-foreground">Separate from customer leads, AI calls and normal Gmail automation.</p>
+                <h2 className="font-semibold text-foreground">{activeTab === 'search' ? 'Saved partner prospects' : 'Partner pipeline'}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {activeTab === 'search'
+                    ? 'Freshly found prospects land here after each run, before you move them into outreach.'
+                    : 'Separate from customer leads, AI calls and normal Gmail automation.'}
+                </p>
               </div>
               <Input
                 value={query}
@@ -375,7 +489,7 @@ export default function PartnerAcquisitionPage() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {visible.map(prospect => (
+              {(activeTab === 'search' ? visible.slice(0, 12) : visible).map(prospect => (
                 <div key={prospect.id} className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_220px_210px]">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -419,22 +533,35 @@ export default function PartnerAcquisitionPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Button
-                      size="sm"
-                      className="gap-2"
-                      disabled={!prospect.email || sendingId === prospect.id || prospect.do_not_contact}
-                      onClick={() => sendPartnerEmail(prospect)}
-                    >
-                      {sendingId === prospect.id ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                      Send partner email
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setStatus(prospect, 'partner_call_booked')}
-                    >
-                      Mark call booked
-                    </Button>
+                    {activeTab === 'contact' ? (
+                      <>
+                        <Button
+                          size="sm"
+                          className="gap-2"
+                          disabled={!prospect.email || sendingId === prospect.id || prospect.do_not_contact}
+                          onClick={() => sendPartnerEmail(prospect)}
+                        >
+                          {sendingId === prospect.id ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                          Send partner email
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setStatus(prospect, 'partner_call_booked')}
+                        >
+                          Mark call booked
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={activeTab !== 'search'}
+                        onClick={() => setActiveTab('contact')}
+                      >
+                        Move to contact tab
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
