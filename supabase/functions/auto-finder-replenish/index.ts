@@ -103,13 +103,15 @@ Deno.serve(async (req) => {
     const batchLabel = `auto-replenish-${nextCountry}-${trigger}`;
     const { data: run, error: runErr } = await supabase.from('finder_runs').insert({
       city,
-      mode: 'gmail',
+      mode: requirePhone ? 'call' : 'gmail',
       keywords,
       radius,
       max_pages: maxPages,
       max_candidates: maxCandidates,
       max_details: maxDetails,
-      require_phone: false,
+      min_rating: minRating,
+      min_reviews: minReviews,
+      require_phone: requirePhone,
       status: 'pending',
       stats: {},
       batch_label: batchLabel,
@@ -118,7 +120,7 @@ Deno.serve(async (req) => {
 
     // Fire-and-forget invocation of finder-search so this function returns quickly.
     const url = `${supabaseUrl}/functions/v1/finder-search`;
-    const payload = {
+    const payload: Record<string, unknown> = {
       runId: (run as any).id,
       city,
       keywords,
@@ -126,10 +128,13 @@ Deno.serve(async (req) => {
       maxPages,
       maxCandidates,
       maxDetails,
-      requirePhone: false,
+      requirePhone,
       findGmailOnly,
       action: 'search',
     };
+    if (minRating !== null) payload.minRating = minRating;
+    if (minReviews !== null) payload.minReviews = minReviews;
+    if (maxReviews !== null) payload.maxReviews = maxReviews;
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${serviceKey}`,
