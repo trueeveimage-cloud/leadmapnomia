@@ -45,6 +45,9 @@ type DayStats = {
 
 type Settings = {
   gmailDaily: number;
+  gmailDailySe: number;
+  gmailDailyUk: number;
+  gmailDailyEs: number;
   callDaily: number;
   startHour: number;
   startMinute: number;
@@ -54,7 +57,10 @@ type Settings = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  gmailDaily: DEFAULT_GMAIL_DAILY,
+  gmailDaily: 120,
+  gmailDailySe: 100,
+  gmailDailyUk: 10,
+  gmailDailyEs: 10,
   callDaily: DEFAULT_CONNECTED_CALL_DAILY,
   startHour: DEFAULT_OUTREACH_START_HOUR,
   startMinute: DEFAULT_OUTREACH_START_MINUTE,
@@ -189,6 +195,9 @@ export default function OutreachProgressPage() {
     try {
       const keys = [
         'gmail_autosend_daily',
+        'gmail_autosend_daily_se',
+        'gmail_autosend_daily_uk',
+        'gmail_autosend_daily_es',
         'ai_calls_daily_connected_cap',
         'ai_calls_daily',
         'ai_calls_start_hour',
@@ -200,7 +209,10 @@ export default function OutreachProgressPage() {
       const values = await Promise.all(keys.map(key => getSetting(key)));
       const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
       const nextSettings: Settings = {
-        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 100),
+        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 200),
+        gmailDailySe: intValue(cfg.gmail_autosend_daily_se, DEFAULT_SETTINGS.gmailDailySe, 0, 200),
+        gmailDailyUk: intValue(cfg.gmail_autosend_daily_uk, DEFAULT_SETTINGS.gmailDailyUk, 0, 200),
+        gmailDailyEs: intValue(cfg.gmail_autosend_daily_es, DEFAULT_SETTINGS.gmailDailyEs, 0, 200),
         callDaily: intValue(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily, DEFAULT_SETTINGS.callDaily, 1, 100),
         startHour: intValue(cfg.ai_calls_start_hour, DEFAULT_SETTINGS.startHour, 0, 23),
         startMinute: intValue(cfg.ai_calls_start_minute, DEFAULT_SETTINGS.startMinute, 0, 59),
@@ -358,6 +370,22 @@ export default function OutreachProgressPage() {
 
         <section className="mt-5 rounded-lg border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
+            <Mail size={17} className="text-primary" />
+            <h2 className="font-semibold text-foreground">Daily email split by country</h2>
+            <Badge variant="secondary" className="ml-auto">Total {settings.gmailDaily}/day</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <CountryCap code="SE" label="Sweden" cap={settings.gmailDailySe} note="Main market — SE leads first" />
+            <CountryCap code="UK" label="United Kingdom" cap={settings.gmailDailyUk} note="Test batch — English template" />
+            <CountryCap code="ES" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Plus {settings.callDaily} connected AI calls/day (Sweden). UK/ES slots fill automatically once leads from those countries are imported.
+          </p>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center gap-2">
             <CalendarDays size={17} className="text-primary" />
             <h2 className="font-semibold text-foreground">Five-day plan</h2>
           </div>
@@ -459,6 +487,21 @@ function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
+
+function CountryCap({ code, label, cap, note }: { code: string; label: string; cap: number; note: string }) {
+  return (
+    <div className="rounded-md border border-border bg-background/60 p-3">
+      <div className="flex items-center gap-2">
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-foreground">{code}</span>
+        <div className="font-semibold text-foreground">{label}</div>
+        <Badge variant="outline" className="ml-auto">{cap}/day</Badge>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{note}</p>
+    </div>
+  );
+}
+
+
 
 function ProgressLine({ label, value, target, percent }: { label: string; value: number; target: number; percent: number }) {
   return (
