@@ -375,9 +375,9 @@ export default function OutreachProgressPage() {
             <Badge variant="secondary" className="ml-auto">Total {settings.gmailDaily}/day</Badge>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <CountryCap flag="🇸🇪" label="Sweden" cap={settings.gmailDailySe} note="Main market — SE leads first" />
-            <CountryCap flag="🇬🇧" label="United Kingdom" cap={settings.gmailDailyUk} note="Test batch — English template" />
-            <CountryCap flag="🇪🇸" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
+            <CountryCap code="SE" label="Sweden" cap={settings.gmailDailySe} note="Main market — SE leads first" />
+            <CountryCap code="UK" label="United Kingdom" cap={settings.gmailDailyUk} note="Test batch — English template" />
+            <CountryCap code="ES" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Plus {settings.callDaily} connected AI calls/day (Sweden). UK/ES slots fill automatically once leads from those countries are imported.
