@@ -499,6 +499,8 @@ export default function LaunchReadinessPanel({ compact = false }: { compact?: bo
 
   useEffect(() => {
     refresh();
+    const intervalId = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(intervalId);
   }, [refresh]);
 
   const overall = useMemo<ReadinessStatus>(() => {

@@ -662,6 +662,8 @@ export default function AutomationPage() {
 
   useEffect(() => {
     refresh();
+    const intervalId = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   const update = <K extends keyof AutomationSettings>(key: K, value: AutomationSettings[K]) => {

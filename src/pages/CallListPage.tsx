@@ -81,7 +81,11 @@ export default function CallListPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const intervalId = window.setInterval(load, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   return (
     <AppLayout>
