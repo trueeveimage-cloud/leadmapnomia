@@ -90,10 +90,14 @@ Deno.serve(async (req) => {
       : pickKeywords(nextCountry, 4);
 
     const findGmailOnly = body?.findGmailOnly !== false; // default true
-    const maxPages = 1;
-    const maxCandidates = 30;
-    const maxDetails = 30;
-    const radius = 15000;
+    const maxPages = Math.max(1, Math.min(5, Number(body?.maxPages) || 1));
+    const maxCandidates = Math.max(10, Math.min(2000, Number(body?.maxCandidates) || 30));
+    const maxDetails = Math.max(10, Math.min(2000, Number(body?.maxDetails) || 30));
+    const radius = Math.max(1000, Math.min(30000, Number(body?.radius) || 15000));
+    const requirePhone = body?.requirePhone === true;
+    const minRating = Number.isFinite(Number(body?.minRating)) ? Number(body.minRating) : null;
+    const minReviews = Number.isFinite(Number(body?.minReviews)) ? Number(body.minReviews) : null;
+    const maxReviews = Number.isFinite(Number(body?.maxReviews)) ? Number(body.maxReviews) : null;
 
     // Create finder_runs row
     const batchLabel = `auto-replenish-${nextCountry}-${trigger}`;
