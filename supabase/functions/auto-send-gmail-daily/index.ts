@@ -13,6 +13,7 @@ const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const CRON_INTERVAL_MINUTES = 5;
+const DEFAULT_EMAIL_SUPPLY_MIN = 120;
 const DEFAULT_SUBJECTS: Record<string, string> = {
   sv: 'En snabb fråga om missade samtal hos {{business_name}}',
   en: 'Quick question about missed calls at {{business_name}}',
@@ -236,6 +237,14 @@ function utcDayOffset(from: Date, offset: number) {
   return value;
 }
 
+function triggerAutoReplenish(supabaseUrl: string, serviceKey: string, body: Record<string, unknown>) {
+  fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 async function recordNotification(supabase: any, input: {
   type: string;
   title: string;
@@ -280,6 +289,7 @@ Deno.serve(async (req) => {
       'gmail_autosend_force',
       'gmail_autosend_delay_seconds',
       'gmail_autosend_batch_size',
+      'gmail_autosend_supply_min',
       'ai_calls_start_hour',
       'ai_calls_start_minute',
       'ai_calls_end_hour',
@@ -306,6 +316,7 @@ Deno.serve(async (req) => {
     const countryCapTotal = capSe + capUk + capEs;
     const daily = Math.max(1, Math.min(configuredDaily, countryCapTotal || configuredDaily));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
+    const supplyMin = Math.max(20, Math.min(1000, parseInt(cfg.gmail_autosend_supply_min || '') || DEFAULT_EMAIL_SUPPLY_MIN));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const startMinute = intSetting(cfg, 'ai_calls_start_minute', 0, 0, 59);
@@ -483,13 +494,21 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+    // Auto-replenish before the pool fully dries up, so tomorrow's batch has stock ready.
+    if (!force && eligible.length > 0 && eligible.length < supplyMin) {
+      triggerAutoReplenish(supabaseUrl, serviceKey, {
+        trigger: 'gmail_supply_low',
+        findGmailOnly: true,
+        country: 'SE',
+        maxCandidates: Math.max(60, supplyMin),
+        maxDetails: Math.max(60, supplyMin),
+        keywords: [nichePlan.selectedLabel || 'service business'],
+      });
+    }
+
     // Auto-replenish: when no emailable leads remain, kick off a finder search in the background.
     if (batch.length === 0) {
-      fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-        body: JSON.stringify({ trigger: 'gmail_empty', findGmailOnly: true }),
-      }).catch(() => {});
+      triggerAutoReplenish(supabaseUrl, serviceKey, { trigger: 'gmail_empty', findGmailOnly: true });
     }
 
     let sent = 0;
@@ -565,6 +584,7 @@ Deno.serve(async (req) => {
         topReasons: diagnostics?.topReasons,
         batchSize,
         configuredBatchSize,
+        supplyMin,
         catchUpBatchSize,
         slotsLeft,
         delaySeconds,
@@ -601,6 +621,7 @@ Deno.serve(async (req) => {
       diagnostics,
       batchSize,
       configuredBatchSize,
+      supplyMin,
       catchUpBatchSize,
       slotsLeft,
       delaySeconds,

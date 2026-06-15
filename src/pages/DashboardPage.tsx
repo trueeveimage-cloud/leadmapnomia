@@ -96,6 +96,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 export default function DashboardPage() {
   const { counts } = useCRM();
   const [msgStats, setMsgStats] = useState({ sent: 0, delivered: 0, failed: 0, undelivered: 0, inbound: 0, queued: 0 });
+  const [emailInterestStats, setEmailInterestStats] = useState({ sent: 0, replies: 0, interested: 0, demos: 0 });
   const [callStats, setCallStats] = useState<{ outcome: string; count: number }[]>([]);
   const [dailyActivity, setDailyActivity] = useState<{ date: string; gmails: number; callsSent: number; connected: number }[]>([]);
   const [countryLeads, setCountryLeads] = useState<Record<Country, { total: number; phone: number; email: number; smsOnly: number; callOnly: number; contacted: number; replied: number }>>({
@@ -155,6 +156,31 @@ export default function DashboardPage() {
         queued: queued.count || 0,
       });
     });
+
+    // Email outcome stats: sent volume, replies, and leads that became interested/demo after Gmail.
+    (async () => {
+      const [{ count: sent }, { count: replies }, emailedLeads] = await Promise.all([
+        supabase.from("message_logs").select("id", { count: "exact", head: true })
+          .eq("channel", "email").eq("direction", "outbound").eq("status", "sent"),
+        supabase.from("message_logs").select("id", { count: "exact", head: true })
+          .eq("channel", "email").eq("direction", "inbound"),
+        supabase
+          .from("leads")
+          .select("status, outreach_stage, last_contact_method, last_message_status")
+          .or("last_contact_method.eq.Email,outreach_stage.eq.email_sent,last_message_status.eq.sent")
+          .limit(5000),
+      ]);
+      const rows = emailedLeads.data || [];
+      const interested = rows.filter((lead: any) => {
+        const status = String(lead.status || "").toLowerCase();
+        return status.includes("interested") || status.includes("callback") || status.includes("demo") || status.includes("meeting");
+      }).length;
+      const demos = rows.filter((lead: any) => {
+        const status = String(lead.status || "").toLowerCase();
+        return status.includes("demo") || status.includes("meeting");
+      }).length;
+      setEmailInterestStats({ sent: sent || 0, replies: replies || 0, interested, demos });
+    })();
 
     // Fetch call outcomes
     supabase
@@ -359,6 +385,9 @@ export default function DashboardPage() {
   const replyRate = msgStats.sent > 0
     ? (msgStats.inbound / msgStats.sent * 100).toFixed(1)
     : "0";
+  const emailInterestRate = emailInterestStats.sent > 0
+    ? ((emailInterestStats.interested / emailInterestStats.sent) * 100).toFixed(1)
+    : "0";
   const realCallTotal = callStats.filter(item => !isNoAnswerOutcome(item.outcome)).reduce((sum, item) => sum + item.count, 0);
   const noAnswerTotal = callStats.filter(item => isNoAnswerOutcome(item.outcome)).reduce((sum, item) => sum + item.count, 0);
 
@@ -391,6 +420,8 @@ export default function DashboardPage() {
           <StatCard label="Conversion" value={`${conversionRate}%`} icon={<Target size={18} />} color={COLORS.green} sub={`${counts.interested + counts.demo + counts.making_demo + counts.closed_won} interested+`} />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="Email Interested" value={emailInterestStats.interested} icon={<Mail size={18} />} color={COLORS.green} sub={`${emailInterestRate}% of sent - ${emailInterestStats.demos} demo/meeting`} />
+          <StatCard label="Email Replies" value={emailInterestStats.replies} icon={<Mail size={18} />} color={COLORS.cyan} sub={`${emailInterestStats.sent.toLocaleString()} Gmail sent`} />
           <StatCard label="Delivered" value={msgStats.delivered} icon={<CheckCircle size={18} />} color={COLORS.green} sub={`${msgStats.undelivered} undelivered`} />
           <StatCard label="Connected Calls" value={realCallTotal} icon={<Phone size={18} />} color={COLORS.amber} sub={`${noAnswerTotal} no-answer attempts excluded`} />
           <StatCard label="Campaigns" value={campaignStats.total} icon={<Zap size={18} />} color={COLORS.purple} sub={`${campaignStats.running} active · ${campaignStats.totalRuns} runs`} />

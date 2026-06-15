@@ -12,6 +12,7 @@ const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const DEFAULT_ACTIVE_GUARD_MINUTES = 8;
 const DEFAULT_STALE_CALL_MINUTES = 35;
+const DEFAULT_CALL_SUPPLY_MIN = 30;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 
 type Settings = Record<string, string>;
@@ -22,6 +23,14 @@ function json(payload: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function triggerAutoReplenish(supabaseUrl: string, serviceKey: string, body: Record<string, unknown>) {
+  fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+    body: JSON.stringify(body),
+  }).catch(() => {});
 }
 
 function intSetting(settings: Settings, key: string, fallback: number, min: number, max: number) {
@@ -239,6 +248,7 @@ Deno.serve(async (req) => {
       'ai_calls_timezone',
       'ai_calls_active_guard_minutes',
       'ai_calls_stale_call_minutes',
+      'ai_calls_supply_min',
       'outreach_niche_rotation_enabled',
       'outreach_niche_rotation_plan',
       'outreach_niche_priority',
@@ -261,6 +271,7 @@ Deno.serve(async (req) => {
     const minScore = intSetting(settings, 'ai_calls_min_score', 0, 0, 100);
     const activeGuardMinutes = intSetting(settings, 'ai_calls_active_guard_minutes', DEFAULT_ACTIVE_GUARD_MINUTES, 5, 45);
     const staleCallMinutes = intSetting(settings, 'ai_calls_stale_call_minutes', DEFAULT_STALE_CALL_MINUTES, activeGuardMinutes + 5, 180);
+    const supplyMin = intSetting(settings, 'ai_calls_supply_min', DEFAULT_CALL_SUPPLY_MIN, 5, 500);
     const countries = csvSetting(settings.ai_calls_countries, ['SE']);
     const days = csvSetting(settings.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const product = settings.ai_calls_product || 'leadmap';
@@ -409,13 +420,26 @@ Deno.serve(async (req) => {
       ? await getCallEligibilityDiagnostics(supabase, { product, minScore, countries })
       : null;
 
+    // Auto-replenish before the callable pool dries up, so upcoming one-by-one calls have stock ready.
+    if (!preview && candidates.length > 0 && candidates.length < supplyMin) {
+      triggerAutoReplenish(supabaseUrl, serviceKey, {
+        trigger: 'ai_calls_supply_low',
+        findGmailOnly: false,
+        requirePhone: true,
+        country: 'SE',
+        maxCandidates: Math.max(60, supplyMin),
+        maxDetails: Math.max(60, supplyMin),
+        keywords: [nichePlan.selectedLabel || 'service business'],
+      });
+    }
+
     // Auto-replenish: when no callable leads remain, kick off a finder search in the background.
     if (!preview && candidates.length === 0) {
-      fetch(`${supabaseUrl}/functions/v1/auto-finder-replenish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-        body: JSON.stringify({ trigger: 'ai_calls_empty', findGmailOnly: false }),
-      }).catch(() => {});
+      triggerAutoReplenish(supabaseUrl, serviceKey, {
+        trigger: 'ai_calls_empty',
+        findGmailOnly: false,
+        requirePhone: true,
+      });
     }
 
     if (preview) {
@@ -426,6 +450,7 @@ Deno.serve(async (req) => {
         dailyCap,
         remainingToday,
         eligible: candidates.length,
+        supplyMin,
         diagnostics,
         niche: nichePlan.selectedKey,
         nicheLabel: nichePlan.selectedLabel,
@@ -509,6 +534,7 @@ Deno.serve(async (req) => {
         skipped,
         failed,
         eligible: candidates.length,
+        supplyMin,
         checked: diagnostics?.checked,
         rejectionSummary: diagnostics?.rejectionSummary,
         topReasons: diagnostics?.topReasons,
@@ -540,6 +566,7 @@ Deno.serve(async (req) => {
       dailyCap,
       remainingToday: Math.max(0, remainingToday - started),
       eligible: candidates.length,
+      supplyMin,
       diagnostics,
       activeGuardMinutes,
       staleCallMinutes,
