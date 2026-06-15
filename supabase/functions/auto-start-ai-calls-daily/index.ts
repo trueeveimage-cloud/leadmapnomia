@@ -385,7 +385,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('leads')
-      .select('id, name, phone, phone_e164, address, country, product, status, category, niche_label, detected_niche, business_type, website, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
+      .select('id, name, phone, phone_e164, address, country, product, status, category, niche_label, detected_niche, business_name, website, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, lead_tier, last_contacted_at, last_called_at, outreach_state')
       .or('phone.not.is.null,phone_e164.not.is.null')
       .or('outreach_opt_out.is.null,outreach_opt_out.eq.false')
       .or('do_not_contact.is.null,do_not_contact.eq.false')
