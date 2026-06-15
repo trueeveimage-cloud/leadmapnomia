@@ -292,7 +292,10 @@ Deno.serve(async (req) => {
 
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
-    const daily = Math.max(1, Math.min(100, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
+    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
+    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
+    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
+    const daily = Math.max(1, Math.min(500, (capSe + capUk + capEs) || (parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY)));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
