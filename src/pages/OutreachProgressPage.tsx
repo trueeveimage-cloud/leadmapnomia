@@ -488,11 +488,11 @@ function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function CountryCap({ flag, label, cap, note }: { flag: string; label: string; cap: number; note: string }) {
+function CountryCap({ code, label, cap, note }: { code: string; label: string; cap: number; note: string }) {
   return (
     <div className="rounded-md border border-border bg-background/60 p-3">
       <div className="flex items-center gap-2">
-        <span className="text-lg">{flag}</span>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-foreground">{code}</span>
         <div className="font-semibold text-foreground">{label}</div>
         <Badge variant="outline" className="ml-auto">{cap}/day</Badge>
       </div>
