@@ -1,7 +1,7 @@
 // Daily Gmail auto-sender for cold outreach.
 // Sends small batches only. send-gmail enforces daily caps, suppression, dedupe and opt-out checks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { chooseNichePlan, filterCandidatesByNiche } from "../_shared/outreach-niches.ts";
+import { chooseNichePlan, filterCandidatesByNiche, labelForNiche } from "../_shared/outreach-niches.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -229,6 +229,13 @@ function windowLabel(startHour: number, startMinute: number, endHour: number, en
   return `${pad(startHour)}:${pad(startMinute)}-${pad(endHour)}:${pad(endMinute)}`;
 }
 
+function utcDayOffset(from: Date, offset: number) {
+  const value = new Date(from);
+  value.setUTCHours(0, 0, 0, 0);
+  value.setUTCDate(value.getUTCDate() + offset);
+  return value;
+}
+
 async function recordNotification(supabase: any, input: {
   type: string;
   title: string;
@@ -295,7 +302,9 @@ Deno.serve(async (req) => {
     const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
     const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
     const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
-    const daily = Math.max(1, Math.min(500, (capSe + capUk + capEs) || (parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY)));
+    const configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
+    const countryCapTotal = capSe + capUk + capEs;
+    const daily = Math.max(1, Math.min(configuredDaily, countryCapTotal || configuredDaily));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
@@ -337,8 +346,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'outside_send_window', hour: nowLocal.hour, minute: nowLocal.minute, startHour, startMinute, endHour, endMinute }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const startOfDay = new Date();
-    startOfDay.setUTCHours(0, 0, 0, 0);
+    const startOfDay = utcDayOffset(new Date(), 0);
 
     // Per-country sent today (joined to leads to bucket by country).
     const { data: sentRows } = await supabase
@@ -355,6 +363,7 @@ Deno.serve(async (req) => {
       sentByBucket[b] = (sentByBucket[b] || 0) + 1;
     });
     const sentToday = (sentRows || []).length;
+    const hardRemaining = Math.max(0, daily - sentToday);
 
     const remainingByBucket: Record<CountryBucket, number> = {
       SE: Math.max(0, capSe - sentByBucket.SE),
@@ -362,13 +371,13 @@ Deno.serve(async (req) => {
       ES: Math.max(0, capEs - sentByBucket.ES),
       OTHER: 0,
     };
-    const remaining = remainingByBucket.SE + remainingByBucket.UK + remainingByBucket.ES;
+    const remaining = Math.min(hardRemaining, remainingByBucket.SE + remainingByBucket.UK + remainingByBucket.ES);
     if (remaining === 0) {
       await recordNotification(supabase, {
         type: 'gmail_batch_done',
         title: 'Gmail auto-send skipped',
-        message: 'Daily email cap was already reached for every country.',
-        payload: { reason: 'daily_cap_reached', sentToday, sentByBucket, caps: { SE: capSe, UK: capUk, ES: capEs } },
+        message: 'Daily email cap was already reached.',
+        payload: { reason: 'daily_cap_reached', sentToday, daily, sentByBucket, caps: { total: daily, SE: capSe, UK: capUk, ES: capEs } },
       });
       return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday, sentByBucket }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -376,6 +385,52 @@ Deno.serve(async (req) => {
     const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour, endMinute);
     const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
     const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
+
+    let nichePlan = initialNichePlan;
+    let catchUpStatus: Record<string, unknown> | null = null;
+    if (!force && nowLocal.day === 2) {
+      const mondayStart = utcDayOffset(startOfDay, -1);
+      const { data: mondayRows } = await supabase
+        .from('message_logs')
+        .select('id')
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .eq('status', 'sent')
+        .gte('created_at', mondayStart.toISOString())
+        .lt('created_at', startOfDay.toISOString())
+        .limit(10000);
+      const mondaySent = mondayRows?.length || 0;
+      const mondayDeficit = Math.max(0, daily - mondaySent);
+      const catchUpBudgetToday = mondayDeficit > 0 ? Math.ceil(daily / 2) : 0;
+      const usingCatchUp = mondayDeficit > 0 && sentToday < catchUpBudgetToday;
+      catchUpStatus = {
+        enabled: mondayDeficit > 0,
+        mondaySent,
+        mondayTarget: daily,
+        mondayDeficit,
+        catchUpBudgetToday,
+        selected: usingCatchUp ? 'monday_emergency_trades' : 'tuesday_dental',
+      };
+      if (usingCatchUp) {
+        nichePlan = {
+          ...initialNichePlan,
+          selectedKey: 'emergency_trades',
+          selectedLabel: labelForNiche('emergency_trades'),
+          plannedKey: 'dental',
+          plannedLabel: labelForNiche('dental'),
+          reason: `Tuesday catch-up: using the first ${catchUpBudgetToday} Gmail slots for Monday's missed VVS and emergency trades batch, then switching to Dental clinics.`,
+        };
+      } else if (mondayDeficit > 0) {
+        nichePlan = {
+          ...initialNichePlan,
+          selectedKey: 'dental',
+          selectedLabel: labelForNiche('dental'),
+          plannedKey: 'dental',
+          plannedLabel: labelForNiche('dental'),
+          reason: `Monday catch-up allocation is filled for today; Tuesday Dental clinics batch is active.`,
+        };
+      }
+    }
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
@@ -390,8 +445,8 @@ Deno.serve(async (req) => {
     console.log('[gmail-auto] candidates', { count: candidates?.length, error: candErr?.message });
     if (candErr) throw candErr;
 
-    const routed = filterCandidatesByNiche(candidates || [], initialNichePlan, cfg);
-    const nichePlan = routed.plan;
+    const routed = filterCandidatesByNiche(candidates || [], nichePlan, cfg);
+    nichePlan = routed.plan;
     const routedCandidates = routed.candidates;
     console.log('[gmail-auto] niche route', {
       selected: nichePlan.selectedKey,
@@ -415,7 +470,7 @@ Deno.serve(async (req) => {
     const perBucketBudget: Record<CountryBucket, number> = { ...remainingByBucket };
     const batch: any[] = [];
     for (const lead of eligible) {
-      if (batch.length >= batchSize) break;
+      if (batch.length >= batchSize || batch.length >= remaining) break;
       const b = detectLeadCountryBucket(lead);
       if (b === 'OTHER') { addReason(rejectionTrace, 'country_not_targeted'); continue; }
       if (perBucketBudget[b] <= 0) { addReason(rejectionTrace, `country_cap_reached_${b}`); continue; }
@@ -514,6 +569,8 @@ Deno.serve(async (req) => {
         slotsLeft,
         delaySeconds,
         remaining: remaining - sent,
+        dailyCap: daily,
+        catchUpStatus,
         details: details.slice(0, 20),
         forced: force,
         scheduled: !force,
@@ -539,6 +596,7 @@ Deno.serve(async (req) => {
       failed,
       sentToday: (sentToday ?? 0) + sent,
       remaining: remaining - sent,
+      dailyCap: daily,
       eligible: batch.length,
       diagnostics,
       batchSize,
@@ -552,6 +610,7 @@ Deno.serve(async (req) => {
       plannedNiche: nichePlan.plannedKey,
       plannedNicheLabel: nichePlan.plannedLabel,
       nicheReason: nichePlan.reason,
+      catchUpStatus,
       timestamp: new Date().toISOString(),
       details: details.slice(0, 20),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

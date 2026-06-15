@@ -57,7 +57,7 @@ type Settings = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  gmailDaily: 120,
+  gmailDaily: DEFAULT_GMAIL_DAILY,
   gmailDailySe: 100,
   gmailDailyUk: 10,
   gmailDailyEs: 10,
@@ -189,6 +189,11 @@ export default function OutreachProgressPage() {
   const report = conclusion(days, settings, weekOver);
   const emailTarget = settings.gmailDaily * Math.max(1, weekDays.length);
   const callTarget = settings.callDaily * Math.max(1, weekDays.length);
+  const monday = days.find(day => day.dateKey === weekDays[0]?.dateKey);
+  const tuesday = days.find(day => day.dateKey === weekDays[1]?.dateKey);
+  const mondayEmailDeficit = Math.max(0, settings.gmailDaily - (monday?.gmailSent || 0));
+  const tuesdayCatchUpBudget = mondayEmailDeficit > 0 ? Math.ceil(settings.gmailDaily / 2) : 0;
+  const tuesdayCatchUpProgress = Math.min(tuesdayCatchUpBudget, tuesday?.gmailSent || 0);
 
   const load = async () => {
     setLoading(true);
@@ -383,6 +388,24 @@ export default function OutreachProgressPage() {
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Plus {settings.callDaily} connected AI calls/day (Sweden). UK/ES slots fill automatically once leads from those countries are imported.
+          </p>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <RefreshCw size={17} className="text-primary" />
+            <h2 className="font-semibold text-foreground">Tuesday catch-up</h2>
+            <Badge variant={mondayEmailDeficit > 0 ? 'destructive' : 'secondary'} className="ml-auto">
+              {mondayEmailDeficit > 0 ? `${mondayEmailDeficit} Monday emails missing` : 'No Monday gap'}
+            </Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <MiniStat label="Monday VVS sent" value={`${monday?.gmailSent || 0} / ${settings.gmailDaily}`} />
+            <MiniStat label="Tuesday catch-up allocation" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpBudget} max` : 'Not needed'} />
+            <MiniStat label="Tuesday catch-up progress" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpProgress} / ${tuesdayCatchUpBudget}` : 'Complete'} />
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            If Monday Gmail missed quota, Tuesday uses the first half of the safe daily Gmail cap for Monday's VVS and emergency trades catch-up, then switches to Tuesday's dental batch. The daily Gmail cap stays at {settings.gmailDaily}; AI calls stay capped at {settings.callDaily} connected calls.
           </p>
         </section>
 
