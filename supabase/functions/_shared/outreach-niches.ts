@@ -206,7 +206,7 @@ export function filterCandidatesByNiche<T extends Record<string, unknown>>(
 
 function connectedCallStatus(status?: unknown) {
   const value = String(status || '').toLowerCase();
-  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
+  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)', 'failed', 'busy'].includes(value);
 }
 
 function timestampMs(value: unknown) {

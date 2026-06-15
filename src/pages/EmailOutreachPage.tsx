@@ -10,6 +10,7 @@ import { getSetting, setSetting } from '@/lib/supabase';
 import { AlertTriangle, Loader2, Mail, Play, Save, Send, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
+import { gmailTargetForToday, TUESDAY_GMAIL_DAILY_TARGET } from '@/lib/outreachEligibility';
 
 const STORAGE_KEY = 'leadmap.gmailAutoSendDraft';
 
@@ -30,7 +31,7 @@ const DEFAULT_DRAFT: Draft = {
   subject: LEADMAP_EMAIL_SUBJECT_SV,
   body: LEADMAP_EMAIL_BODY_SV,
   senderName: 'Maged',
-  dailyLimit: '100',
+  dailyLimit: '120',
   delaySeconds: '120',
   batchSize: '10',
   suppressionList: '',
@@ -99,7 +100,8 @@ export default function EmailOutreachPage() {
   const dailyLimitNumber = Number(draft.dailyLimit) || 0;
   const delayNumber = Number(draft.delaySeconds) || 0;
   const batchSizeNumber = Number(draft.batchSize) || 0;
-  const needsSafetyAttention = dailyLimitNumber > 100 || delayNumber < 60 || batchSizeNumber > 20;
+  const todayTarget = gmailTargetForToday(dailyLimitNumber);
+  const needsSafetyAttention = dailyLimitNumber > TUESDAY_GMAIL_DAILY_TARGET || delayNumber < 60 || batchSizeNumber > 20;
 
   const persistDraft = async (next: Draft) => {
     await Promise.all([
@@ -206,7 +208,7 @@ export default function EmailOutreachPage() {
               </div>
               <div>
                 <Label>Daily limit</Label>
-                <Input type="number" min={1} max={100} value={draft.dailyLimit} onChange={e => update('dailyLimit', e.target.value)} className="mt-1" />
+                <Input type="number" min={1} max={500} value={draft.dailyLimit} onChange={e => update('dailyLimit', e.target.value)} className="mt-1" />
               </div>
               <div>
                 <Label>Delay seconds</Label>
@@ -221,14 +223,14 @@ export default function EmailOutreachPage() {
               </div>
               <div className="rounded-lg border border-border bg-background/40 p-3 text-xs leading-relaxed text-muted-foreground">
                 <div className="font-medium text-foreground">Recommended</div>
-                The automation target is 100/day. Keep 120+ seconds between emails and a batch size of 10 while warming up the sender.
+                The automation target is 120/day on normal weekdays and 240 on Tuesday catch-up. Keep 120+ seconds between emails and a batch size of 10 while warming up the sender.
               </div>
             </div>
 
             {needsSafetyAttention && (
               <div className="rounded-lg border border-amber/30 bg-amber/10 p-3 text-xs text-muted-foreground flex gap-2">
                 <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber" />
-                <span>These settings are aggressive. Keep the daily limit at 100 or lower, use at least 60 seconds between emails, and keep batches small to protect sender reputation.</span>
+                <span>These settings are aggressive. Keep the normal daily limit at 120 or lower, use at least 60 seconds between emails, and keep batches small to protect sender reputation.</span>
               </div>
             )}
 
@@ -267,7 +269,7 @@ export default function EmailOutreachPage() {
             <div className="rounded-lg border border-border bg-background/40 p-3 text-xs">
               <div className="text-muted-foreground">Sent today</div>
               <div className="mt-1 text-lg font-semibold text-foreground">
-                {sentToday ?? '...'} / {draft.dailyLimit || '0'}
+                {sentToday ?? '...'} / {todayTarget || '0'}
               </div>
             </div>
             <div className="rounded-lg border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed space-y-2">

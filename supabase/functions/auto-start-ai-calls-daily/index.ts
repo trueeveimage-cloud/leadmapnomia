@@ -125,6 +125,7 @@ function labelReason(reason: string) {
     excluded_status: 'final status',
     bad_phone: 'invalid phone',
     attempt_limit: 'call attempt limit',
+    waiting_retry_window: 'waiting for retry window',
   };
   return labels[reason] || reason.replace(/_/g, ' ');
 }
@@ -150,7 +151,7 @@ function summarizeDetails(details: any[]) {
 
 function connectedCallStatus(status?: string | null) {
   const value = String(status || '').toLowerCase();
-  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
+  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)', 'failed', 'busy'].includes(value);
 }
 
 function callRejectionReasons(lead: any, input: { product: string; minScore: number; countries: string[] }) {
@@ -168,6 +169,8 @@ function callRejectionReasons(lead: any, input: { product: string; minScore: num
   if (EXCLUDED_STATUSES.includes(String(lead.status || ''))) reasons.push('excluded_status');
   if (!normalizeE164(lead.phone_e164 || lead.phone)) reasons.push('bad_phone');
   if (Number(lead.call_attempts || 0) >= 3) reasons.push('attempt_limit');
+  if (Number(lead.no_answer_count || 0) >= 3) reasons.push('attempt_limit');
+  if (lead.next_call_after && String(lead.next_call_after) > new Date().toISOString()) reasons.push('waiting_retry_window');
   return reasons;
 }
 
@@ -177,9 +180,9 @@ async function getCallEligibilityDiagnostics(
 ) {
   const { data: leads } = await supabase
     .from('leads')
-    .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, call_status, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+    .select('id, name, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, last_called_at, outreach_state')
     .or('phone.not.is.null,phone_e164.not.is.null')
-    .limit(2000);
+    .limit(5000);
 
   const summary: ReasonSummary = {};
   let eligible = 0;
@@ -403,9 +406,8 @@ Deno.serve(async (req) => {
       .or('call_attempts.is.null,call_attempts.lt.3')
       .or('no_answer_count.is.null,no_answer_count.lt.3')
       .or(`next_call_after.is.null,next_call_after.lte.${new Date().toISOString()}`)
-      .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
-      .limit(Math.max(50, perRun * 20));
+      .limit(Math.max(500, perRun * 100));
     if (product !== 'all') query = query.eq('product', product);
     if (minScore > 0) query = query.gte('potential_score', minScore);
 

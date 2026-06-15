@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, Mail, Phone, Play, Search, CalendarOff } from "lucide-react";
 import { toast } from "sonner";
+import { connectedCallStatus, gmailTargetForToday, isCallEligible, isEmailEligible, NORMAL_GMAIL_DAILY_TARGET } from "@/lib/outreachEligibility";
 
 interface DailyState {
   emailsSent: number;
@@ -32,7 +33,7 @@ type DailyOutreachRow = {
 
 const DEFAULTS: DailyState = {
   emailsSent: 0,
-  emailsCap: 100,
+  emailsCap: NORMAL_GMAIL_DAILY_TARGET,
   emailsEligible: 0,
   callsConnected: 0,
   callsCap: 15,
@@ -59,10 +60,6 @@ function runCost(stats: any) {
   const searches = Number(stats?.runTextSearchRequests || stats?.textSearchRequests || 0);
   const details = Number(stats?.runDetailRequests || stats?.detailsFetched || 0);
   return (searches * TEXT_SEARCH_COST) + (details * DETAIL_COST);
-}
-
-function validEmail(value?: string | null) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
 function dayKey(value: string | Date) {
@@ -106,20 +103,6 @@ function makeDailyBuckets(days = 7) {
     });
   }
   return rows;
-}
-
-function connectedCallStatus(status?: string | null) {
-  const value = String(status || "").toLowerCase();
-  return !!value && !["no answer", "calling", "error", "dead (3x no answer)"].includes(value);
-}
-
-function normalizePhone(value?: string | null) {
-  const compact = String(value || "").trim().replace(/[^\d+]/g, "");
-  if (!compact) return null;
-  if (compact.startsWith("+")) return compact;
-  if (compact.startsWith("00")) return `+${compact.slice(2)}`;
-  if (compact.startsWith("0")) return `+46${compact.slice(1)}`;
-  return compact.startsWith("46") ? `+${compact}` : compact;
 }
 
 function Bar({ value, max, color }: { value: number; max: number; color: string }) {
@@ -167,7 +150,7 @@ export default function TodayOutreachPanel() {
         .eq("call_status", "Calling"),
       supabase.from("leads").select("id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, call_connected")
         .not("email", "is", null).neq("email", "").limit(5000),
-      supabase.from("leads").select("id, phone, phone_e164, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state")
+      supabase.from("leads").select("id, phone, phone_e164, address, country, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state")
         .or("phone.not.is.null,phone_e164.not.is.null").limit(5000),
       supabase.from("finder_runs").select("id, stats, created_at"),
       supabase.from("message_logs").select("id, created_at")
@@ -192,30 +175,8 @@ export default function TodayOutreachPanel() {
     }).length;
 
     const seenEmails = new Set<string>();
-    const emailsEligible = (emailRows.data || []).filter((lead: any) => {
-      const email = String(lead.email || "").trim().toLowerCase();
-      if (!validEmail(email) || seenEmails.has(email)) return false;
-      seenEmails.add(email);
-      if (lead.outreach_opt_out || lead.do_not_contact) return false;
-      if (lead.outreach_stage === "email_sent" || lead.outreach_state === "email_sent") return false;
-      if (lead.outreach_state === "do_not_contact") return false;
-      if (!["S", "A+", "A"].includes(String(lead.lead_tier || ""))) return false;
-      if (lead.call_connected === true || lead.last_called_at || (lead.call_attempts || 0) > 0 || lead.last_contact_method === "AI Call") return false;
-      return true;
-    }).length;
-
-    const nowIso = new Date().toISOString();
-    const callsEligible = (callRows.data || []).filter((lead: any) => {
-      const status = String(lead.call_status || "").toLowerCase();
-      const isNoAnswer = status.includes("no answer");
-      if (lead.product !== "leadmap") return false;
-      if (lead.outreach_opt_out || lead.do_not_contact || lead.outreach_state === "do_not_contact") return false;
-      if (lead.call_status === "Calling") return false;
-      if ((lead.call_connected === true || lead.last_contacted_at || lead.outreach_state === "called") && !isNoAnswer) return false;
-      if (Number(lead.call_attempts || 0) >= 2 || Number(lead.no_answer_count || 0) >= 3) return false;
-      if (lead.next_call_after && String(lead.next_call_after) > nowIso) return false;
-      return !!normalizePhone(lead.phone_e164 || lead.phone);
-    }).length;
+    const emailsEligible = (emailRows.data || []).filter((lead: any) => isEmailEligible(lead, seenEmails)).length;
+    const callsEligible = (callRows.data || []).filter((lead: any) => isCallEligible(lead, { product: "leadmap", countries: ["SE"] })).length;
 
     const latestIssue = (gmailNotifications.data || []).find((row: any) => {
       const payload = row.payload || {};
@@ -247,7 +208,7 @@ export default function TodayOutreachPanel() {
 
     setState({
       emailsSent: emailsSent.count || 0,
-      emailsCap: parseInt(cfg.gmail_autosend_daily || "100", 10),
+      emailsCap: gmailTargetForToday(parseInt(cfg.gmail_autosend_daily || "120", 10)),
       emailsEligible,
       callsConnected: connectedCalls,
       callsCap: parseInt(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily || "15", 10),

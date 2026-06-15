@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import InfoTip from '@/components/InfoTip';
 import { useCRM } from '@/context/CRMContext';
 import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
+import { NORMAL_GMAIL_DAILY_TARGET } from '@/lib/outreachEligibility';
 
 export default function SettingsPage() {
   const { refreshCounts } = useCRM();
@@ -119,9 +120,9 @@ export default function SettingsPage() {
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
   const [gmailFromAddress, setGmailFromAddress] = useState('');
 
-  // Gmail auto-send (100/business-day)
+  // Gmail auto-send (120/business-day, with Tuesday catch-up handled by automation)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
-  const [autosendDaily, setAutosendDaily] = useState('100');
+  const [autosendDaily, setAutosendDaily] = useState(String(NORMAL_GMAIL_DAILY_TARGET));
   const [autosendSubject, setAutosendSubject] = useState(LEADMAP_EMAIL_SUBJECT_SV);
   const [autosendBody, setAutosendBody] = useState(LEADMAP_EMAIL_BODY_SV);
   const [autosendRunning, setAutosendRunning] = useState(false);

@@ -17,6 +17,7 @@ import {
   nextOutreachCheckpoint,
 } from '@/lib/outreachPlan';
 import { cn } from '@/lib/utils';
+import { connectedCallStatus } from '@/lib/outreachEligibility';
 import {
   Activity,
   Bot,
@@ -98,11 +99,6 @@ function intValue(value: string | null, fallback: number, min: number, max: numb
   const parsed = Number.parseInt(value || '', 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
-}
-
-function connectedCallStatus(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
 }
 
 function isInterestedStatus(status?: string | null) {

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { connectedCallStatus, gmailTargetForToday, isCallEligible, isEmailEligible, normalizePhone } from '@/lib/outreachEligibility';
 
 type ReadinessStatus = 'ready' | 'warning' | 'blocked' | 'checking';
 
@@ -85,7 +86,7 @@ const EMPTY_BUCKETS: LeadBucketStats = {
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   gmail_autosend_enabled: 'true',
-  gmail_autosend_daily: '100',
+  gmail_autosend_daily: '120',
   ai_calls_enabled: 'true',
   ai_calls_daily_connected_cap: '15',
   ai_calls_daily: '15',
@@ -125,20 +126,6 @@ function shortDay(value: string | Date) {
 function formatTime(value?: string | null) {
   if (!value) return '--:--';
   return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function validEmail(value?: string | null) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
-}
-
-function normalizePhone(value?: string | null) {
-  const compact = String(value || '').trim().replace(/[^\d+]/g, '');
-  if (!compact) return null;
-  if (compact.startsWith('+')) return /^\+[1-9]\d{7,14}$/.test(compact) ? compact : null;
-  if (compact.startsWith('00')) return /^\+[1-9]\d{7,14}$/.test(`+${compact.slice(2)}`) ? `+${compact.slice(2)}` : null;
-  if (compact.startsWith('0')) return /^\+[1-9]\d{7,14}$/.test(`+46${compact.slice(1)}`) ? `+46${compact.slice(1)}` : null;
-  if (compact.startsWith('46')) return /^\+[1-9]\d{7,14}$/.test(`+${compact}`) ? `+${compact}` : null;
-  return null;
 }
 
 function isMissing(value?: string | null) {
@@ -193,11 +180,6 @@ function scheduleStatus(settings: Record<string, string>) {
   };
 }
 
-function connectedCallStatus(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)', 'failed', 'busy'].includes(value);
-}
-
 function alreadyContacted(lead: any) {
   return !!lead.last_contacted_at
     || !!lead.last_called_at
@@ -214,7 +196,7 @@ function buildBuckets(leads: any[]) {
   for (const lead of leads) {
     buckets.total += 1;
     const email = String(lead.email || '').trim().toLowerCase();
-    const hasEmail = validEmail(email);
+    const hasEmail = !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const hasPhone = !!normalizePhone(lead.phone_e164 || lead.phone);
     const blocked = lead.outreach_opt_out || lead.do_not_contact === true || lead.outreach_state === 'do_not_contact';
     const contacted = alreadyContacted(lead);
@@ -226,11 +208,11 @@ function buildBuckets(leads: any[]) {
     if (hasEmail) seenEmails.add(email);
 
     const highTier = ['S', 'A+', 'A'].includes(String(lead.lead_tier || ''));
-    if (hasEmail && highTier && !blocked && !contacted && !seenEmails.has(`${email}:used`)) {
+    if (hasEmail && highTier && !blocked && !contacted && isEmailEligible(lead) && !seenEmails.has(`${email}:used`)) {
       buckets.readyEmail += 1;
       seenEmails.add(`${email}:used`);
     }
-    if (hasPhone && !blocked && !contacted && lead.call_status !== 'Calling' && Number(lead.call_attempts || 0) < 3) {
+    if (hasPhone && isCallEligible(lead, { product: 'leadmap', countries: ['SE'] })) {
       buckets.readyCall += 1;
     }
   }
@@ -290,7 +272,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     sb.from('settings').select('key,value').in('key', settingsKeys),
     sb
       .from('leads')
-      .select('id,name,email,phone,phone_e164,lead_tier,outreach_stage,outreach_state,outreach_opt_out,do_not_contact,last_called_at,last_contacted_at,last_contact_method,call_attempts,call_status,call_connected,product,status,potential_score')
+      .select('id,name,email,phone,phone_e164,lead_tier,outreach_stage,outreach_state,outreach_opt_out,do_not_contact,last_called_at,last_contacted_at,last_contact_method,call_attempts,no_answer_count,next_call_after,call_status,call_connected,product,status,potential_score')
       .eq('product', 'leadmap')
       .limit(5000),
     sb
@@ -337,7 +319,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
 
   const leads = leadsRes.status === 'fulfilled' ? (leadsRes.value.data || []) : [];
   const buckets = buildBuckets(leads);
-  const emailCap = intSetting(settings, 'gmail_autosend_daily', 100);
+  const emailCap = gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 120));
   const callCap = intSetting(settings, 'ai_calls_daily_connected_cap', intSetting(settings, 'ai_calls_daily', 15));
   const emailSentToday = emailTodayRes.status === 'fulfilled' ? (emailTodayRes.value.count || 0) : 0;
   const messageRows = messageRowsRes.status === 'fulfilled' ? (messageRowsRes.value.data || []) : [];
@@ -398,7 +380,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
       label: 'Daily caps',
       value: `${emailCap} Gmail / ${callCap} calls`,
       detail: `${emailSentToday}/${emailCap} Gmail sent and ${connectedCallsToday}/${callCap} connected calls counted today.`,
-      status: emailCap <= 100 && callCap <= 15 ? 'ready' : 'warning',
+      status: emailCap <= 240 && callCap <= 15 ? 'ready' : 'warning',
     },
   ];
 

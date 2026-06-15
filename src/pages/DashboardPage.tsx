@@ -8,6 +8,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, 
 import { TrendingUp, Users, Phone, MessageSquare, Target, ArrowUpRight, ArrowDownRight, Globe, Mail, Search, Zap, Clock, CheckCircle } from "lucide-react";
 import { findCity, Country, getCitiesByCountry } from "@/lib/cities";
 import CountryFlag, { countryLabel } from "@/components/CountryFlag";
+import { connectedCallStatus } from "@/lib/outreachEligibility";
 
 const COLORS = {
   primary: "hsl(213, 94%, 58%)",
@@ -116,11 +117,6 @@ export default function DashboardPage() {
   const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
   const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
   const [finderBudgetStartDate, setFinderBudgetStartDate] = useState('2026-06-01');
-
-  function connectedCallStatus(status?: string | null) {
-    const value = String(status || '').toLowerCase();
-    return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
-  }
 
   function dayKey(value: string | Date) {
     const date = new Date(value);

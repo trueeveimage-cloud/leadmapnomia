@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
+import { connectedCallStatus, gmailTargetForToday, isCallEligible, isEmailEligible, NORMAL_GMAIL_DAILY_TARGET, normalizePhone } from '@/lib/outreachEligibility';
 
 type AutomationSettings = {
   aiEnabled: boolean;
@@ -99,7 +100,7 @@ const DEFAULTS: AutomationSettings = {
   aiMinScore: '0',
   aiProduct: 'leadmap',
   gmailEnabled: true,
-  gmailDaily: '100',
+  gmailDaily: String(NORMAL_GMAIL_DAILY_TARGET),
   gmailBatchSize: '10',
   gmailDelaySeconds: '120',
   gmailSubject: LEADMAP_EMAIL_SUBJECT_SV,
@@ -119,7 +120,6 @@ const WEEKDAYS = [
 ];
 
 const COUNTRIES = ['SE', 'NO', 'DK', 'UK', 'ES'];
-const EXCLUDED_CALL_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
 const AUTOMATION_INTERVAL_MINUTES = 5;
 const NICHE_ROTATION_PLAN: Record<string, { key: string; day: string; label: string; shortLabel: string }> = {
   '1': { key: 'emergency_trades', day: 'Monday', label: 'VVS and emergency trades', shortLabel: 'VVS / emergency' },
@@ -151,20 +151,6 @@ function parseCsv(value: string | null, fallback: string[]) {
 
 function toggle(list: string[], value: string) {
   return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
-}
-
-function normalizePhone(value?: string | null) {
-  const compact = String(value || '').trim().replace(/[^\d+]/g, '');
-  if (!compact) return '';
-  if (compact.startsWith('+')) return compact;
-  if (compact.startsWith('00')) return `+${compact.slice(2)}`;
-  if (compact.startsWith('0')) return `+46${compact.slice(1)}`;
-  if (compact.startsWith('46')) return `+${compact}`;
-  return '';
-}
-
-function validEmail(value?: string | null) {
-  return !!value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 }
 
 function detectCountry(lead: any) {
@@ -222,11 +208,6 @@ function makeDailyBuckets(days = 14) {
     });
   }
   return rows;
-}
-
-function connectedCallStatus(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-  return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
 }
 
 function isAiAutomationNotification(item: AppNotification) {
@@ -409,10 +390,11 @@ export default function AutomationPage() {
     return Math.min(100, Math.round((stats.callsToday / cap) * 100));
   }, [settings.aiDaily, stats.callsToday]);
 
+  const todayGmailTarget = useMemo(() => gmailTargetForToday(Number(settings.gmailDaily || NORMAL_GMAIL_DAILY_TARGET)), [settings.gmailDaily]);
+
   const emailPercent = useMemo(() => {
-    const cap = Number(settings.gmailDaily) || 1;
-    return Math.min(100, Math.round((stats.emailsToday / cap) * 100));
-  }, [settings.gmailDaily, stats.emailsToday]);
+    return Math.min(100, Math.round((stats.emailsToday / Math.max(1, todayGmailTarget)) * 100));
+  }, [stats.emailsToday, todayGmailTarget]);
 
   const scheduleDaysText = useMemo(() => getScheduleDaysText(settings.aiDays), [settings.aiDays]);
   const nextCallCheck = useMemo(() => settings.aiEnabled ? nextCheckTime(settings, AUTOMATION_INTERVAL_MINUTES) : null, [settings]);
@@ -445,7 +427,7 @@ export default function AutomationPage() {
   const smartSummary = useMemo(() => {
     const callsPerRun = clampNumber(settings.aiPerRun, 1, 1, 1);
     const callDaily = clampNumber(settings.aiDaily, 15, 1, 100);
-    const emailDaily = clampNumber(settings.gmailDaily, 100, 1, 100);
+    const emailDaily = gmailTargetForToday(clampNumber(settings.gmailDaily, NORMAL_GMAIL_DAILY_TARGET, 1, 500));
     const emailBatch = clampNumber(settings.gmailBatchSize, 10, 1, 20);
     const delay = clampNumber(settings.gmailDelaySeconds, 120, 0, 900);
     return {
@@ -454,7 +436,7 @@ export default function AutomationPage() {
       emailDaily,
       emailBatch,
       delay,
-      safeEmail: emailDaily <= 100 && emailBatch <= 20 && delay >= 60,
+      safeEmail: emailDaily <= 240 && emailBatch <= 20 && delay >= 60,
     };
   }, [settings.aiDaily, settings.aiPerRun, settings.gmailDaily, settings.gmailBatchSize, settings.gmailDelaySeconds]);
 
@@ -539,45 +521,20 @@ export default function AutomationPage() {
         .limit(5000),
       sb
         .from('leads')
-        .select('id, phone, phone_e164, country, address, product, status, call_attempts, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
+        .select('id, phone, phone_e164, country, address, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
         .or('phone.not.is.null,phone_e164.not.is.null')
         .limit(2000),
     ]);
 
     const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => lead.call_connected === true || connectedCallStatus(lead.call_status)).length;
 
-    const callEligible = (callRowsRes.data || []).filter((lead: any) => {
-      const status = String(lead.call_status || '').toLowerCase();
-      const isNoAnswer = status.includes('no answer');
-      if (lead.outreach_opt_out) return false;
-      if (Number(lead.call_attempts || 0) >= 3) return false;
-      if (nextSettings.aiProduct !== 'all' && lead.product !== nextSettings.aiProduct) return false;
-      if (Number(nextSettings.aiMinScore || 0) > 0 && (lead.potential_score || 0) < Number(nextSettings.aiMinScore)) return false;
-      if (!nextSettings.aiCountries.includes(detectCountry(lead))) return false;
-      if (lead.do_not_contact === true) return false;
-      if (lead.call_status === 'Calling') return false;
-      if ((lead.call_connected === true || lead.last_contacted_at || lead.outreach_state === 'called') && !isNoAnswer) return false;
-      if (lead.outreach_state === 'do_not_contact') return false;
-      if (EXCLUDED_CALL_STATUSES.includes(String(lead.status || ''))) return false;
-      return !!normalizePhone(lead.phone_e164 || lead.phone);
-    }).length;
+    const callEligible = (callRowsRes.data || []).filter((lead: any) => isCallEligible(lead, {
+      product: nextSettings.aiProduct,
+      minScore: Number(nextSettings.aiMinScore || 0),
+      countries: nextSettings.aiCountries,
+    })).length;
     const seenEmails = new Set<string>();
-    const emailEligible = (emailRowsRes.data || []).filter((lead: any) => {
-      const email = String(lead.email || '').trim().toLowerCase();
-      if (!validEmail(email) || seenEmails.has(email)) return false;
-      seenEmails.add(email);
-      if (lead.outreach_opt_out) return false;
-      if (lead.do_not_contact === true) return false;
-      if (lead.outreach_stage === 'email_sent' || lead.outreach_state === 'email_sent') return false;
-      if (lead.outreach_state === 'do_not_contact') return false;
-      if (!['S', 'A+', 'A'].includes(String(lead.lead_tier || ''))) return false;
-      if (lead.last_called_at) return false;
-      if ((lead.call_attempts || 0) > 0) return false;
-      if (lead.call_connected === true) return false;
-      if (lead.outreach_state === 'called') return false;
-      if (lead.last_contact_method === 'AI Call') return false;
-      return true;
-    }).length;
+    const emailEligible = (emailRowsRes.data || []).filter((lead: any) => isEmailEligible(lead, seenEmails)).length;
 
     setStats({
       callsToday: connectedCallsToday,
@@ -724,7 +681,7 @@ export default function AutomationPage() {
       aiDays: ['1', '2', '3', '4', '5'],
       aiCountries: settings.aiCountries.length ? settings.aiCountries : ['SE'],
       gmailEnabled: true,
-      gmailDaily: '100',
+      gmailDaily: String(NORMAL_GMAIL_DAILY_TARGET),
       gmailBatchSize: '10',
       gmailDelaySeconds: '120',
       nicheRotationEnabled: true,
@@ -894,7 +851,7 @@ export default function AutomationPage() {
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Gmail and AI calls use the same daily niche: 100 emails and 15 connected calls target one market each weekday. After enough contacts, the highest-success niche gets priority automatically.
+                Gmail and AI calls use the same daily niche: 120 emails on normal weekdays, 240 on Tuesday catch-up, and 15 connected calls target one market each weekday. After enough contacts, the highest-success niche gets priority automatically.
               </p>
             </div>
             <div className="grid min-w-[17rem] gap-2 sm:grid-cols-2 lg:grid-cols-1">
@@ -930,7 +887,7 @@ export default function AutomationPage() {
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{niche.day}</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">{niche.shortLabel}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    100 Gmail + 15 connected calls
+                    {niche.key === 'dental' ? '240 Tuesday Gmail + 15 calls' : '120 Gmail + 15 connected calls'}
                   </div>
                 </div>
               );
@@ -963,7 +920,7 @@ export default function AutomationPage() {
 
         <div className="grid gap-3 md:grid-cols-4">
           <Metric title="AI calls today" value={`${stats.callsToday} / ${settings.aiDaily || 0}`} percent={callPercent} />
-          <Metric title="Gmail sent today" value={`${stats.emailsToday} / ${settings.gmailDaily || 0}`} percent={emailPercent} />
+          <Metric title="Gmail sent today" value={`${stats.emailsToday} / ${todayGmailTarget}`} percent={emailPercent} />
           <Metric title="Call queue" value={stats.activeCalls ? `${stats.callEligible} queued, 1 active` : String(stats.callEligible)} />
           <Metric title="Email queue" value={String(stats.emailEligible)} />
         </div>
@@ -1108,7 +1065,7 @@ export default function AutomationPage() {
 
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Emails/day">
-                <Input type="number" min="1" max="100" value={settings.gmailDaily} onChange={event => update('gmailDaily', event.target.value)} />
+                <Input type="number" min="1" max="500" value={settings.gmailDaily} onChange={event => update('gmailDaily', event.target.value)} />
               </Field>
               <Field label="Emails/hour">
                 <Input type="number" min="1" max="20" value={settings.gmailBatchSize} onChange={event => update('gmailBatchSize', event.target.value)} />
@@ -1137,7 +1094,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
-              Smart setup keeps Gmail controlled at 100/day: catch-up batches increase only when needed before 16:00, with email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
+              Smart setup keeps Gmail controlled at 120/day on normal weekdays and 240 on Tuesday catch-up, with email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
             </div>
 
             <details className="mt-4 rounded-md border border-border bg-background/40 p-3">
