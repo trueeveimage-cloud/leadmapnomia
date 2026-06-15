@@ -1,0 +1,456 @@
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import AppLayout from '@/components/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+import { COUNTRY_LABELS, Country, getCitiesByCountry } from '@/lib/cities';
+import { createFinderRun, fetchFinderCandidates, FinderCandidate, runFinderSearch } from '@/lib/finder';
+import {
+  buildPartnerEmail,
+  fetchPartnerLogs,
+  fetchPartnerProspects,
+  partnerTypeLabel,
+  PARTNER_SEARCH_PRESETS,
+  PARTNER_STATUSES,
+  PartnerProspect,
+  PartnerStatus,
+  PartnerType,
+  savePartnerCandidates,
+  updatePartnerProspect,
+} from '@/lib/partners';
+import {
+  BriefcaseBusiness,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
+
+function unique<T>(values: T[]) {
+  return Array.from(new Set(values));
+}
+
+function statusTone(status: PartnerStatus) {
+  if (['qualified', 'partner_call_booked'].includes(status)) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
+  if (['replied', 'contacted'].includes(status)) return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-400';
+  if (['not_fit', 'do_not_contact'].includes(status)) return 'border-red-500/30 bg-red-500/10 text-red-400';
+  return 'border-border bg-muted text-muted-foreground';
+}
+
+function statusLabel(status: string) {
+  return status.replace(/_/g, ' ');
+}
+
+export default function PartnerAcquisitionPage() {
+  const [country, setCountry] = useState<Country>('SE');
+  const [city, setCity] = useState('Stockholm');
+  const [selectedTypes, setSelectedTypes] = useState<PartnerType[]>(PARTNER_SEARCH_PRESETS.map(item => item.type));
+  const [prospects, setProspects] = useState<PartnerProspect[]>([]);
+  const [logCount, setLogCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [activeStatus, setActiveStatus] = useState<'all' | PartnerStatus>('all');
+
+  const cities = useMemo(() => getCitiesByCountry(country).slice(0, 24), [country]);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [nextProspects, logs] = await Promise.all([fetchPartnerProspects(), fetchPartnerLogs()]);
+      setProspects(nextProspects);
+      setLogCount(logs.filter(log => log.status === 'sent').length);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load partners');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    const first = getCitiesByCountry(country)[0]?.name;
+    if (first) setCity(first);
+  }, [country]);
+
+  const metrics = useMemo(() => {
+    const ready = prospects.filter(item => item.status === 'ready_to_contact').length;
+    const contacted = prospects.filter(item => item.status === 'contacted').length;
+    const replied = prospects.filter(item => item.status === 'replied').length;
+    const calls = prospects.filter(item => item.status === 'partner_call_booked').length;
+    const qualified = prospects.filter(item => item.status === 'qualified').length;
+    return { ready, contacted, replied, calls, qualified };
+  }, [prospects]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return prospects.filter(item => {
+      if (activeStatus !== 'all' && item.status !== activeStatus) return false;
+      if (!needle) return true;
+      return [item.name, item.email, item.website, item.city, item.country, item.partner_type, item.fit_reason]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [activeStatus, prospects, query]);
+
+  const toggleType = (type: PartnerType) => {
+    setSelectedTypes(prev => prev.includes(type) ? prev.filter(item => item !== type) : [...prev, type]);
+  };
+
+  const runPartnerFinder = async () => {
+    const targets = PARTNER_SEARCH_PRESETS.filter(item => selectedTypes.includes(item.type));
+    if (!targets.length) {
+      toast.error('Choose at least one partner type');
+      return;
+    }
+    setRunning(true);
+    try {
+      const keywords = unique(targets.flatMap(item => item.keywords[country] || item.keywords.SE)).slice(0, 18);
+      const run = await createFinderRun({
+        city,
+        mode: 'partner_acquisition',
+        keywords,
+        radius: 7000,
+        maxPages: 2,
+        maxCandidates: 260,
+        maxDetails: 120,
+        minRating: 3,
+        minReviews: 0,
+        requirePhone: false,
+        batchLabel: `Partner Finder - ${COUNTRY_LABELS[country]} - ${city}`,
+      });
+      await runFinderSearch(run.id, {
+        city,
+        keywords,
+        radius: 7000,
+        maxPages: 2,
+        maxCandidates: 260,
+        maxDetails: 120,
+        minRating: 3,
+        minReviews: 0,
+        requirePhone: false,
+      });
+      let candidates = await fetchFinderCandidates(run.id);
+      candidates = await scrapePartnerEmails(candidates);
+      const saved = await savePartnerCandidates(candidates, { city, country });
+      toast.success(`Partner Finder saved ${saved} partner prospect${saved === 1 ? '' : 's'}`);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Partner Finder failed');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const scrapePartnerEmails = async (candidates: FinderCandidate[]) => {
+    const targets = candidates.filter(candidate => candidate.website && !candidate.email);
+    for (let i = 0; i < targets.length; i += 4) {
+      const slice = targets.slice(i, i + 4);
+      const { data, error } = await supabase.functions.invoke('scrape-emails', {
+        body: {
+          urls: slice.map(candidate => ({
+            leadId: candidate.id,
+            website: candidate.website,
+            businessName: candidate.name,
+          })),
+        },
+      });
+      if (error) throw error;
+      for (const result of data?.results || []) {
+        const email = result?.email || result?.emails?.[0];
+        if (!email) continue;
+        const candidate = candidates.find(item => item.id === result.leadId);
+        if (!candidate) continue;
+        candidate.email = email;
+        await (supabase as any).from('finder_candidates').update({ email }).eq('id', candidate.id);
+      }
+    }
+    return candidates;
+  };
+
+  const sendPartnerEmail = async (prospect: PartnerProspect) => {
+    if (!prospect.email) {
+      toast.error('This partner has no email yet');
+      return;
+    }
+    setSendingId(prospect.id);
+    try {
+      const email = buildPartnerEmail(prospect);
+      const { data, error } = await supabase.functions.invoke('send-gmail', {
+        body: {
+          partnerProspectId: prospect.id,
+          to: prospect.email,
+          subject: email.subject,
+          body: email.body,
+          skipCooldown: true,
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || 'Send failed');
+      toast.success('Partner email sent');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Partner email failed');
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const setStatus = async (prospect: PartnerProspect, status: PartnerStatus) => {
+    try {
+      await updatePartnerProspect(prospect.id, {
+        status,
+        do_not_contact: status === 'do_not_contact',
+      });
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update partner');
+    }
+  };
+
+  return (
+    <AppLayout>
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Leadmap growth</div>
+            <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-foreground">
+              <BriefcaseBusiness size={22} className="text-primary" /> Partner Acquisition
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Find telecom, PBX, agency, installer and consultant partners without mixing them into normal customer outreach.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+          </Button>
+        </div>
+
+        <section className="mb-5 grid gap-3 md:grid-cols-5">
+          <Metric icon={<Users size={15} />} label="Prospects" value={prospects.length} />
+          <Metric icon={<Mail size={15} />} label="Ready" value={metrics.ready} />
+          <Metric icon={<Send size={15} />} label="Sent" value={logCount} />
+          <Metric icon={<CheckCircle2 size={15} />} label="Partner calls" value={metrics.calls} tone="good" />
+          <Metric icon={<ShieldCheck size={15} />} label="Qualified" value={metrics.qualified} tone="good" />
+        </section>
+
+        <section className="mb-5 rounded-lg border border-border bg-card p-4">
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                <Search size={16} className="text-primary" /> Partner Finder
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs text-muted-foreground">
+                  Country
+                  <select
+                    value={country}
+                    onChange={event => setCountry(event.target.value as Country)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    {COUNTRIES.map(item => <option key={item} value={item}>{COUNTRY_LABELS[item]}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs text-muted-foreground">
+                  City
+                  <select
+                    value={city}
+                    onChange={event => setCity(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    {cities.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {PARTNER_SEARCH_PRESETS.map(item => (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => toggleType(item.type)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                      selectedTypes.includes(item.type)
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <Button onClick={runPartnerFinder} disabled={running} className="mt-4 gap-2">
+                {running ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                {running ? 'Searching partners...' : 'Run partner search'}
+              </Button>
+            </div>
+            <div className="rounded-md border border-border bg-background/40 p-4">
+              <div className="text-sm font-medium text-foreground">Partner pitch default</div>
+              <Textarea
+                readOnly
+                value={buildPartnerEmail({
+                  id: 'preview',
+                  name: 'Partner Company',
+                  website: null,
+                  email: null,
+                  phone: null,
+                  country,
+                  city,
+                  address: null,
+                  partner_type: 'telecom',
+                  status: 'ready_to_contact',
+                  fit_score: 70,
+                  fit_reason: null,
+                  source_url: null,
+                  source: 'preview',
+                  notes: null,
+                  do_not_contact: false,
+                  last_contacted_at: null,
+                  last_reply_at: null,
+                  created_at: '',
+                  updated_at: '',
+                }).body}
+                className="mt-3 min-h-48 resize-none font-mono text-xs"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-card">
+          <div className="border-b border-border p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="font-semibold text-foreground">Partner pipeline</h2>
+                <p className="text-sm text-muted-foreground">Separate from customer leads, AI calls and normal Gmail automation.</p>
+              </div>
+              <Input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search partners..."
+                className="max-w-sm"
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(['all', ...PARTNER_STATUSES] as const).map(status => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setActiveStatus(status)}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                    activeStatus === status
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {status === 'all' ? 'All' : statusLabel(status)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="py-16 text-center text-sm text-muted-foreground">Loading partners...</div>
+          ) : visible.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <BriefcaseBusiness size={34} className="mx-auto mb-3 text-muted-foreground" />
+              <p className="text-sm font-medium text-foreground">No partner prospects in this view</p>
+              <p className="mt-1 text-xs text-muted-foreground">Run a partner search or change filters.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {visible.map(prospect => (
+                <div key={prospect.id} className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_220px_210px]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate font-semibold text-foreground">{prospect.name}</div>
+                      <Badge variant="outline">{partnerTypeLabel(prospect.partner_type)}</Badge>
+                      <span className={cn('rounded-full border px-2 py-0.5 text-xs capitalize', statusTone(prospect.status))}>
+                        {statusLabel(prospect.status)}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {prospect.email && <span>{prospect.email}</span>}
+                      {prospect.phone && <span>{prospect.phone}</span>}
+                      {prospect.city && <span>{prospect.city}</span>}
+                      {prospect.country && <span>{prospect.country}</span>}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      {prospect.website && (
+                        <a href={prospect.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                          Website <ExternalLink size={11} />
+                        </a>
+                      )}
+                      {prospect.source_url && (
+                        <a href={prospect.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                          Source <ExternalLink size={11} />
+                        </a>
+                      )}
+                      <span className="text-muted-foreground">Score {prospect.fit_score}</span>
+                    </div>
+                    {prospect.fit_reason && <p className="mt-2 text-sm text-muted-foreground">{prospect.fit_reason}</p>}
+                  </div>
+                  <div>
+                    <select
+                      value={prospect.status}
+                      onChange={event => setStatus(prospect, event.target.value as PartnerStatus)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    >
+                      {PARTNER_STATUSES.map(status => <option key={status} value={status}>{statusLabel(status)}</option>)}
+                    </select>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Last contact: {prospect.last_contacted_at ? new Date(prospect.last_contacted_at).toLocaleString() : 'Never'}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-2"
+                      disabled={!prospect.email || sendingId === prospect.id || prospect.do_not_contact}
+                      onClick={() => sendPartnerEmail(prospect)}
+                    >
+                      {sendingId === prospect.id ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      Send partner email
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setStatus(prospect, 'partner_call_booked')}
+                    >
+                      Mark call booked
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </AppLayout>
+  );
+}
+
+function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; label: string; value: ReactNode; tone?: 'normal' | 'good' }) {
+  return (
+    <div className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">{icon}{label}</div>
+      <div className={cn('mt-1 text-2xl font-semibold text-foreground', tone === 'good' && 'text-emerald-400')}>{value}</div>
+    </div>
+  );
+}

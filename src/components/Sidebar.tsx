@@ -65,6 +65,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     { label: 'Automation', path: '/automation', icon: <Bot size={15} />, product: 'leadmap' },
     { label: 'Outreach Progress', path: '/outreach-progress', icon: <Clock size={15} />, product: 'leadmap' },
     { label: 'Lead Finder', path: '/lead-finder', icon: <Mail size={15} />, product: 'leadmap' },
+    { label: 'Partners', path: '/partners', icon: <BriefcaseBusiness size={15} />, product: 'leadmap' },
     { label: 'Gmail Auto Send', path: '/leadmap/email-outreach', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Email Results', path: '/email-results', icon: <Inbox size={15} />, product: 'leadmap' },
     { label: 'Cold Call', path: '/cold-call', icon: <PhoneCall size={15} />, product: 'leadmap' },
