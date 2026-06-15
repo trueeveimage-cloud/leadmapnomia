@@ -90,22 +90,28 @@ Deno.serve(async (req) => {
       : pickKeywords(nextCountry, 4);
 
     const findGmailOnly = body?.findGmailOnly !== false; // default true
-    const maxPages = 1;
-    const maxCandidates = 30;
-    const maxDetails = 30;
-    const radius = 15000;
+    const maxPages = Math.max(1, Math.min(5, Number(body?.maxPages) || 1));
+    const maxCandidates = Math.max(10, Math.min(2000, Number(body?.maxCandidates) || 30));
+    const maxDetails = Math.max(10, Math.min(2000, Number(body?.maxDetails) || 30));
+    const radius = Math.max(1000, Math.min(30000, Number(body?.radius) || 15000));
+    const requirePhone = body?.requirePhone === true;
+    const minRating = Number.isFinite(Number(body?.minRating)) ? Number(body.minRating) : null;
+    const minReviews = Number.isFinite(Number(body?.minReviews)) ? Number(body.minReviews) : null;
+    const maxReviews = Number.isFinite(Number(body?.maxReviews)) ? Number(body.maxReviews) : null;
 
     // Create finder_runs row
     const batchLabel = `auto-replenish-${nextCountry}-${trigger}`;
     const { data: run, error: runErr } = await supabase.from('finder_runs').insert({
       city,
-      mode: 'gmail',
+      mode: requirePhone ? 'call' : 'gmail',
       keywords,
       radius,
       max_pages: maxPages,
       max_candidates: maxCandidates,
       max_details: maxDetails,
-      require_phone: false,
+      min_rating: minRating,
+      min_reviews: minReviews,
+      require_phone: requirePhone,
       status: 'pending',
       stats: {},
       batch_label: batchLabel,
@@ -114,7 +120,7 @@ Deno.serve(async (req) => {
 
     // Fire-and-forget invocation of finder-search so this function returns quickly.
     const url = `${supabaseUrl}/functions/v1/finder-search`;
-    const payload = {
+    const payload: Record<string, unknown> = {
       runId: (run as any).id,
       city,
       keywords,
@@ -122,10 +128,13 @@ Deno.serve(async (req) => {
       maxPages,
       maxCandidates,
       maxDetails,
-      requirePhone: false,
+      requirePhone,
       findGmailOnly,
       action: 'search',
     };
+    if (minRating !== null) payload.minRating = minRating;
+    if (minReviews !== null) payload.minReviews = minReviews;
+    if (maxReviews !== null) payload.maxReviews = maxReviews;
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${serviceKey}`,

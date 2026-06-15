@@ -71,11 +71,21 @@ function personalize(template: string, lead: any) {
     .replace(/\{city\}/g, city);
 }
 
+type CountryBucket = 'SE' | 'UK' | 'ES' | 'OTHER';
+
+function detectLeadCountryBucket(lead: any): CountryBucket {
+  const country = String(lead?.country || '').trim().toUpperCase();
+  const text = `${lead?.address || ''} ${lead?.city || ''} ${lead?.phone || ''} ${lead?.phone_e164 || ''}`.toLowerCase();
+  if (country === 'ES' || text.includes('+34') || text.includes('spain') || text.includes('españa') || text.includes('espana')) return 'ES';
+  if (country === 'UK' || country === 'GB' || text.includes('+44') || text.includes('united kingdom') || text.includes('england') || text.includes('scotland') || text.includes('wales') || text.includes(' uk')) return 'UK';
+  if (country === 'SE' || text.includes('+46') || text.includes('sweden') || text.includes('sverige')) return 'SE';
+  return 'OTHER';
+}
+
 function detectLeadLanguage(lead: any) {
-  const country = String(lead.country || '').trim().toUpperCase();
-  const text = `${lead.address || ''} ${lead.city || ''} ${lead.phone || ''} ${lead.phone_e164 || ''}`.toLowerCase();
-  if (country === 'ES' || text.includes('+34') || text.includes('spain') || text.includes('españa') || text.includes('espana')) return 'es';
-  if (country === 'SE' || text.includes('+46') || text.includes('sweden') || text.includes('sverige')) return 'sv';
+  const bucket = detectLeadCountryBucket(lead);
+  if (bucket === 'ES') return 'es';
+  if (bucket === 'SE') return 'sv';
   return 'en';
 }
 
@@ -249,6 +259,9 @@ Deno.serve(async (req) => {
     const keys = [
       'gmail_autosend_enabled',
       'gmail_autosend_daily',
+      'gmail_autosend_daily_se',
+      'gmail_autosend_daily_uk',
+      'gmail_autosend_daily_es',
       'gmail_autosend_subject',
       'gmail_autosend_body',
       'gmail_autosend_subject_sv',
@@ -279,7 +292,10 @@ Deno.serve(async (req) => {
 
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
-    const daily = Math.max(1, Math.min(100, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
+    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
+    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
+    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
+    const daily = Math.max(1, Math.min(500, (capSe + capUk + capEs) || (parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY)));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
@@ -323,23 +339,38 @@ Deno.serve(async (req) => {
 
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const { count: sentToday } = await supabase
+
+    // Per-country sent today (joined to leads to bucket by country).
+    const { data: sentRows } = await supabase
       .from('message_logs')
-      .select('id', { count: 'exact', head: true })
+      .select('lead_id, leads!inner(country, address, city, phone)')
       .eq('channel', 'email')
       .eq('direction', 'outbound')
       .eq('status', 'sent')
       .gte('created_at', startOfDay.toISOString());
 
-    const remaining = Math.max(0, daily - (sentToday ?? 0));
+    const sentByBucket: Record<CountryBucket, number> = { SE: 0, UK: 0, ES: 0, OTHER: 0 };
+    (sentRows || []).forEach((r: any) => {
+      const b = detectLeadCountryBucket(r?.leads || {});
+      sentByBucket[b] = (sentByBucket[b] || 0) + 1;
+    });
+    const sentToday = (sentRows || []).length;
+
+    const remainingByBucket: Record<CountryBucket, number> = {
+      SE: Math.max(0, capSe - sentByBucket.SE),
+      UK: Math.max(0, capUk - sentByBucket.UK),
+      ES: Math.max(0, capEs - sentByBucket.ES),
+      OTHER: 0,
+    };
+    const remaining = remainingByBucket.SE + remainingByBucket.UK + remainingByBucket.ES;
     if (remaining === 0) {
       await recordNotification(supabase, {
         type: 'gmail_batch_done',
         title: 'Gmail auto-send skipped',
-        message: 'Daily email cap was already reached.',
-        payload: { reason: 'daily_cap_reached', sentToday: sentToday ?? 0, daily },
+        message: 'Daily email cap was already reached for every country.',
+        payload: { reason: 'daily_cap_reached', sentToday, sentByBucket, caps: { SE: capSe, UK: capUk, ES: capEs } },
       });
-      return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ skipped: true, reason: 'daily_cap_reached', sentToday, sentByBucket }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour, endMinute);
@@ -348,7 +379,7 @@ Deno.serve(async (req) => {
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
-      .select('id, name, owner_name, email, address, city, country, category, niche_label, detected_niche, business_type, website, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts')
+      .select('id, name, owner_name, email, address, city, country, category, niche_label, detected_niche, business_type, website, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, phone, phone_e164')
       .not('email', 'is', null)
       .neq('email', '')
       .in('lead_tier', ['S', 'A+', 'A'])
@@ -372,16 +403,26 @@ Deno.serve(async (req) => {
 
     const seenEmails = new Set<string>();
     const rejectionTrace: ReasonSummary = {};
-    const batch = routedCandidates
-      .filter((lead: any) => {
-        const email = String(lead.email || '').trim().toLowerCase();
-        const reasons = emailRejectionReasons(lead, seenEmails);
-        if (reasons.length > 0) { reasons.forEach(r => addReason(rejectionTrace, r)); return false; }
-        lead.email = email;
-        return true;
-      })
-      .slice(0, Math.min(remaining, batchSize));
-    console.log('[gmail-auto] batch', { len: batch.length, rejectionTrace });
+    const eligible = routedCandidates.filter((lead: any) => {
+      const email = String(lead.email || '').trim().toLowerCase();
+      const reasons = emailRejectionReasons(lead, seenEmails);
+      if (reasons.length > 0) { reasons.forEach(r => addReason(rejectionTrace, r)); return false; }
+      lead.email = email;
+      return true;
+    });
+
+    // Bucket by country and pick per-country up to that country's remaining cap.
+    const perBucketBudget: Record<CountryBucket, number> = { ...remainingByBucket };
+    const batch: any[] = [];
+    for (const lead of eligible) {
+      if (batch.length >= batchSize) break;
+      const b = detectLeadCountryBucket(lead);
+      if (b === 'OTHER') { addReason(rejectionTrace, 'country_not_targeted'); continue; }
+      if (perBucketBudget[b] <= 0) { addReason(rejectionTrace, `country_cap_reached_${b}`); continue; }
+      perBucketBudget[b]--;
+      batch.push(lead);
+    }
+    console.log('[gmail-auto] batch', { len: batch.length, rejectionTrace, remainingByBucket, sentByBucket });
     const diagnostics = batch.length === 0 ? await getEmailEligibilityDiagnostics(supabase) : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
