@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useProduct, type Product } from '@/context/ProductContext';
 import {
   Bell, Bot, BriefcaseBusiness, Clock, Inbox, LayoutDashboard, LogOut, Mail, MapPin,
-  MessageSquare, PhoneCall, Settings, Target, Users, X,
+  MessageSquare, Newspaper, PhoneCall, Settings, Target, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +66,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     { label: 'Outreach Progress', path: '/outreach-progress', icon: <Clock size={15} />, product: 'leadmap' },
     { label: 'Lead Finder', path: '/lead-finder', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Partners', path: '/partners', icon: <BriefcaseBusiness size={15} />, product: 'leadmap' },
+    { label: 'GBP Content Loop', path: '/gbp-content', icon: <Newspaper size={15} />, product: 'leadmap' },
     { label: 'Gmail Auto Send', path: '/leadmap/email-outreach', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Email Results', path: '/email-results', icon: <Inbox size={15} />, product: 'leadmap' },
     { label: 'Cold Call', path: '/cold-call', icon: <PhoneCall size={15} />, product: 'leadmap' },

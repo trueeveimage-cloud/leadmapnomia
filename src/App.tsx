@@ -23,6 +23,7 @@ const LeadmapClosingPage = lazy(() => import("./pages/LeadmapClosingPage"));
 const EmailOutreachPage = lazy(() => import("./pages/EmailOutreachPage"));
 const EmailResultsPage = lazy(() => import("./pages/EmailResultsPage"));
 const PartnerAcquisitionPage = lazy(() => import("./pages/PartnerAcquisitionPage"));
+const GBPContentLoopPage = lazy(() => import("./pages/GBPContentLoopPage"));
 const SmsOutreachPage = lazy(() => import("./pages/SmsOutreachPage"));
 const CallbacksPage = lazy(() => import("./pages/CallbacksPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -134,6 +135,7 @@ function productForPath(pathname: string) {
     || pathname.startsWith('/automation')
     || pathname.startsWith('/outreach-progress')
     || pathname.startsWith('/partners')
+    || pathname.startsWith('/gbp-content')
     || pathname.startsWith('/lead-finder')
     || pathname.startsWith('/email-results')
     || pathname.startsWith('/email-finder')
@@ -237,6 +239,7 @@ const App = () => (
                       <Route path="/leadmap/email-outreach" element={<EmailOutreachPage />} />
                       <Route path="/email-results" element={<EmailResultsPage />} />
                       <Route path="/partners" element={<PartnerAcquisitionPage />} />
+                      <Route path="/gbp-content" element={<GBPContentLoopPage />} />
                       <Route path="/nomia/email-outreach" element={<EmailOutreachPage />} />
                       <Route path="/nomia/sms-outreach" element={<SmsOutreachPage />} />
                       <Route path="/nomia/closing" element={<ClosingPage status="interested" title="Nomia Closing" />} />

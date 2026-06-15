@@ -94,6 +94,15 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
+function MiniMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-border bg-secondary/30 p-3">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-foreground">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { counts } = useCRM();
   const [msgStats, setMsgStats] = useState({ sent: 0, delivered: 0, failed: 0, undelivered: 0, inbound: 0, queued: 0 });
@@ -117,6 +126,14 @@ export default function DashboardPage() {
   const [outreachStages, setOutreachStages] = useState<{ stage: string; count: number }[]>([]);
   const [campaignStats, setCampaignStats] = useState({ total: 0, running: 0, totalRuns: 0, totalSent: 0 });
   const [finderBudgetStartDate, setFinderBudgetStartDate] = useState('2026-06-01');
+  const [freeMarketingStats, setFreeMarketingStats] = useState({
+    audit: 0,
+    seo: 0,
+    caseStudy: 0,
+    gbp: 0,
+    total: 0,
+    followUp: 0,
+  });
 
   function dayKey(value: string | Date) {
     const date = new Date(value);
@@ -338,6 +355,37 @@ export default function DashboardPage() {
       }
       setFinderStats(fStats);
     })();
+
+    // Free marketing source tracking. This is tolerant while migrations roll out.
+    (async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('leads')
+          .select('lead_source, source_page, utm_source, seo_landing_page, case_study_page, website_demo_requested, status')
+          .eq('product', 'leadmap')
+          .limit(5000);
+        if (error) throw error;
+        const rows = data || [];
+        const audit = rows.filter((lead: any) => lead.lead_source === 'website_audit' || lead.website_demo_requested === true).length;
+        const seo = rows.filter((lead: any) => !!lead.seo_landing_page || String(lead.utm_source || '') === 'seo').length;
+        const caseStudy = rows.filter((lead: any) => !!lead.case_study_page || String(lead.source_page || '').includes('/anvandningsfall/')).length;
+        const gbp = rows.filter((lead: any) => lead.lead_source === 'gbp_post' || String(lead.utm_source || '') === 'google_business_profile').length;
+        const followUp = rows.filter((lead: any) => {
+          const status = String(lead.status || '').toLowerCase();
+          return lead.website_demo_requested === true || status === 'follow_up_needed' || status === 'interested' || status === 'callback';
+        }).length;
+        setFreeMarketingStats({
+          audit,
+          seo,
+          caseStudy,
+          gbp,
+          total: audit + seo + caseStudy + gbp,
+          followUp,
+        });
+      } catch {
+        setFreeMarketingStats({ audit: 0, seo: 0, caseStudy: 0, gbp: 0, total: 0, followUp: 0 });
+      }
+    })();
   }, []);
 
   // Funnel data
@@ -407,6 +455,24 @@ export default function DashboardPage() {
         <LaunchReadinessPanel compact />
 
         <TodayOutreachPanel />
+
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="mb-4 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Free marketing engine</h2>
+              <p className="text-xs text-muted-foreground">Website audit, SEO pages, use-case pages and GBP post leads.</p>
+            </div>
+            <a href="/gbp-content" className="text-xs font-medium text-primary hover:underline">Open GBP loop</a>
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <MiniMetric label="Total free leads" value={freeMarketingStats.total} />
+            <MiniMetric label="Audit submits" value={freeMarketingStats.audit} />
+            <MiniMetric label="SEO page leads" value={freeMarketingStats.seo} />
+            <MiniMetric label="Use-case leads" value={freeMarketingStats.caseStudy} />
+            <MiniMetric label="GBP leads" value={freeMarketingStats.gbp} />
+            <MiniMetric label="Follow-up needed" value={freeMarketingStats.followUp} />
+          </div>
+        </div>
 
         {/* Stat cards - 2 rows */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
