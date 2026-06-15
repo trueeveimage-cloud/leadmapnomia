@@ -499,6 +499,9 @@ function CountryCap({ flag, label, cap, note }: { flag: string; label: string; c
       <p className="mt-2 text-xs text-muted-foreground">{note}</p>
     </div>
   );
+}
+
+
 
 function ProgressLine({ label, value, target, percent }: { label: string; value: number; target: number; percent: number }) {
   return (
