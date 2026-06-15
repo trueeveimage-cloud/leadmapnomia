@@ -370,6 +370,22 @@ export default function OutreachProgressPage() {
 
         <section className="mt-5 rounded-lg border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
+            <Mail size={17} className="text-primary" />
+            <h2 className="font-semibold text-foreground">Daily email split by country</h2>
+            <Badge variant="secondary" className="ml-auto">Total {settings.gmailDaily}/day</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <CountryCap flag="🇸🇪" label="Sweden" cap={settings.gmailDailySe} note="Main market — SE leads first" />
+            <CountryCap flag="🇬🇧" label="United Kingdom" cap={settings.gmailDailyUk} note="Test batch — English template" />
+            <CountryCap flag="🇪🇸" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Plus {settings.callDaily} connected AI calls/day (Sweden). UK/ES slots fill automatically once leads from those countries are imported.
+          </p>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-border bg-card p-5">
+          <div className="mb-4 flex items-center gap-2">
             <CalendarDays size={17} className="text-primary" />
             <h2 className="font-semibold text-foreground">Five-day plan</h2>
           </div>
