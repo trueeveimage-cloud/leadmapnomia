@@ -36,8 +36,13 @@ type DayStats = {
   shortLabel: string;
   nicheLabel: string;
   gmailSent: number;
+  emailInterested: number;
+  emailDemo: number;
   aiStarted: number;
   aiConnected: number;
+  callInterested: number;
+  callDemo: number;
+  callNotInterested: number;
   failed: number;
   skipped: number;
   summary: string;
@@ -100,15 +105,31 @@ function connectedCallStatus(status?: string | null) {
   return !!value && !['no answer', 'calling', 'error', 'dead (3x no answer)'].includes(value);
 }
 
+function isInterestedStatus(status?: string | null) {
+  const value = String(status || '').toLowerCase();
+  return value.includes('interested') || value.includes('callback') || value.includes('demo') || value.includes('meeting');
+}
+
+function isDemoStatus(status?: string | null) {
+  const value = String(status || '').toLowerCase();
+  return value.includes('demo') || value.includes('meeting') || value.includes('making_demo');
+}
+
+function gmailTargetForDay(day: Pick<DayStats, 'dateKey'>, settings: Settings) {
+  const normalTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
+  const date = new Date(`${day.dateKey}T00:00:00`);
+  return date.getDay() === 2 ? Math.max(240, normalTarget * 2) : normalTarget;
+}
+
 function formatDate(value: Date) {
   return value.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function dayStatus(day: DayStats, settings: Settings, now: Date) {
+function dayStatus(day: DayStats, settings: Settings, now: Date, emailTarget: number) {
   const date = new Date(`${day.dateKey}T00:00:00`);
   const end = new Date(date);
   end.setHours(settings.endHour, settings.endMinute, 0, 0);
-  const emailDone = day.gmailSent >= settings.gmailDaily;
+  const emailDone = day.gmailSent >= emailTarget;
   const callsDone = day.aiConnected >= settings.callDaily;
   if (emailDone && callsDone) return { label: 'Complete', tone: 'good' as const };
   if (now > end) return { label: 'Needs review', tone: 'warn' as const };
@@ -116,8 +137,8 @@ function dayStatus(day: DayStats, settings: Settings, now: Date) {
   return { label: 'Waiting', tone: 'muted' as const };
 }
 
-function summarizeDay(day: DayStats, settings: Settings) {
-  const emailLeft = Math.max(0, settings.gmailDaily - day.gmailSent);
+function summarizeDay(day: DayStats, settings: Settings, emailTarget: number) {
+  const emailLeft = Math.max(0, emailTarget - day.gmailSent);
   const callLeft = Math.max(0, settings.callDaily - day.aiConnected);
   if (emailLeft === 0 && callLeft === 0) return 'Daily quota hit.';
   if (day.gmailSent === 0 && day.aiStarted === 0) return 'No outreach recorded yet.';
@@ -132,7 +153,7 @@ function conclusion(days: DayStats[], settings: Settings, weekOver: boolean) {
     failed: acc.failed + day.failed,
     skipped: acc.skipped + day.skipped,
   }), { gmailSent: 0, aiStarted: 0, aiConnected: 0, failed: 0, skipped: 0 });
-  const emailTarget = settings.gmailDaily * days.length;
+  const emailTarget = days.reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0);
   const callTarget = settings.callDaily * days.length;
   const completion = Math.round(((totals.gmailSent / Math.max(1, emailTarget)) * 0.55 + (totals.aiConnected / Math.max(1, callTarget)) * 0.45) * 100);
   const best = [...days].sort((a, b) => (b.gmailSent + b.aiConnected * 6) - (a.gmailSent + a.aiConnected * 6))[0];
@@ -187,13 +208,17 @@ export default function OutreachProgressPage() {
     endMinute: settings.endMinute,
   });
   const report = conclusion(days, settings, weekOver);
-  const emailTarget = settings.gmailDaily * Math.max(1, weekDays.length);
+  const emailTarget = days.length
+    ? days.reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0)
+    : Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs) * Math.max(1, weekDays.length);
   const callTarget = settings.callDaily * Math.max(1, weekDays.length);
   const monday = days.find(day => day.dateKey === weekDays[0]?.dateKey);
   const tuesday = days.find(day => day.dateKey === weekDays[1]?.dateKey);
-  const mondayEmailDeficit = Math.max(0, settings.gmailDaily - (monday?.gmailSent || 0));
-  const tuesdayCatchUpBudget = mondayEmailDeficit > 0 ? Math.ceil(settings.gmailDaily / 2) : 0;
+  const normalEmailTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
+  const mondayEmailDeficit = Math.max(0, normalEmailTarget - (monday?.gmailSent || 0));
+  const tuesdayCatchUpBudget = mondayEmailDeficit > 0 ? normalEmailTarget : 0;
   const tuesdayCatchUpProgress = Math.min(tuesdayCatchUpBudget, tuesday?.gmailSent || 0);
+  const showTuesdayCatchUp = now.getDay() <= 2 && weekDays[1]?.dateKey >= now.toISOString().slice(0, 10);
 
   const load = async () => {
     setLoading(true);
@@ -214,10 +239,10 @@ export default function OutreachProgressPage() {
       const values = await Promise.all(keys.map(key => getSetting(key)));
       const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
       const nextSettings: Settings = {
-        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 200),
-        gmailDailySe: intValue(cfg.gmail_autosend_daily_se, DEFAULT_SETTINGS.gmailDailySe, 0, 200),
-        gmailDailyUk: intValue(cfg.gmail_autosend_daily_uk, DEFAULT_SETTINGS.gmailDailyUk, 0, 200),
-        gmailDailyEs: intValue(cfg.gmail_autosend_daily_es, DEFAULT_SETTINGS.gmailDailyEs, 0, 200),
+        gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 500),
+        gmailDailySe: intValue(cfg.gmail_autosend_daily_se, DEFAULT_SETTINGS.gmailDailySe, 0, 500),
+        gmailDailyUk: intValue(cfg.gmail_autosend_daily_uk, DEFAULT_SETTINGS.gmailDailyUk, 0, 500),
+        gmailDailyEs: intValue(cfg.gmail_autosend_daily_es, DEFAULT_SETTINGS.gmailDailyEs, 0, 500),
         callDaily: intValue(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily, DEFAULT_SETTINGS.callDaily, 1, 100),
         startHour: intValue(cfg.ai_calls_start_hour, DEFAULT_SETTINGS.startHour, 0, 23),
         startMinute: intValue(cfg.ai_calls_start_minute, DEFAULT_SETTINGS.startMinute, 0, 59),
@@ -235,7 +260,7 @@ export default function OutreachProgressPage() {
       const [{ data: emailRows }, { data: aiRows }, { data: connectedRows }, notifications] = await Promise.all([
         sb
           .from('message_logs')
-          .select('id, created_at')
+          .select('id, created_at, lead_id, leads(status)')
           .eq('channel', 'email')
           .eq('direction', 'outbound')
           .eq('status', 'sent')
@@ -251,7 +276,7 @@ export default function OutreachProgressPage() {
           .limit(10000),
         sb
           .from('leads')
-          .select('id, last_contacted_at, call_status, call_connected')
+          .select('id, last_contacted_at, call_status, call_connected, status')
           .eq('last_contact_method', 'AI Call')
           .gte('last_contacted_at', since)
           .lte('last_contacted_at', until)
@@ -267,8 +292,13 @@ export default function OutreachProgressPage() {
           shortLabel: day.shortLabel,
           nicheLabel: day.nicheLabel,
           gmailSent: 0,
+          emailInterested: 0,
+          emailDemo: 0,
           aiStarted: 0,
           aiConnected: 0,
+          callInterested: 0,
+          callDemo: 0,
+          callNotInterested: 0,
           failed: 0,
           skipped: 0,
           summary: '',
@@ -277,7 +307,12 @@ export default function OutreachProgressPage() {
 
       for (const row of emailRows || []) {
         const bucket = buckets.get(row.created_at.slice(0, 10));
-        if (bucket) bucket.gmailSent += 1;
+        if (bucket) {
+          const status = row.leads?.status;
+          bucket.gmailSent += 1;
+          if (isInterestedStatus(status)) bucket.emailInterested += 1;
+          if (isDemoStatus(status)) bucket.emailDemo += 1;
+        }
       }
       for (const row of aiRows || []) {
         const bucket = buckets.get(row.created_at.slice(0, 10));
@@ -286,7 +321,12 @@ export default function OutreachProgressPage() {
       for (const row of connectedRows || []) {
         if (row.call_connected !== true && !connectedCallStatus(row.call_status)) continue;
         const bucket = buckets.get(String(row.last_contacted_at || '').slice(0, 10));
-        if (bucket) bucket.aiConnected += 1;
+        if (bucket) {
+          bucket.aiConnected += 1;
+          if (isInterestedStatus(row.status) || isInterestedStatus(row.call_status)) bucket.callInterested += 1;
+          if (isDemoStatus(row.status) || isDemoStatus(row.call_status)) bucket.callDemo += 1;
+          if (String(row.status || '').toLowerCase() === 'not_interested' || String(row.call_status || '').toLowerCase().includes('not interested')) bucket.callNotInterested += 1;
+        }
       }
 
       const relevantNotifications = notifications.filter(item => {
@@ -303,7 +343,7 @@ export default function OutreachProgressPage() {
 
       const nextDays = Array.from(buckets.values()).map(day => ({
         ...day,
-        summary: summarizeDay(day, nextSettings),
+        summary: summarizeDay(day, nextSettings, gmailTargetForDay(day, nextSettings)),
       }));
       setDays(nextDays);
       setHistory(relevantNotifications.slice(0, 30));
@@ -379,7 +419,7 @@ export default function OutreachProgressPage() {
           <div className="mb-4 flex items-center gap-2">
             <Mail size={17} className="text-primary" />
             <h2 className="font-semibold text-foreground">Daily email split by country</h2>
-            <Badge variant="secondary" className="ml-auto">Total {settings.gmailDaily}/day</Badge>
+            <Badge variant="secondary" className="ml-auto">Normal {normalEmailTarget}/day</Badge>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <CountryCap code="SE" label="Sweden" cap={settings.gmailDailySe} note="Main market — SE leads first" />
@@ -387,10 +427,11 @@ export default function OutreachProgressPage() {
             <CountryCap code="ES" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Plus {settings.callDaily} connected AI calls/day (Sweden). UK/ES slots fill automatically once leads from those countries are imported.
+            Tuesday is the catch-up exception: up to 240 Gmail total, with the send window extended to 18:00. Plus {settings.callDaily} connected AI calls/day (Sweden).
           </p>
         </section>
 
+        {showTuesdayCatchUp && (
         <section className="mt-5 rounded-lg border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
             <RefreshCw size={17} className="text-primary" />
@@ -400,14 +441,15 @@ export default function OutreachProgressPage() {
             </Badge>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
-            <MiniStat label="Monday VVS sent" value={`${monday?.gmailSent || 0} / ${settings.gmailDaily}`} />
+            <MiniStat label="Monday VVS sent" value={`${monday?.gmailSent || 0} / ${normalEmailTarget}`} />
             <MiniStat label="Tuesday catch-up allocation" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpBudget} max` : 'Not needed'} />
             <MiniStat label="Tuesday catch-up progress" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpProgress} / ${tuesdayCatchUpBudget}` : 'Complete'} />
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            If Monday Gmail missed quota, Tuesday uses the first half of the safe daily Gmail cap for Monday's VVS and emergency trades catch-up, then switches to Tuesday's dental batch. The daily Gmail cap stays at {settings.gmailDaily}; AI calls stay capped at {settings.callDaily} connected calls.
+            If Monday Gmail missed quota, Tuesday can use the first {normalEmailTarget} Gmail slots for Monday's VVS and emergency trades catch-up, then switch to Tuesday's dental batch. Tuesday's special Gmail cap is 240; AI calls stay capped at {settings.callDaily} connected calls.
           </p>
         </section>
+        )}
 
         <section className="mt-5 rounded-lg border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
@@ -416,9 +458,12 @@ export default function OutreachProgressPage() {
           </div>
           <div className="grid gap-3 xl:grid-cols-5">
             {days.map(day => {
-              const status = dayStatus(day, settings, now);
-              const emailPct = Math.min(100, Math.round((day.gmailSent / Math.max(1, settings.gmailDaily)) * 100));
+              const dayEmailTarget = gmailTargetForDay(day, settings);
+              const status = dayStatus(day, settings, now, dayEmailTarget);
+              const emailPct = Math.min(100, Math.round((day.gmailSent / Math.max(1, dayEmailTarget)) * 100));
               const callPct = Math.min(100, Math.round((day.aiConnected / Math.max(1, settings.callDaily)) * 100));
+              const emailInterestPct = Math.round((day.emailInterested / Math.max(1, day.gmailSent)) * 100);
+              const callInterestPct = Math.round((day.callInterested / Math.max(1, day.aiConnected)) * 100);
               return (
                 <div key={day.dateKey} className="rounded-lg border border-border bg-background/40 p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -435,11 +480,13 @@ export default function OutreachProgressPage() {
                   </div>
 
                   <div className="mt-4 space-y-3">
-                    <ProgressLine label="Gmail" value={day.gmailSent} target={settings.gmailDaily} percent={emailPct} />
+                    <ProgressLine label="Gmail" value={day.gmailSent} target={dayEmailTarget} percent={emailPct} />
                     <ProgressLine label="Connected calls" value={day.aiConnected} target={settings.callDaily} percent={callPct} />
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
+                    <MiniStat label="Email interest" value={`${emailInterestPct}%`} />
+                    <MiniStat label="Call interest" value={`${callInterestPct}%`} />
                     <MiniStat label="AI started" value={day.aiStarted} />
                     <MiniStat label="Failed" value={day.failed} />
                   </div>

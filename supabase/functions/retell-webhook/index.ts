@@ -50,12 +50,44 @@ function boolish(value: unknown) {
   return value === true || String(value).toLowerCase() === 'true';
 }
 
+function normalizeOutcome(value: string) {
+  return value.toLowerCase().replace(/[_-]/g, ' ').trim();
+}
+
 function outcomeFromCustom(custom: JsonRecord) {
   if (boolish(custom.do_not_contact)) return 'do_not_contact';
   if (boolish(custom.meeting_requested)) return 'meeting_requested';
   if (boolish(custom.demo_requested)) return 'demo_requested';
   if (boolish(custom.interested)) return 'interested';
   return '';
+}
+
+function statusFromExplicitOutcome(outcome: string) {
+  const text = normalizeOutcome(outcome);
+  if (!text) return null;
+  if (hasAny(text, ['do not contact', 'opt out', 'stop calling', 'do not call'])) {
+    return {
+      call_status: 'Do not contact',
+      status: 'not_interested',
+      outreach_state: 'do_not_contact',
+      do_not_contact: true,
+      outreach_opt_out: true,
+      next_step: 'Do not contact again',
+    };
+  }
+  if (hasAny(text, ['not interested', 'declined', 'no interest', 'not relevant', 'not a fit', 'remove'])) {
+    return { call_status: 'Not interested', status: 'not_interested', outreach_state: 'called', next_step: 'No follow-up needed' };
+  }
+  if (hasAny(text, ['meeting requested', 'meeting booked', 'booked meeting', 'requested meeting', 'schedule meeting'])) {
+    return { call_status: 'Meeting requested', status: 'demo', outreach_state: 'called', next_step: 'Schedule meeting and follow up manually' };
+  }
+  if (hasAny(text, ['demo requested', 'asked for demo', 'wants demo', 'send demo', 'requested demo'])) {
+    return { call_status: 'Demo requested', status: 'demo', outreach_state: 'called', next_step: 'Send demo and follow up manually' };
+  }
+  if (hasAny(text, ['interested', 'positive', 'wants more info', 'follow up', 'callback requested', 'call back'])) {
+    return { call_status: 'Interested', status: 'interested', outreach_state: 'called', next_step: 'Follow up manually' };
+  }
+  return null;
 }
 
 function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
@@ -72,13 +104,24 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     outcomeFromCustom(custom),
     analysis.call_successful,
   ).toLowerCase();
-  const fallback = `${firstString(call.call_status, payload.call_status)} ${firstString(call.disconnection_reason, payload.disconnection_reason)} ${summary} ${transcript}`.toLowerCase();
-  const text = `${primary} ${fallback}`;
+  const explicit = statusFromExplicitOutcome(firstString(
+    custom.outcome,
+    custom.call_outcome,
+    custom.lead_outcome,
+    custom.status,
+    custom.interest_level,
+    outcomeFromCustom(custom),
+  ));
+  if (explicit) return explicit;
+  const transportText = `${firstString(call.call_status, payload.call_status)} ${firstString(call.disconnection_reason, payload.disconnection_reason)}`.toLowerCase();
+  const analysisText = `${primary} ${summary}`.toLowerCase();
+  const transcriptText = transcript.toLowerCase();
+  const text = `${analysisText} ${transportText}`;
 
   if (event === 'call_started' || hasAny(text, ['ongoing', 'registered'])) {
     return { call_status: 'Calling' };
   }
-  if (hasAny(text, ['do not contact', 'do-not-contact', 'opt out', 'opt-out', 'stop calling'])) {
+  if (hasAny(`${analysisText} ${transcriptText}`, ['do not contact', 'do-not-contact', 'opt out', 'opt-out', 'stop calling', 'sluta ring', 'kontakta inte'])) {
     return {
       call_status: 'Do not contact',
       status: 'not_interested',
@@ -88,19 +131,19 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
       next_step: 'Do not contact again',
     };
   }
-  if (hasAny(text, ['meeting requested', 'book meeting', 'schedule meeting', 'meeting'])) {
-    return { call_status: 'Meeting requested', status: 'interested', outreach_state: 'called', next_step: 'Schedule meeting and follow up manually' };
-  }
-  if (hasAny(text, ['not interested', 'declined', 'declined further contact', 'no interest', 'nothing today', 'ingenting strax idag', 'without the user opting in'])) {
+  if (hasAny(`${analysisText} ${transcriptText}`, ['not interested', 'declined', 'declined further contact', 'no interest', 'nothing today', 'not relevant', 'not a fit', 'inget intresse', 'inte intresserad', 'without the user opting in'])) {
     return { call_status: 'Not interested', status: 'not_interested', outreach_state: 'called', next_step: 'No follow-up needed' };
   }
-  if (hasAny(text, ['demo requested', 'wants demo', 'send demo', 'demo'])) {
-    return { call_status: 'Demo requested', status: 'interested', outreach_state: 'called', next_step: 'Send demo and follow up manually' };
+  if (hasAny(analysisText, ['meeting requested', 'booked a meeting', 'meeting booked', 'requested a meeting', 'schedule meeting'])) {
+    return { call_status: 'Meeting requested', status: 'demo', outreach_state: 'called', next_step: 'Schedule meeting and follow up manually' };
   }
-  if (hasAny(text, ['interested', 'positive', 'successful'])) {
+  if (hasAny(analysisText, ['demo requested', 'asked for demo', 'wants demo', 'requested a demo', 'send demo'])) {
+    return { call_status: 'Demo requested', status: 'demo', outreach_state: 'called', next_step: 'Send demo and follow up manually' };
+  }
+  if (hasAny(analysisText, ['interested', 'positive response', 'wants more info', 'follow up requested', 'callback requested'])) {
     return { call_status: 'Interested', status: 'interested', outreach_state: 'called', next_step: 'Follow up manually' };
   }
-  if (hasAny(text, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy'])) {
+  if (hasAny(`${transportText} ${analysisText}`, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy'])) {
     // Doesn't count as a real call — clear last_called_at so it isn't counted in "calls today",
     // schedule a retry for tomorrow, and let no_answer_count gate the 3-strike rule.
     return { call_status: 'No answer', outreach_state: 'not_contacted', next_step: 'Auto-retry on next eligible day', __no_answer: true };
@@ -109,7 +152,7 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     return { call_status: 'Error', outreach_state: 'follow_up_needed', next_step: 'Check Retell error and retry manually if appropriate' };
   }
   if (event === 'call_ended' || event === 'call_analyzed') {
-    return { call_status: 'Interested', outreach_state: 'called', next_step: 'Review transcript and decide next action' };
+    return { call_status: 'Answered', status: 'answered', outreach_state: 'called', next_step: 'Review transcript and decide next action' };
   }
   return {};
 }

@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const DEFAULT_DAILY = 100;
+const DEFAULT_DAILY = 120;
 const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
@@ -309,22 +309,35 @@ Deno.serve(async (req) => {
 
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
-    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
-    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
-    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
-    const configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
-    const countryCapTotal = capSe + capUk + capEs;
-    const daily = Math.max(1, Math.min(configuredDaily, countryCapTotal || configuredDaily));
+    let capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
+    let capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
+    let capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
+    let configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const supplyMin = Math.max(20, Math.min(1000, parseInt(cfg.gmail_autosend_supply_min || '') || DEFAULT_EMAIL_SUPPLY_MIN));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const startMinute = intSetting(cfg, 'ai_calls_start_minute', 0, 0, 59);
-    const endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
-    const endMinute = intSetting(cfg, 'ai_calls_end_minute', 0, 0, 59);
+    let endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
+    let endMinute = intSetting(cfg, 'ai_calls_end_minute', 0, 0, 59);
     const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
+    const regularCountryCapTotal = capSe + capUk + capEs;
+    const regularDaily = Math.max(1, Math.min(500, Math.max(configuredDaily, regularCountryCapTotal || configuredDaily)));
+    const isTuesday = nowLocal.day === 2;
+    if (!force && isTuesday) {
+      configuredDaily = Math.max(configuredDaily, 240);
+      capSe = Math.max(capSe, 200);
+      capUk = Math.max(capUk, 20);
+      capEs = Math.max(capEs, 20);
+      if (minutesOfDay(endHour, endMinute) < minutesOfDay(18, 0)) {
+        endHour = 18;
+        endMinute = 0;
+      }
+    }
+    const countryCapTotal = capSe + capUk + capEs;
+    const daily = Math.max(1, Math.min(500, Math.max(configuredDaily, countryCapTotal || configuredDaily)));
     const initialNichePlan = await chooseNichePlan(supabase, cfg, nowLocal.day);
 
     if (!enabled && !force) {
@@ -411,13 +424,13 @@ Deno.serve(async (req) => {
         .lt('created_at', startOfDay.toISOString())
         .limit(10000);
       const mondaySent = mondayRows?.length || 0;
-      const mondayDeficit = Math.max(0, daily - mondaySent);
-      const catchUpBudgetToday = mondayDeficit > 0 ? Math.ceil(daily / 2) : 0;
+      const mondayDeficit = Math.max(0, regularDaily - mondaySent);
+      const catchUpBudgetToday = mondayDeficit > 0 ? regularDaily : 0;
       const usingCatchUp = mondayDeficit > 0 && sentToday < catchUpBudgetToday;
       catchUpStatus = {
         enabled: mondayDeficit > 0,
         mondaySent,
-        mondayTarget: daily,
+        mondayTarget: regularDaily,
         mondayDeficit,
         catchUpBudgetToday,
         selected: usingCatchUp ? 'monday_emergency_trades' : 'tuesday_dental',
