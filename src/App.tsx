@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 
 // Lazy: everything else — splits bundle per route for faster initial load
 const AddPage = lazy(() => import("./pages/AddPage"));
+const MarketingPage = lazy(() => import("./pages/MarketingPage"));
 const BulkPage = lazy(() => import("./pages/BulkPage"));
 const SectionPage = lazy(() => import("./pages/SectionPage"));
 const ClosingPage = lazy(() => import("./pages/ClosingPage"));
@@ -207,7 +208,17 @@ const App = () => (
                   <ScoringWeightsBootstrap />
                   <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>}>
                     <Routes>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/" element={<MarketingPage />} />
+                      <Route path="/missade-samtal-audit" element={<MarketingPage mode="audit" />} />
+                      <Route path="/boka-demo" element={<MarketingPage mode="demo" />} />
+                      <Route path="/priser" element={<MarketingPage mode="pricing" />} />
+                      <Route path="/sa-fungerar-det" element={<MarketingPage />} />
+                      <Route path="/exempel" element={<MarketingPage />} />
+                      <Route path="/vvs" element={<MarketingPage mode="niche" />} />
+                      <Route path="/tandlakare" element={<MarketingPage mode="niche" />} />
+                      <Route path="/bilverkstad" element={<MarketingPage mode="niche" />} />
+                      <Route path="/elektriker-jour" element={<MarketingPage mode="niche" />} />
+                      <Route path="/:city/:niche" element={<MarketingPage mode="niche" />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/outreach-progress" element={<OutreachProgressPage />} />
