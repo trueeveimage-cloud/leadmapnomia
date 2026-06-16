@@ -47,6 +47,7 @@ const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
 const EmailFinderPage = lazy(() => import("./pages/EmailFinderPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const HealthCheckPage = lazy(() => import("./pages/HealthCheckPage"));
 
 
 const queryClient = new QueryClient();
@@ -265,6 +266,7 @@ const App = () => (
                       <Route path="/mailbox" element={<MailboxPage />} />
                       <Route path="/guide" element={<GuidePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/health" element={<HealthCheckPage />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
