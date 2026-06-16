@@ -465,7 +465,9 @@ Deno.serve(async (req) => {
       .or('outreach_stage.is.null,outreach_stage.neq.email_sent')
       .is('last_called_at', null)
       .order('potential_score', { ascending: false, nullsFirst: false })
-      .limit(1000);
+      // Load enough leads before niche/country filtering so launch-week stock
+      // searches show up in the scheduled Gmail queue immediately.
+      .limit(5000);
     console.log('[gmail-auto] candidates', { count: candidates?.length, error: candErr?.message });
     if (candErr) throw candErr;
 

@@ -16,21 +16,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
+import { EMPTY_LEAD_SUPPLY_STATS, loadLeadmapSupplyStats, type LeadSupplyStats } from '@/lib/leadSupply';
 import { cn } from '@/lib/utils';
-import { connectedCallStatus, gmailTargetForToday, isCallEligible, isEmailEligible, normalizePhone } from '@/lib/outreachEligibility';
+import { connectedCallStatus, gmailTargetForToday } from '@/lib/outreachEligibility';
 
 type ReadinessStatus = 'ready' | 'warning' | 'blocked' | 'checking';
-
-type LeadBucketStats = {
-  total: number;
-  readyEmail: number;
-  readyCall: number;
-  missingEmail: number;
-  missingPhone: number;
-  alreadyContacted: number;
-  doNotContact: number;
-  duplicateEmails: number;
-};
 
 type LaunchItem = {
   key: string;
@@ -58,7 +48,7 @@ type DailyStat = {
 
 type Diagnostics = {
   items: LaunchItem[];
-  buckets: LeadBucketStats;
+  buckets: LeadSupplyStats;
   logs: LogItem[];
   daily: DailyStat[];
   blockers: string[];
@@ -71,17 +61,6 @@ type Diagnostics = {
   windowLabel: string;
   nextCheckLabel: string;
   windowOpen: boolean;
-};
-
-const EMPTY_BUCKETS: LeadBucketStats = {
-  total: 0,
-  readyEmail: 0,
-  readyCall: 0,
-  missingEmail: 0,
-  missingPhone: 0,
-  alreadyContacted: 0,
-  doNotContact: 0,
-  duplicateEmails: 0,
 };
 
 const DEFAULT_SETTINGS: Record<string, string> = {
@@ -180,45 +159,6 @@ function scheduleStatus(settings: Record<string, string>) {
   };
 }
 
-function alreadyContacted(lead: any) {
-  return !!lead.last_contacted_at
-    || !!lead.last_called_at
-    || lead.last_contact_method === 'AI Call'
-    || lead.outreach_stage === 'email_sent'
-    || lead.outreach_state === 'email_sent'
-    || lead.outreach_state === 'called'
-    || lead.call_connected === true;
-}
-
-function buildBuckets(leads: any[]) {
-  const buckets = { ...EMPTY_BUCKETS };
-  const seenEmails = new Set<string>();
-  for (const lead of leads) {
-    buckets.total += 1;
-    const email = String(lead.email || '').trim().toLowerCase();
-    const hasEmail = !!email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    const hasPhone = !!normalizePhone(lead.phone_e164 || lead.phone);
-    const blocked = lead.outreach_opt_out || lead.do_not_contact === true || lead.outreach_state === 'do_not_contact';
-    const contacted = alreadyContacted(lead);
-    if (!hasEmail) buckets.missingEmail += 1;
-    if (!hasPhone) buckets.missingPhone += 1;
-    if (blocked) buckets.doNotContact += 1;
-    if (contacted) buckets.alreadyContacted += 1;
-    if (hasEmail && seenEmails.has(email)) buckets.duplicateEmails += 1;
-    if (hasEmail) seenEmails.add(email);
-
-    const highTier = ['S', 'A+', 'A'].includes(String(lead.lead_tier || ''));
-    if (hasEmail && highTier && !blocked && !contacted && isEmailEligible(lead) && !seenEmails.has(`${email}:used`)) {
-      buckets.readyEmail += 1;
-      seenEmails.add(`${email}:used`);
-    }
-    if (hasPhone && isCallEligible(lead, { product: 'leadmap', countries: ['SE'] })) {
-      buckets.readyCall += 1;
-    }
-  }
-  return buckets;
-}
-
 function itemClass(status: ReadinessStatus) {
   if (status === 'ready') return 'border-emerald-500/30 bg-emerald-500/10';
   if (status === 'warning') return 'border-amber-500/30 bg-amber-500/10';
@@ -268,13 +208,9 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     'ai_calls_product',
   ];
 
-  const [settingsRes, leadsRes, emailTodayRes, messageRowsRes, activityRowsRes, connectedRowsRes, notificationRowsRes, diagRes, previewRes] = await Promise.allSettled([
+  const [settingsRes, supplyRes, emailTodayRes, messageRowsRes, activityRowsRes, connectedRowsRes, notificationRowsRes, diagRes, previewRes] = await Promise.allSettled([
     sb.from('settings').select('key,value').in('key', settingsKeys),
-    sb
-      .from('leads')
-      .select('id,name,email,phone,phone_e164,lead_tier,outreach_stage,outreach_state,outreach_opt_out,do_not_contact,last_called_at,last_contacted_at,last_contact_method,call_attempts,no_answer_count,next_call_after,call_status,call_connected,product,status,potential_score')
-      .eq('product', 'leadmap')
-      .limit(5000),
+    loadLeadmapSupplyStats(),
     sb
       .from('message_logs')
       .select('id', { count: 'exact', head: true })
@@ -317,8 +253,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     for (const row of settingsRes.value.data || []) settings[row.key] = row.value;
   }
 
-  const leads = leadsRes.status === 'fulfilled' ? (leadsRes.value.data || []) : [];
-  const buckets = buildBuckets(leads);
+  const buckets = supplyRes.status === 'fulfilled' ? supplyRes.value : EMPTY_LEAD_SUPPLY_STATS;
   const emailCap = gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 120));
   const callCap = intSetting(settings, 'ai_calls_daily_connected_cap', intSetting(settings, 'ai_calls_daily', 15));
   const emailSentToday = emailTodayRes.status === 'fulfilled' ? (emailTodayRes.value.count || 0) : 0;
@@ -338,6 +273,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   }).length;
   const callsStartedToday = activityRows.filter((row: any) => new Date(row.created_at) >= new Date(today)).length;
   const previewEligible = Number(preview?.eligibleCalls ?? preview?.eligible ?? buckets.readyCall);
+  const previewLabel = preview?.nicheLabel ? `${preview.nicheLabel} queue` : 'today queue';
 
   const items: LaunchItem[] = [
     {
@@ -364,9 +300,9 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     {
       key: 'phone-supply',
       label: 'Call supply',
-      value: previewEligible.toLocaleString(),
-      detail: preview?.message || (previewEligible >= callCap ? `Enough for ${callCap} connected-call target.` : `Need more callable numbers before the queue can finish the day.`),
-      status: previewEligible >= callCap ? 'ready' : previewEligible > 0 ? 'warning' : 'blocked',
+      value: buckets.readyCall.toLocaleString(),
+      detail: `${previewEligible.toLocaleString()} in ${previewLabel}; ${buckets.readyCall.toLocaleString()} total callable SE leads.`,
+      status: buckets.readyCall >= callCap ? 'ready' : buckets.readyCall > 0 ? 'warning' : 'blocked',
     },
     {
       key: 'schedule',
@@ -483,6 +419,26 @@ export default function LaunchReadinessPanel({ compact = false }: { compact?: bo
     refresh();
     const intervalId = window.setInterval(refresh, 30_000);
     return () => window.clearInterval(intervalId);
+  }, [refresh]);
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const scheduleRefresh = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(refresh, 800);
+    };
+    const channel = supabase
+      .channel('launch-readiness-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: 'product=eq.leadmap' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_logs' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_notifications' }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
   }, [refresh]);
 
   const overall = useMemo<ReadinessStatus>(() => {

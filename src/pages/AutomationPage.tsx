@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchNotifications, getSetting, setSetting, type AppNotification } from '@/lib/supabase';
+import { loadLeadmapSupplyStats } from '@/lib/leadSupply';
 import { cn } from '@/lib/utils';
 import {
   Bot,
@@ -29,7 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LEADMAP_EMAIL_BODY_SV, LEADMAP_EMAIL_SUBJECT_SV } from '@/lib/leadmapEmailTemplates';
-import { connectedCallStatus, gmailTargetForToday, isCallEligible, isEmailEligible, NORMAL_GMAIL_DAILY_TARGET, normalizePhone } from '@/lib/outreachEligibility';
+import { connectedCallStatus, gmailTargetForToday, NORMAL_GMAIL_DAILY_TARGET } from '@/lib/outreachEligibility';
 
 type AutomationSettings = {
   aiEnabled: boolean;
@@ -494,7 +495,7 @@ export default function AutomationPage() {
   const loadStats = async (nextSettings = settings) => {
     const activeSince = new Date(Date.now() - 45 * 60 * 1000).toISOString();
     const sb = supabase as any;
-    const [{ count: emailsToday }, callsTodayRes, { count: activeCalls }, emailRowsRes, callRowsRes] = await Promise.all([
+    const [{ count: emailsToday }, callsTodayRes, { count: activeCalls }, supply] = await Promise.all([
       sb
         .from('message_logs')
         .select('id', { count: 'exact', head: true })
@@ -513,34 +514,16 @@ export default function AutomationPage() {
         .select('id', { count: 'exact', head: true })
         .eq('call_status', 'Calling')
         .gte('last_called_at', activeSince),
-      sb
-        .from('leads')
-        .select('id, email, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, call_connected')
-        .not('email', 'is', null)
-        .neq('email', '')
-        .limit(5000),
-      sb
-        .from('leads')
-        .select('id, phone, phone_e164, country, address, product, status, call_attempts, no_answer_count, next_call_after, call_status, call_connected, outreach_opt_out, do_not_contact, potential_score, last_contacted_at, outreach_state')
-        .or('phone.not.is.null,phone_e164.not.is.null')
-        .limit(2000),
+      loadLeadmapSupplyStats(),
     ]);
 
     const connectedCallsToday = (callsTodayRes.data || []).filter((lead: any) => lead.call_connected === true || connectedCallStatus(lead.call_status)).length;
 
-    const callEligible = (callRowsRes.data || []).filter((lead: any) => isCallEligible(lead, {
-      product: nextSettings.aiProduct,
-      minScore: Number(nextSettings.aiMinScore || 0),
-      countries: nextSettings.aiCountries,
-    })).length;
-    const seenEmails = new Set<string>();
-    const emailEligible = (emailRowsRes.data || []).filter((lead: any) => isEmailEligible(lead, seenEmails)).length;
-
     setStats({
       callsToday: connectedCallsToday,
       emailsToday: emailsToday || 0,
-      callEligible,
-      emailEligible,
+      callEligible: supply.readyCall,
+      emailEligible: supply.readyEmail,
       activeCalls: activeCalls || 0,
     });
   };

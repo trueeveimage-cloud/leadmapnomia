@@ -407,7 +407,9 @@ Deno.serve(async (req) => {
       .or('no_answer_count.is.null,no_answer_count.lt.3')
       .or(`next_call_after.is.null,next_call_after.lte.${new Date().toISOString()}`)
       .order('potential_score', { ascending: false, nullsFirst: false })
-      .limit(Math.max(500, perRun * 100));
+      // Load enough leads before niche filtering; a tiny top-score slice can make
+      // a stocked niche look empty even when the database has hundreds available.
+      .limit(Math.max(5000, perRun * 100));
     if (product !== 'all') query = query.eq('product', product);
     if (minScore > 0) query = query.gte('potential_score', minScore);
 

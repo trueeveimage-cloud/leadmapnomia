@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -361,6 +362,26 @@ export default function OutreachProgressPage() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const scheduleLoad = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(load, 800);
+    };
+    const channel = supabase
+      .channel('outreach-progress-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_logs' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: 'product=eq.leadmap' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_notifications' }, scheduleLoad)
+      .subscribe();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   return (
     <AppLayout>
       <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-5 sm:py-6">
@@ -376,6 +397,10 @@ export default function OutreachProgressPage() {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </Button>
+        </div>
+
+        <div className="mb-5">
+          <LaunchReadinessPanel />
         </div>
 
         <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
