@@ -266,6 +266,7 @@ const App = () => (
                       <Route path="/mailbox" element={<MailboxPage />} />
                       <Route path="/guide" element={<GuidePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/health" element={<HealthCheckPage />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
