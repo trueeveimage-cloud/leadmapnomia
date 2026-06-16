@@ -6,13 +6,35 @@ const corsHeaders = {
 
 Deno.serve((req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  const keys = ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY', 'RETELL_AGENT_ID', 'RETELL_API_KEY', 'RETELL_FROM_NUMBER', 'SUPABASE_SERVICE_ROLE_KEY'];
-  const out: Record<string, string> = {};
-  for (const k of keys) {
+  const required = [
+    'LOVABLE_API_KEY',
+    'GOOGLE_MAIL_API_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_URL',
+    'RETELL_API_KEY',
+    'RETELL_AGENT_ID',
+    'RETELL_FROM_NUMBER',
+    'TWILIO_ACCOUNT_SID',
+    'TWILIO_AUTH_TOKEN',
+    'TWILIO_PHONE_NUMBER',
+    'GOOGLE_PLACES_API_KEY',
+  ];
+  const secrets: Record<string, { present: boolean; len: number }> = {};
+  for (const k of required) {
     const v = Deno.env.get(k) || '';
-    out[k] = v ? `present (len=${v.length})` : 'MISSING';
+    secrets[k] = { present: !!v, len: v.length };
   }
-  return new Response(JSON.stringify(out, null, 2), {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const projectRef = supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] || 'unknown';
+  const missing = Object.entries(secrets).filter(([_, v]) => !v.present).map(([k]) => k);
+  return new Response(JSON.stringify({
+    ok: missing.length === 0,
+    project_ref: projectRef,
+    supabase_url: supabaseUrl,
+    missing,
+    secrets,
+    checked_at: new Date().toISOString(),
+  }, null, 2), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
