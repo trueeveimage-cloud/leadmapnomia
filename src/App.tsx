@@ -42,6 +42,7 @@ const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const AutomationPage = lazy(() => import("./pages/AutomationPage"));
 const OutreachProgressPage = lazy(() => import("./pages/OutreachProgressPage"));
+const AutomationRunsPage = lazy(() => import("./pages/AutomationRunsPage"));
 const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
@@ -134,6 +135,7 @@ function productForPath(pathname: string) {
     pathname.startsWith('/leadmap')
     || pathname.startsWith('/automation')
     || pathname.startsWith('/outreach-progress')
+    || pathname.startsWith('/automation-runs')
     || pathname.startsWith('/partners')
     || pathname.startsWith('/gbp-content')
     || pathname.startsWith('/lead-finder')
@@ -211,6 +213,7 @@ const App = () => (
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/outreach-progress" element={<OutreachProgressPage />} />
+                      <Route path="/automation-runs" element={<AutomationRunsPage />} />
                       <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />

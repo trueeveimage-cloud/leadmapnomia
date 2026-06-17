@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { connectedCallStatus } from '@/lib/outreachEligibility';
 import {
   Activity,
+  AlertTriangle,
   Bot,
   CalendarDays,
   CheckCircle2,
@@ -31,6 +32,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
 
 type DayStats = {
   dateKey: string;
@@ -126,10 +128,16 @@ function dayStatus(day: DayStats, settings: Settings, now: Date, emailTarget: nu
   const date = new Date(`${day.dateKey}T00:00:00`);
   const end = new Date(date);
   end.setHours(settings.endHour, settings.endMinute, 0, 0);
+  const isPast = now > end;
+  const isToday = day.dateKey === new Date().toISOString().slice(0, 10);
   const emailDone = day.gmailSent >= emailTarget;
   const callsDone = day.aiConnected >= settings.callDaily;
-  if (emailDone && callsDone) return { label: 'Complete', tone: 'good' as const };
-  if (now > end) return { label: 'Needs review', tone: 'warn' as const };
+  if (emailDone && callsDone) return { label: `Complete · ${day.gmailSent}✉ ${day.aiConnected}📞`, tone: 'good' as const };
+  if (isToday) return { label: `Running · ${day.gmailSent}/${emailTarget}✉ ${day.aiConnected}/${settings.callDaily}📞`, tone: 'active' as const };
+  if (isPast) {
+    if (day.gmailSent === 0 && day.aiStarted === 0) return { label: 'No runs', tone: 'warn' as const };
+    return { label: `Below target · ${day.gmailSent}/${emailTarget}✉ ${day.aiConnected}/${settings.callDaily}📞`, tone: 'warn' as const };
+  }
   if (day.gmailSent > 0 || day.aiStarted > 0) return { label: 'In progress', tone: 'active' as const };
   return { label: 'Waiting', tone: 'muted' as const };
 }
@@ -333,7 +341,7 @@ export default function OutreachProgressPage() {
 
       const relevantNotifications = notifications.filter(item => {
         const key = item.created_at.slice(0, 10);
-        return buckets.has(key) && (item.type === 'gmail_batch_done' || item.type === 'ai_call_batch_done');
+        return buckets.has(key) && (item.type === 'gmail_batch_done' || item.type === 'ai_call_batch_done' || item.type === 'system_error');
       });
       for (const item of relevantNotifications) {
         const bucket = buckets.get(item.created_at.slice(0, 10));
@@ -398,6 +406,8 @@ export default function OutreachProgressPage() {
             Refresh
           </Button>
         </div>
+
+        <ErrorAlertBanner history={history} />
 
         <div className="mb-5">
           <LaunchReadinessPanel />
@@ -610,6 +620,37 @@ function ProgressLine({ label, value, target, percent }: { label: string; value:
       </div>
       <div className="mt-1.5 h-1.5 rounded-full bg-muted">
         <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ErrorAlertBanner({ history }: { history: AppNotification[] }) {
+  const errors = history.filter(h => h.type === 'system_error' || /fail|error|401|429|missing secret/i.test(`${h.title} ${h.message}`));
+  if (errors.length === 0) return null;
+  const latest = errors[0];
+  const payload = (latest.payload || {}) as Record<string, any>;
+  const detail = payload.error || payload.details || payload.reason || latest.message;
+  return (
+    <div className="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/5 p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle size={18} className="mt-0.5 text-rose-500" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold text-rose-500">
+              {errors.length} automation failure{errors.length === 1 ? '' : 's'} this week
+            </div>
+            <Badge variant="outline" className="text-[10px]">{latest.type}</Badge>
+            <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+              {new Date(latest.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <div className="mt-1 text-sm text-foreground">{latest.title}</div>
+          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{String(detail).slice(0, 280)}</div>
+          <Link to="/automation-runs" className="mt-2 inline-block text-xs font-medium text-rose-500 hover:underline">
+            View full run log →
+          </Link>
+        </div>
       </div>
     </div>
   );
