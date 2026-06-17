@@ -12,6 +12,7 @@ import {
   buildPartnerEmail,
   fetchPartnerLogs,
   fetchPartnerProspects,
+  partnerWebsiteHref,
   partnerTypeLabel,
   PARTNER_SEARCH_PRESETS,
   PARTNER_STATUSES,
@@ -37,9 +38,15 @@ import {
 import { toast } from 'sonner';
 
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
+const PARTNER_BATCH_LIMIT = 100;
+const PARTNER_BATCH_DELAY_MS = 2000;
 
 function unique<T>(values: T[]) {
   return Array.from(new Set(values));
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function statusTone(status: PartnerStatus) {
@@ -62,9 +69,19 @@ export default function PartnerAcquisitionPage() {
   const [logs, setLogs] = useState<PartnerOutreachLog[]>([]);
   const [logCount, setLogCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [emailScraping, setEmailScraping] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [batchSending, setBatchSending] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{
+    total: number;
+    sent: number;
+    skipped: number;
+    failed: number;
+    current?: string;
+    error?: string;
+  } | null>(null);
   const [query, setQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<'all' | PartnerStatus>('all');
   const [searchProgress, setSearchProgress] = useState<{
@@ -79,13 +96,16 @@ export default function PartnerAcquisitionPage() {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [nextProspects, nextLogs] = await Promise.all([fetchPartnerProspects(), fetchPartnerLogs()]);
       setProspects(nextProspects);
       setLogs(nextLogs);
       setLogCount(nextLogs.filter(log => log.status === 'sent').length);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load partners');
+      const message = error instanceof Error ? error.message : 'Failed to load partners';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -108,6 +128,28 @@ export default function PartnerAcquisitionPage() {
     const qualified = prospects.filter(item => item.status === 'qualified').length;
     return { ready, contacted, replied, calls, qualified };
   }, [prospects]);
+
+  const sentPartnerIds = useMemo(() => new Set(
+    logs
+      .filter(log => log.status === 'sent' && log.partner_prospect_id)
+      .map(log => log.partner_prospect_id as string),
+  ), [logs]);
+
+  const sentPartnerEmails = useMemo(() => new Set(
+    logs
+      .filter(log => log.status === 'sent' && log.to_email)
+      .map(log => String(log.to_email).trim().toLowerCase()),
+  ), [logs]);
+
+  const contactablePartners = useMemo(() => prospects
+    .filter(prospect => {
+      const email = String(prospect.email || '').trim().toLowerCase();
+      if (!email || prospect.do_not_contact) return false;
+      if (['contacted', 'replied', 'partner_call_booked', 'qualified', 'not_fit', 'do_not_contact'].includes(prospect.status)) return false;
+      if (sentPartnerIds.has(prospect.id) || sentPartnerEmails.has(email)) return false;
+      return true;
+    })
+    .sort((a, b) => (b.fit_score || 0) - (a.fit_score || 0)), [prospects, sentPartnerEmails, sentPartnerIds]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -231,8 +273,15 @@ export default function PartnerAcquisitionPage() {
 
   const scrapePartnerEmails = async (candidates: FinderCandidate[]) => {
     const targets = candidates.filter(candidate => candidate.website && !candidate.email);
+    let found = 0;
     for (let i = 0; i < targets.length; i += 4) {
       const slice = targets.slice(i, i + 4);
+      setSearchProgress(prev => prev ? {
+        ...prev,
+        step: 'Finding public emails',
+        detail: `Checked ${Math.min(i, targets.length)} of ${targets.length} partner websites. Found ${found} email${found === 1 ? '' : 's'} so far.`,
+        percent: Math.min(88, 82 + Math.round((i / Math.max(1, targets.length)) * 6)),
+      } : prev);
       const { data, error } = await supabase.functions.invoke('scrape-emails', {
         body: {
           urls: slice.map(candidate => ({
@@ -249,7 +298,8 @@ export default function PartnerAcquisitionPage() {
         const candidate = candidates.find(item => item.id === result.leadId);
         if (!candidate) continue;
         candidate.email = email;
-        await (supabase as any).from('finder_candidates').update({ email }).eq('id', candidate.id);
+        found += 1;
+        await supabase.from('finder_candidates').update({ email } as never).eq('id', candidate.id);
       }
     }
     return candidates;
@@ -295,6 +345,21 @@ export default function PartnerAcquisitionPage() {
     }
   };
 
+  const sendPartnerEmailRequest = async (prospect: PartnerProspect, skipCooldown = true) => {
+    const email = buildPartnerEmail(prospect);
+    const { data, error } = await supabase.functions.invoke('send-gmail', {
+      body: {
+        partnerProspectId: prospect.id,
+        to: prospect.email,
+        subject: email.subject,
+        body: email.body,
+        skipCooldown,
+      },
+    });
+    if (error || data?.error) throw new Error(data?.error || error?.message || 'Send failed');
+    return data;
+  };
+
   const sendPartnerEmail = async (prospect: PartnerProspect) => {
     if (!prospect.email) {
       toast.error('This partner has no email yet');
@@ -302,23 +367,51 @@ export default function PartnerAcquisitionPage() {
     }
     setSendingId(prospect.id);
     try {
-      const email = buildPartnerEmail(prospect);
-      const { data, error } = await supabase.functions.invoke('send-gmail', {
-        body: {
-          partnerProspectId: prospect.id,
-          to: prospect.email,
-          subject: email.subject,
-          body: email.body,
-          skipCooldown: true,
-        },
-      });
-      if (error || data?.error) throw new Error(data?.error || error?.message || 'Send failed');
-      toast.success('Partner email sent');
+      const data = await sendPartnerEmailRequest(prospect, true);
+      toast.success(data?.skipped ? `Partner email skipped: ${data.reason || 'not eligible'}` : 'Partner email sent');
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Partner email failed');
     } finally {
       setSendingId(null);
+    }
+  };
+
+  const sendPartnerBatch = async () => {
+    const batch = contactablePartners.slice(0, PARTNER_BATCH_LIMIT);
+    if (!batch.length) {
+      toast.message('No ready partners with unsent emails');
+      return;
+    }
+    const confirmed = window.confirm(`Send partner outreach to ${batch.length} ready partners now? This skips already-contacted, do-not-contact and duplicate email records.`);
+    if (!confirmed) return;
+    setBatchSending(true);
+    setBatchProgress({ total: batch.length, sent: 0, skipped: 0, failed: 0 });
+    try {
+      for (let i = 0; i < batch.length; i += 1) {
+        const prospect = batch[i];
+        setBatchProgress(prev => prev ? { ...prev, current: prospect.name } : prev);
+        try {
+          const data = await sendPartnerEmailRequest(prospect, true);
+          setBatchProgress(prev => prev ? {
+            ...prev,
+            sent: prev.sent + (data?.skipped ? 0 : 1),
+            skipped: prev.skipped + (data?.skipped ? 1 : 0),
+          } : prev);
+        } catch (error) {
+          setBatchProgress(prev => prev ? {
+            ...prev,
+            failed: prev.failed + 1,
+            error: error instanceof Error ? error.message : 'Partner email failed',
+          } : prev);
+        }
+        if (i < batch.length - 1) await sleep(PARTNER_BATCH_DELAY_MS);
+      }
+      toast.success('Partner batch finished');
+      await load();
+    } finally {
+      setBatchSending(false);
+      setBatchProgress(prev => prev ? { ...prev, current: undefined } : prev);
     }
   };
 
@@ -352,9 +445,10 @@ export default function PartnerAcquisitionPage() {
           </Button>
         </div>
 
-        <section className="mb-5 grid gap-3 md:grid-cols-5">
+        <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Metric icon={<Users size={15} />} label="Prospects" value={prospects.length} />
           <Metric icon={<Mail size={15} />} label="Ready" value={metrics.ready} />
+          <Metric icon={<Send size={15} />} label="Contactable" value={contactablePartners.length} />
           <Metric icon={<Send size={15} />} label="Sent" value={logCount} />
           <Metric icon={<Mail size={15} />} label="Replied" value={metrics.replied} tone="good" />
           <Metric icon={<CheckCircle2 size={15} />} label="Partner calls" value={metrics.calls} tone="good" />
@@ -492,7 +586,39 @@ export default function PartnerAcquisitionPage() {
           ) : (
             <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_300px]">
               <div className="rounded-md border border-border bg-background/40 p-4">
-                <div className="text-sm font-medium text-foreground">Partner pitch default</div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Contact partners</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {contactablePartners.length} ready partner{contactablePartners.length === 1 ? '' : 's'} can be contacted now. Already-sent emails and do-not-contact records are skipped.
+                    </p>
+                  </div>
+                  <Button onClick={sendPartnerBatch} disabled={batchSending || contactablePartners.length === 0} className="gap-2">
+                    {batchSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    Contact up to 100
+                  </Button>
+                </div>
+                {batchProgress && (
+                  <div className="mt-4 rounded-md border border-border bg-card/70 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-medium text-foreground">
+                        Batch progress: {batchProgress.sent + batchProgress.skipped + batchProgress.failed}/{batchProgress.total}
+                      </span>
+                      <span className="text-muted-foreground">
+                        Sent {batchProgress.sent} / Skipped {batchProgress.skipped} / Failed {batchProgress.failed}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${Math.round(((batchProgress.sent + batchProgress.skipped + batchProgress.failed) / Math.max(1, batchProgress.total)) * 100)}%` }}
+                      />
+                    </div>
+                    {batchProgress.current && <div className="mt-2 text-xs text-muted-foreground">Sending: {batchProgress.current}</div>}
+                    {batchProgress.error && <div className="mt-2 text-xs text-red-400">Last error: {batchProgress.error}</div>}
+                  </div>
+                )}
+                <div className="mt-5 text-sm font-medium text-foreground">Partner pitch default</div>
                 <Textarea
                   readOnly
                   value={buildPartnerEmail({
@@ -577,6 +703,12 @@ export default function PartnerAcquisitionPage() {
 
           {loading ? (
             <div className="py-16 text-center text-sm text-muted-foreground">Loading partners...</div>
+          ) : loadError ? (
+            <div className="px-6 py-16 text-center">
+              <p className="text-sm font-medium text-red-400">Failed to load partners</p>
+              <p className="mt-1 text-xs text-muted-foreground">{loadError}</p>
+              <Button className="mt-4" variant="outline" size="sm" onClick={load}>Try again</Button>
+            </div>
           ) : visible.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <BriefcaseBusiness size={34} className="mx-auto mb-3 text-muted-foreground" />
@@ -603,7 +735,7 @@ export default function PartnerAcquisitionPage() {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
                       {prospect.website && (
-                        <a href={prospect.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                        <a href={partnerWebsiteHref(prospect.website) || '#'} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
                           Website <ExternalLink size={11} />
                         </a>
                       )}

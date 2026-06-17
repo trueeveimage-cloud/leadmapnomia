@@ -148,6 +148,12 @@ function normalizeWebsite(value?: string | null) {
     .replace(/\/+$/, '');
 }
 
+export function partnerWebsiteHref(value?: string | null) {
+  const website = String(value || '').trim();
+  if (!website) return null;
+  return /^https?:\/\//i.test(website) ? website : `https://${website}`;
+}
+
 function normalizeName(value?: string | null) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ') || null;
 }
@@ -288,7 +294,7 @@ export async function savePartnerCandidates(
 }
 
 export function buildPartnerEmail(prospect: PartnerProspect) {
-  const subject = `Partnership idea for ${prospect.name}`;
+  const subject = `Partner idea for ${prospect.name}`;
   const body = `Hi ${prospect.name},
 
 I am reaching out from Leadmap. We build an AI receptionist that helps service businesses answer missed calls, qualify the caller, and send a clean summary or booking request to the owner.

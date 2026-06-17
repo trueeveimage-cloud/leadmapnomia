@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
       supabase.from('settings').select('value').eq('key', 'partner_gmail_daily_cap').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'partner_gmail_delay_seconds').maybeSingle(),
     ]);
-    dailyCap = Math.max(0, Math.min(50, parseInt(capSetting?.value || '') || 30));
+    dailyCap = Math.max(0, Math.min(100, parseInt(capSetting?.value || '') || 100));
     delaySeconds = Math.max(0, Math.min(3600, parseInt(delaySetting?.value || '') || 0));
     const { count } = await supabase
       .from('partner_outreach_logs').select('id', { count: 'exact', head: true })
