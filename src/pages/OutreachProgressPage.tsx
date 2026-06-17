@@ -405,6 +405,8 @@ export default function OutreachProgressPage() {
           </Button>
         </div>
 
+        <ErrorAlertBanner history={history} />
+
         <div className="mb-5">
           <LaunchReadinessPanel />
         </div>
