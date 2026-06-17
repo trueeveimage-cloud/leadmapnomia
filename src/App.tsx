@@ -42,6 +42,7 @@ const CampaignStatsPage = lazy(() => import("./pages/CampaignStatsPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const AutomationPage = lazy(() => import("./pages/AutomationPage"));
 const OutreachProgressPage = lazy(() => import("./pages/OutreachProgressPage"));
+const AutomationRunsPage = lazy(() => import("./pages/AutomationRunsPage"));
 const QuickSendPage = lazy(() => import("./pages/QuickSendPage"));
 const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
