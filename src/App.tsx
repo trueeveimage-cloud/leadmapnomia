@@ -135,6 +135,7 @@ function productForPath(pathname: string) {
     pathname.startsWith('/leadmap')
     || pathname.startsWith('/automation')
     || pathname.startsWith('/outreach-progress')
+    || pathname.startsWith('/automation-runs')
     || pathname.startsWith('/partners')
     || pathname.startsWith('/gbp-content')
     || pathname.startsWith('/lead-finder')
