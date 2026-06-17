@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
@@ -36,15 +37,21 @@ type DayStats = {
   dateKey: string;
   label: string;
   shortLabel: string;
+  niche: string;
   nicheLabel: string;
   gmailSent: number;
+  gmailBatchSent: number;
   emailInterested: number;
   emailDemo: number;
   aiStarted: number;
+  aiBatchStarted: number;
   aiConnected: number;
   callInterested: number;
   callDemo: number;
   callNotInterested: number;
+  finderRuns: number;
+  finderCandidates: number;
+  finderSaved: number;
   failed: number;
   skipped: number;
   summary: string;
@@ -107,6 +114,16 @@ function isInterestedStatus(status?: string | null) {
   return value.includes('interested') || value.includes('callback') || value.includes('demo') || value.includes('meeting');
 }
 
+function localDateKey(value?: string | Date | null) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function isDemoStatus(status?: string | null) {
   const value = String(status || '').toLowerCase();
   return value.includes('demo') || value.includes('meeting') || value.includes('making_demo');
@@ -131,6 +148,7 @@ function dayStatus(day: DayStats, settings: Settings, now: Date, emailTarget: nu
   if (emailDone && callsDone) return { label: 'Complete', tone: 'good' as const };
   if (now > end) return { label: 'Needs review', tone: 'warn' as const };
   if (day.gmailSent > 0 || day.aiStarted > 0) return { label: 'In progress', tone: 'active' as const };
+  if (day.finderRuns > 0) return { label: 'Supply run', tone: 'active' as const };
   return { label: 'Waiting', tone: 'muted' as const };
 }
 
@@ -138,6 +156,9 @@ function summarizeDay(day: DayStats, settings: Settings, emailTarget: number) {
   const emailLeft = Math.max(0, emailTarget - day.gmailSent);
   const callLeft = Math.max(0, settings.callDaily - day.aiConnected);
   if (emailLeft === 0 && callLeft === 0) return 'Daily quota hit.';
+  if (day.gmailSent === 0 && day.aiStarted === 0 && day.finderRuns > 0) {
+    return `${day.finderRuns} finder run${day.finderRuns === 1 ? '' : 's'} logged. Supply found: ${day.finderSaved || day.finderCandidates}.`;
+  }
   if (day.gmailSent === 0 && day.aiStarted === 0) return 'No outreach recorded yet.';
   return `${emailLeft} emails and ${callLeft} connected calls left.`;
 }
@@ -259,7 +280,7 @@ export default function OutreachProgressPage() {
       const since = startOfDayIso(first);
       const until = endOfDayIso(last);
       const sb = supabase as any;
-      const [{ data: emailRows }, { data: aiRows }, { data: connectedRows }, notifications] = await Promise.all([
+      const [{ data: emailRows }, { data: aiRows }, { data: connectedRows }, { data: finderRows }, notifications] = await Promise.all([
         sb
           .from('message_logs')
           .select('id, created_at, lead_id, leads(status)')
@@ -283,32 +304,48 @@ export default function OutreachProgressPage() {
           .gte('last_contacted_at', since)
           .lte('last_contacted_at', until)
           .limit(10000),
+        sb
+          .from('finder_runs')
+          .select('id, created_at, mode, keywords, status, stats')
+          .gte('created_at', since)
+          .lte('created_at', until)
+          .order('created_at', { ascending: false })
+          .limit(300),
         fetchNotifications(300),
       ]);
 
       const buckets = new Map<string, DayStats>();
+      const bucketsByNiche = new Map<string, DayStats>();
       for (const day of weekDays) {
-        buckets.set(day.dateKey, {
+        const bucket = {
           dateKey: day.dateKey,
           label: day.label,
           shortLabel: day.shortLabel,
+          niche: day.niche,
           nicheLabel: day.nicheLabel,
           gmailSent: 0,
+          gmailBatchSent: 0,
           emailInterested: 0,
           emailDemo: 0,
           aiStarted: 0,
+          aiBatchStarted: 0,
           aiConnected: 0,
           callInterested: 0,
           callDemo: 0,
           callNotInterested: 0,
+          finderRuns: 0,
+          finderCandidates: 0,
+          finderSaved: 0,
           failed: 0,
           skipped: 0,
           summary: '',
-        });
+        };
+        buckets.set(day.dateKey, bucket);
+        bucketsByNiche.set(day.niche, bucket);
       }
 
       for (const row of emailRows || []) {
-        const bucket = buckets.get(row.created_at.slice(0, 10));
+        const bucket = buckets.get(localDateKey(row.created_at));
         if (bucket) {
           const status = row.leads?.status;
           bucket.gmailSent += 1;
@@ -317,12 +354,12 @@ export default function OutreachProgressPage() {
         }
       }
       for (const row of aiRows || []) {
-        const bucket = buckets.get(row.created_at.slice(0, 10));
+        const bucket = buckets.get(localDateKey(row.created_at));
         if (bucket) bucket.aiStarted += 1;
       }
       for (const row of connectedRows || []) {
         if (row.call_connected !== true && !connectedCallStatus(row.call_status)) continue;
-        const bucket = buckets.get(String(row.last_contacted_at || '').slice(0, 10));
+        const bucket = buckets.get(localDateKey(row.last_contacted_at));
         if (bucket) {
           bucket.aiConnected += 1;
           if (isInterestedStatus(row.status) || isInterestedStatus(row.call_status)) bucket.callInterested += 1;
@@ -330,15 +367,45 @@ export default function OutreachProgressPage() {
           if (String(row.status || '').toLowerCase() === 'not_interested' || String(row.call_status || '').toLowerCase().includes('not interested')) bucket.callNotInterested += 1;
         }
       }
+      for (const row of finderRows || []) {
+        const stats = (row.stats || {}) as Record<string, any>;
+        const keywords = Array.isArray(row.keywords) ? row.keywords.join(' ') : '';
+        const foundNiche = weekDays.find(day => {
+          const needle = `${day.niche} ${day.nicheLabel}`.toLowerCase();
+          const hay = `${row.mode || ''} ${keywords} ${JSON.stringify(stats || {})}`.toLowerCase();
+          return hay.includes(day.niche) || day.nicheLabel.toLowerCase().split(' ')[0] && needle.split(' ')[0] && hay.includes(needle.split(' ')[0]);
+        });
+        const bucket = (foundNiche ? bucketsByNiche.get(foundNiche.niche) : null) || buckets.get(localDateKey(row.created_at));
+        if (bucket) {
+          bucket.finderRuns += 1;
+          bucket.finderCandidates += Number(stats.candidatesFound || stats.totalCandidates || 0);
+          bucket.finderSaved += Number(stats.savedLeads || stats.emailsFound || stats.noWebsiteEmailOnly || stats.noWebsiteWithPhone || 0);
+        }
+      }
 
       const relevantNotifications = notifications.filter(item => {
-        const key = item.created_at.slice(0, 10);
-        return buckets.has(key) && (item.type === 'gmail_batch_done' || item.type === 'ai_call_batch_done');
+        const key = localDateKey(item.created_at);
+        return buckets.has(key) && (
+          item.type === 'gmail_batch_done'
+          || item.type === 'ai_call_batch_done'
+          || item.type === 'finder_auto_replenish'
+        );
       });
       for (const item of relevantNotifications) {
-        const bucket = buckets.get(item.created_at.slice(0, 10));
         const payload = (item.payload || {}) as Record<string, any>;
+        const bucket = bucketsByNiche.get(String(payload.plannedNiche || payload.niche || '')) || buckets.get(localDateKey(item.created_at));
         if (!bucket) continue;
+        if (item.type === 'gmail_batch_done') {
+          bucket.gmailBatchSent += Number(payload.sent || 0);
+          bucket.gmailSent = Math.max(bucket.gmailSent, bucket.gmailBatchSent);
+        }
+        if (item.type === 'ai_call_batch_done') {
+          bucket.aiBatchStarted += Number(payload.started || 0);
+          bucket.aiStarted = Math.max(bucket.aiStarted, bucket.aiBatchStarted);
+        }
+        if (item.type === 'finder_auto_replenish') {
+          bucket.finderRuns += 1;
+        }
         bucket.failed += Number(payload.failed || 0);
         bucket.skipped += Number(payload.skipped || 0);
       }
@@ -372,6 +439,7 @@ export default function OutreachProgressPage() {
       .channel('outreach-progress-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_logs' }, scheduleLoad)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'finder_runs' }, scheduleLoad)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: 'product=eq.leadmap' }, scheduleLoad)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_notifications' }, scheduleLoad)
       .subscribe();
@@ -514,6 +582,8 @@ export default function OutreachProgressPage() {
                     <MiniStat label="Email interest" value={`${emailInterestPct}%`} />
                     <MiniStat label="Call interest" value={`${callInterestPct}%`} />
                     <MiniStat label="AI started" value={day.aiStarted} />
+                    <MiniStat label="Finder runs" value={day.finderRuns} />
+                    <MiniStat label="Supply found" value={day.finderSaved || day.finderCandidates} />
                     <MiniStat label="Failed" value={day.failed} />
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{day.summary}</p>
