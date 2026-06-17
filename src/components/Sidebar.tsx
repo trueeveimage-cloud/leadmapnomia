@@ -64,6 +64,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const leadmap: NavItem[] = [
     { label: 'Automation', path: '/automation', icon: <Bot size={15} />, product: 'leadmap' },
     { label: 'Outreach Progress', path: '/outreach-progress', icon: <Clock size={15} />, product: 'leadmap' },
+    { label: 'Automation Runs', path: '/automation-runs', icon: <ListChecks size={15} />, product: 'leadmap' },
     { label: 'Lead Finder', path: '/lead-finder', icon: <Mail size={15} />, product: 'leadmap' },
     { label: 'Partners', path: '/partners', icon: <BriefcaseBusiness size={15} />, product: 'leadmap' },
     { label: 'GBP Content Loop', path: '/gbp-content', icon: <Newspaper size={15} />, product: 'leadmap' },
