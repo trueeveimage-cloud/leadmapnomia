@@ -624,3 +624,34 @@ function ProgressLine({ label, value, target, percent }: { label: string; value:
     </div>
   );
 }
+
+function ErrorAlertBanner({ history }: { history: AppNotification[] }) {
+  const errors = history.filter(h => h.type === 'system_error' || /fail|error|401|429|missing secret/i.test(`${h.title} ${h.message}`));
+  if (errors.length === 0) return null;
+  const latest = errors[0];
+  const payload = (latest.payload || {}) as Record<string, any>;
+  const detail = payload.error || payload.details || payload.reason || latest.message;
+  return (
+    <div className="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/5 p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle size={18} className="mt-0.5 text-rose-500" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold text-rose-500">
+              {errors.length} automation failure{errors.length === 1 ? '' : 's'} this week
+            </div>
+            <Badge variant="outline" className="text-[10px]">{latest.type}</Badge>
+            <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+              {new Date(latest.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <div className="mt-1 text-sm text-foreground">{latest.title}</div>
+          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{String(detail).slice(0, 280)}</div>
+          <Link to="/automation-runs" className="mt-2 inline-block text-xs font-medium text-rose-500 hover:underline">
+            View full run log →
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
