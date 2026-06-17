@@ -483,6 +483,7 @@ export type Database = {
           address: string | null
           best_contact_method: string | null
           business_name: string | null
+          business_type: string | null
           call_after_at: string | null
           call_attempts: number
           call_connected: boolean | null
@@ -557,6 +558,7 @@ export type Database = {
           address?: string | null
           best_contact_method?: string | null
           business_name?: string | null
+          business_type?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_connected?: boolean | null
@@ -631,6 +633,7 @@ export type Database = {
           address?: string | null
           best_contact_method?: string | null
           business_name?: string | null
+          business_type?: string | null
           call_after_at?: string | null
           call_attempts?: number
           call_connected?: boolean | null
