@@ -339,7 +339,7 @@ export default function OutreachProgressPage() {
 
       const relevantNotifications = notifications.filter(item => {
         const key = item.created_at.slice(0, 10);
-        return buckets.has(key) && (item.type === 'gmail_batch_done' || item.type === 'ai_call_batch_done');
+        return buckets.has(key) && (item.type === 'gmail_batch_done' || item.type === 'ai_call_batch_done' || item.type === 'system_error');
       });
       for (const item of relevantNotifications) {
         const bucket = buckets.get(item.created_at.slice(0, 10));
