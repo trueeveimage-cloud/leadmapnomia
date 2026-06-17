@@ -126,10 +126,16 @@ function dayStatus(day: DayStats, settings: Settings, now: Date, emailTarget: nu
   const date = new Date(`${day.dateKey}T00:00:00`);
   const end = new Date(date);
   end.setHours(settings.endHour, settings.endMinute, 0, 0);
+  const isPast = now > end;
+  const isToday = day.dateKey === new Date().toISOString().slice(0, 10);
   const emailDone = day.gmailSent >= emailTarget;
   const callsDone = day.aiConnected >= settings.callDaily;
-  if (emailDone && callsDone) return { label: 'Complete', tone: 'good' as const };
-  if (now > end) return { label: 'Needs review', tone: 'warn' as const };
+  if (emailDone && callsDone) return { label: `Complete · ${day.gmailSent}✉ ${day.aiConnected}📞`, tone: 'good' as const };
+  if (isToday) return { label: `Running · ${day.gmailSent}/${emailTarget}✉ ${day.aiConnected}/${settings.callDaily}📞`, tone: 'active' as const };
+  if (isPast) {
+    if (day.gmailSent === 0 && day.aiStarted === 0) return { label: 'No runs', tone: 'warn' as const };
+    return { label: `Below target · ${day.gmailSent}/${emailTarget}✉ ${day.aiConnected}/${settings.callDaily}📞`, tone: 'warn' as const };
+  }
   if (day.gmailSent > 0 || day.aiStarted > 0) return { label: 'In progress', tone: 'active' as const };
   return { label: 'Waiting', tone: 'muted' as const };
 }
