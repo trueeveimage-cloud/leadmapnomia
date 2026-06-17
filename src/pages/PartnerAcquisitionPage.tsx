@@ -40,6 +40,7 @@ import { toast } from 'sonner';
 const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
 const PARTNER_BATCH_LIMIT = 100;
 const PARTNER_BATCH_DELAY_MS = 2000;
+const PARTNER_DAILY_TARGET = 100;
 
 function unique<T>(values: T[]) {
   return Array.from(new Set(values));
@@ -73,6 +74,7 @@ export default function PartnerAcquisitionPage() {
   const [running, setRunning] = useState(false);
   const [emailScraping, setEmailScraping] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [autoRunning, setAutoRunning] = useState(false);
   const [batchSending, setBatchSending] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{
     total: number;
@@ -128,6 +130,12 @@ export default function PartnerAcquisitionPage() {
     const qualified = prospects.filter(item => item.status === 'qualified').length;
     return { ready, contacted, replied, calls, qualified };
   }, [prospects]);
+
+  const todayPartnerSent = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return logs.filter(log => log.status === 'sent' && new Date(log.created_at) >= start).length;
+  }, [logs]);
 
   const sentPartnerIds = useMemo(() => new Set(
     logs
@@ -415,6 +423,24 @@ export default function PartnerAcquisitionPage() {
     }
   };
 
+  const runPartnerAutomationNow = async () => {
+    setAutoRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('auto-send-partner-gmail-daily', {
+        body: { force: true, source: 'partners_page' },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || 'Partner automation failed');
+      toast.success(data?.skipped
+        ? `Partner automation skipped: ${data.reason || 'not ready'}`
+        : `Partner automation sent ${data?.sent || 0} email${data?.sent === 1 ? '' : 's'}`);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Partner automation failed');
+    } finally {
+      setAutoRunning(false);
+    }
+  };
+
   const setStatus = async (prospect: PartnerProspect, status: PartnerStatus) => {
     try {
       await updatePartnerProspect(prospect.id, {
@@ -445,10 +471,11 @@ export default function PartnerAcquisitionPage() {
           </Button>
         </div>
 
-        <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Metric icon={<Users size={15} />} label="Prospects" value={prospects.length} />
           <Metric icon={<Mail size={15} />} label="Ready" value={metrics.ready} />
           <Metric icon={<Send size={15} />} label="Contactable" value={contactablePartners.length} />
+          <Metric icon={<Send size={15} />} label="Today" value={`${todayPartnerSent}/${PARTNER_DAILY_TARGET}`} tone={todayPartnerSent >= PARTNER_DAILY_TARGET ? 'good' : 'normal'} />
           <Metric icon={<Send size={15} />} label="Sent" value={logCount} />
           <Metric icon={<Mail size={15} />} label="Replied" value={metrics.replied} tone="good" />
           <Metric icon={<CheckCircle2 size={15} />} label="Partner calls" value={metrics.calls} tone="good" />
@@ -597,6 +624,24 @@ export default function PartnerAcquisitionPage() {
                     {batchSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     Contact up to 100
                   </Button>
+                  <Button onClick={runPartnerAutomationNow} disabled={autoRunning} variant="outline" className="gap-2">
+                    {autoRunning ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Run daily sender
+                  </Button>
+                </div>
+                <div className="mt-4 grid gap-3 rounded-md border border-border bg-card/70 p-3 text-xs text-muted-foreground sm:grid-cols-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em]">Daily target</div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">{PARTNER_DAILY_TARGET}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em]">Sent today</div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">{todayPartnerSent}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em]">Left today</div>
+                    <div className="mt-1 text-lg font-semibold text-foreground">{Math.max(0, PARTNER_DAILY_TARGET - todayPartnerSent)}</div>
+                  </div>
                 </div>
                 {batchProgress && (
                   <div className="mt-4 rounded-md border border-border bg-card/70 p-3">
