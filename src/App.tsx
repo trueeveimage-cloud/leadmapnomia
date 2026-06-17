@@ -212,6 +212,7 @@ const App = () => (
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/automation" element={<AutomationPage />} />
                       <Route path="/outreach-progress" element={<OutreachProgressPage />} />
+                      <Route path="/automation-runs" element={<AutomationRunsPage />} />
                       <Route path="/notifications" element={<NotificationsPage />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
