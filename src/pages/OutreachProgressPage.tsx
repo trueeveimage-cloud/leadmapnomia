@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { connectedCallStatus } from '@/lib/outreachEligibility';
 import {
   Activity,
+  AlertTriangle,
   Bot,
   CalendarDays,
   CheckCircle2,
@@ -31,6 +32,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
 
 type DayStats = {
   dateKey: string;
