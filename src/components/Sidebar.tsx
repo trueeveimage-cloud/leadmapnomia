@@ -4,7 +4,7 @@ import { useCRM } from '@/context/CRMContext';
 import { useAuth } from '@/context/AuthContext';
 import { useProduct, type Product } from '@/context/ProductContext';
 import {
-  Bell, Bot, BriefcaseBusiness, Clock, Inbox, LayoutDashboard, LogOut, Mail, MapPin,
+  Bell, Bot, BriefcaseBusiness, Clock, Inbox, LayoutDashboard, ListChecks, LogOut, Mail, MapPin,
   MessageSquare, Newspaper, PhoneCall, Settings, Target, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
