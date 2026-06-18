@@ -809,6 +809,128 @@ export type Database = {
         }
         Relationships: []
       }
+      partner_outreach_logs: {
+        Row: {
+          body: string | null
+          channel: string
+          created_at: string
+          direction: string
+          error_message: string | null
+          id: string
+          partner_prospect_id: string | null
+          provider: string | null
+          provider_message_id: string | null
+          status: string
+          subject: string | null
+          to_email: string | null
+        }
+        Insert: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          direction?: string
+          error_message?: string | null
+          id?: string
+          partner_prospect_id?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          status?: string
+          subject?: string | null
+          to_email?: string | null
+        }
+        Update: {
+          body?: string | null
+          channel?: string
+          created_at?: string
+          direction?: string
+          error_message?: string | null
+          id?: string
+          partner_prospect_id?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          status?: string
+          subject?: string | null
+          to_email?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_outreach_logs_partner_prospect_id_fkey"
+            columns: ["partner_prospect_id"]
+            isOneToOne: false
+            referencedRelation: "partner_prospects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_prospects: {
+        Row: {
+          address: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          do_not_contact: boolean
+          email: string | null
+          fit_reason: string | null
+          fit_score: number
+          id: string
+          last_contacted_at: string | null
+          last_reply_at: string | null
+          name: string
+          notes: string | null
+          partner_type: string
+          phone: string | null
+          source: string
+          source_url: string | null
+          status: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          do_not_contact?: boolean
+          email?: string | null
+          fit_reason?: string | null
+          fit_score?: number
+          id?: string
+          last_contacted_at?: string | null
+          last_reply_at?: string | null
+          name: string
+          notes?: string | null
+          partner_type?: string
+          phone?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          do_not_contact?: boolean
+          email?: string | null
+          fit_reason?: string | null
+          fit_score?: number
+          id?: string
+          last_contacted_at?: string | null
+          last_reply_at?: string | null
+          name?: string
+          notes?: string | null
+          partner_type?: string
+          phone?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       place_cache: {
         Row: {
           address: string | null
