@@ -262,10 +262,11 @@ export default function OutreachProgressPage() {
       const values = await Promise.all(keys.map(key => getSetting(key)));
       const cfg = Object.fromEntries(keys.map((key, index) => [key, values[index]]));
       const nextSettings: Settings = {
+        ...DEFAULT_SETTINGS,
         gmailDaily: intValue(cfg.gmail_autosend_daily, DEFAULT_SETTINGS.gmailDaily, 1, 500),
-        gmailDailySe: intValue(cfg.gmail_autosend_daily_se, DEFAULT_SETTINGS.gmailDailySe, 0, 500),
-        gmailDailyUk: intValue(cfg.gmail_autosend_daily_uk, DEFAULT_SETTINGS.gmailDailyUk, 0, 500),
-        gmailDailyEs: intValue(cfg.gmail_autosend_daily_es, DEFAULT_SETTINGS.gmailDailyEs, 0, 500),
+        gmailDailySe: DEFAULT_SETTINGS.gmailDailySe,
+        gmailDailyUk: DEFAULT_SETTINGS.gmailDailyUk,
+        gmailDailyEs: DEFAULT_SETTINGS.gmailDailyEs,
         callDaily: intValue(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily, DEFAULT_SETTINGS.callDaily, 1, 100),
         startHour: intValue(cfg.ai_calls_start_hour, DEFAULT_SETTINGS.startHour, 0, 23),
         startMinute: intValue(cfg.ai_calls_start_minute, DEFAULT_SETTINGS.startMinute, 0, 59),
@@ -273,6 +274,10 @@ export default function OutreachProgressPage() {
         endMinute: intValue(cfg.ai_calls_end_minute, DEFAULT_SETTINGS.endMinute, 0, 59),
         days: parseCsvNumbers(cfg.ai_calls_days, DEFAULT_SETTINGS.days),
       };
+      const hasCountrySplit = cfg.gmail_autosend_daily_se !== null || cfg.gmail_autosend_daily_uk !== null || cfg.gmail_autosend_daily_es !== null;
+      nextSettings.gmailDailySe = intValue(cfg.gmail_autosend_daily_se, hasCountrySplit ? DEFAULT_SETTINGS.gmailDailySe : nextSettings.gmailDaily, 0, 500);
+      nextSettings.gmailDailyUk = intValue(cfg.gmail_autosend_daily_uk, hasCountrySplit ? DEFAULT_SETTINGS.gmailDailyUk : 0, 0, 500);
+      nextSettings.gmailDailyEs = intValue(cfg.gmail_autosend_daily_es, hasCountrySplit ? DEFAULT_SETTINGS.gmailDailyEs : 0, 0, 500);
       setSettings(nextSettings);
 
       const first = weekDays[0]?.date || new Date();

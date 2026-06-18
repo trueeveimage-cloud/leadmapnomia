@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export const NORMAL_GMAIL_DAILY_TARGET = 120;
 export const TUESDAY_GMAIL_DAILY_TARGET = 240;
 
@@ -75,6 +76,6 @@ export function isCallEligible(lead: any, input?: { product?: string; minScore?:
 }
 
 export function gmailTargetForToday(baseDaily?: number) {
-  const normal = Math.max(NORMAL_GMAIL_DAILY_TARGET, Number(baseDaily || 0));
+  const normal = Math.max(1, Number(baseDaily || NORMAL_GMAIL_DAILY_TARGET));
   return new Date().getDay() === 2 ? Math.max(TUESDAY_GMAIL_DAILY_TARGET, normal * 2) : normal;
 }

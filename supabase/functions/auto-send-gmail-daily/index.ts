@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Daily Gmail auto-sender for cold outreach.
 // Sends small batches only. send-gmail enforces daily caps, suppression, dedupe and opt-out checks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -309,10 +310,11 @@ Deno.serve(async (req) => {
 
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
-    let capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || 100));
-    let capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || 10));
-    let capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || 10));
     let configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
+    const hasCountryCaps = Boolean(cfg.gmail_autosend_daily_se || cfg.gmail_autosend_daily_uk || cfg.gmail_autosend_daily_es);
+    let capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || (hasCountryCaps ? 100 : configuredDaily)));
+    let capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || (hasCountryCaps ? 10 : 0)));
+    let capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || (hasCountryCaps ? 10 : 0)));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const supplyMin = Math.max(20, Math.min(1000, parseInt(cfg.gmail_autosend_supply_min || '') || DEFAULT_EMAIL_SUPPLY_MIN));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
