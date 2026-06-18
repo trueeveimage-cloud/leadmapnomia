@@ -290,6 +290,7 @@ Deno.serve(async (req) => {
       'gmail_autosend_delay_seconds',
       'gmail_autosend_batch_size',
       'gmail_autosend_supply_min',
+      'gmail_autosend_min_gap_minutes',
       'ai_calls_start_hour',
       'ai_calls_start_minute',
       'ai_calls_end_hour',
