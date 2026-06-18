@@ -371,6 +371,30 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, reason: 'outside_send_window', hour: nowLocal.hour, minute: nowLocal.minute, startHour, startMinute, endHour, endMinute }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Throttle: skip if a successful Gmail send happened within the configured min-gap window.
+    const minGapMinutes = Math.max(0, Math.min(240, parseInt(cfg.gmail_autosend_min_gap_minutes || '') || 30));
+    if (!force && minGapMinutes > 0) {
+      const gapSince = new Date(Date.now() - minGapMinutes * 60 * 1000).toISOString();
+      const { data: recent } = await supabase
+        .from('message_logs')
+        .select('id, created_at')
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .eq('status', 'sent')
+        .gte('created_at', gapSince)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (recent && recent.length > 0) {
+        await recordNotification(supabase, {
+          type: 'gmail_batch_done',
+          title: 'Gmail auto-send throttled',
+          message: `Skipped: last send was less than ${minGapMinutes} min ago.`,
+          payload: { reason: 'min_gap_throttle', minGapMinutes, lastSentAt: recent[0].created_at },
+        });
+        return new Response(JSON.stringify({ skipped: true, reason: 'min_gap_throttle', minGapMinutes, lastSentAt: recent[0].created_at }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     const startOfDay = utcDayOffset(new Date(), 0);
 
     // Per-country sent today (joined to leads to bucket by country).
