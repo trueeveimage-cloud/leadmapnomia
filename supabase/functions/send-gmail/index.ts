@@ -13,6 +13,7 @@ const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1'
 const DEFAULT_DAILY_CAP = 100;
 const TUESDAY_DAILY_CAP = 240;
 const UNSUBSCRIBE_MAILBOX = 'leadmapai.se@gmail.com';
+const DEFAULT_FROM_NAME = 'Leadmap';
 
 const BodySchema = z.object({
   leadId: z.string().uuid().optional(),
@@ -56,6 +57,71 @@ function normalizeEmail(email: string) {
 
 function withComplianceFooter(body: string) {
   return body;
+}
+
+function mailProvider() {
+  if (Deno.env.get('RESEND_API_KEY')) return 'resend';
+  if (Deno.env.get('LOVABLE_API_KEY') && Deno.env.get('GOOGLE_MAIL_API_KEY')) return 'gmail';
+  return 'missing';
+}
+
+function senderAddress() {
+  return Deno.env.get('EMAIL_FROM') || Deno.env.get('RESEND_FROM_EMAIL') || Deno.env.get('GMAIL_FROM_ADDRESS') || '';
+}
+
+async function sendViaResend(input: { to: string; subject: string; body: string }) {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = senderAddress();
+  if (!apiKey) return { ok: false, status: 500, data: { error: 'RESEND_API_KEY missing' } };
+  if (!from) return { ok: false, status: 500, data: { error: 'EMAIL_FROM missing' } };
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: `${DEFAULT_FROM_NAME} <${from}>`,
+      to: [input.to],
+      subject: input.subject,
+      text: input.body,
+      headers: {
+        'List-Unsubscribe': `<mailto:${UNSUBSCRIBE_MAILBOX}?subject=unsubscribe>`,
+      },
+    }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, data, id: data?.id };
+}
+
+async function sendViaLovableGmail(input: { to: string; subject: string; body: string }) {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
+  if (!LOVABLE_API_KEY) return { ok: false, status: 500, data: { error: 'LOVABLE_API_KEY missing' } };
+  if (!GMAIL_KEY) return { ok: false, status: 500, data: { error: 'Gmail is not connected' } };
+
+  let fromAddress: string | undefined;
+  try {
+    const profResp = await fetch(`${GATEWAY_URL}/users/me/profile`, {
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': GMAIL_KEY },
+    });
+    const prof = await profResp.json().catch(() => ({}));
+    if (profResp.ok && prof?.emailAddress) fromAddress = String(prof.emailAddress);
+  } catch { /* Gmail will use connected account by default */ }
+
+  const raw = buildRaw(input.to, input.subject, input.body, fromAddress);
+  const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      'X-Connection-Api-Key': GMAIL_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, data, id: data?.id };
 }
 
 function parseSuppressionList(value: string | null | undefined) {
@@ -112,11 +178,6 @@ Deno.serve(async (req) => {
 
 
 
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
-  if (!LOVABLE_API_KEY) return jsonResp({ error: 'LOVABLE_API_KEY missing' }, 500);
-  if (!GMAIL_KEY) return jsonResp({ error: 'Gmail is not connected' }, 500);
-
   let parsed;
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
@@ -124,6 +185,13 @@ Deno.serve(async (req) => {
   const { leadId, partnerProspectId, subject, manualUnlock, skipCooldown } = parsed.data;
   const to = normalizeEmail(parsed.data.to);
   const body = withComplianceFooter(parsed.data.body);
+  const emailProvider = mailProvider();
+  if (emailProvider === 'missing') {
+    return jsonResp({
+      error: 'email_provider_missing',
+      details: 'Set RESEND_API_KEY + EMAIL_FROM for owned Supabase sending, or LOVABLE_API_KEY + GOOGLE_MAIL_API_KEY for Lovable Gmail fallback.',
+    }, 500);
+  }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let leadRecord: any = null;
@@ -328,7 +396,7 @@ Deno.serve(async (req) => {
         partner_prospect_id: partnerProspectId,
         channel: 'email',
         direction: 'outbound',
-        provider: 'gmail',
+        provider: emailProvider,
         to_email: to,
         subject,
         body,
@@ -337,7 +405,7 @@ Deno.serve(async (req) => {
       } as any);
     } else if (leadId) {
       await supabase.from('message_logs').insert({
-        lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+        lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'skipped',
         error_message: `daily_cap reached (${sentToday}/${dailyCap})`,
       } as any);
@@ -364,36 +432,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Always use the connected Gmail account as the From address.
-    // We resolve it via the Gmail profile endpoint so we never fall back to a stale
-    // "gmail_from_address" setting (which is what caused emails to go out as the wrong sender).
-    let fromAddress: string | undefined;
-    try {
-      const profResp = await fetch(`${GATEWAY_URL}/users/me/profile`, {
-        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': GMAIL_KEY },
-      });
-      const prof = await profResp.json().catch(() => ({}));
-      if (profResp.ok && prof?.emailAddress) fromAddress = String(prof.emailAddress);
-    } catch { /* fall through — Gmail will use connected account by default */ }
-    const raw = buildRaw(to, subject, body, fromAddress);
-    const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': GMAIL_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ raw }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
+    const result = emailProvider === 'resend'
+      ? await sendViaResend({ to, subject, body })
+      : await sendViaLovableGmail({ to, subject, body });
+    const data = result.data || {};
+    const messageId = result.id || data.id || data.message_id || null;
+    if (!result.ok) {
       const errorText = JSON.stringify(data).slice(0, 500);
       if (partnerProspectId) {
         await supabase.from('partner_outreach_logs').insert({
           partner_prospect_id: partnerProspectId,
           channel: 'email',
           direction: 'outbound',
-          provider: 'gmail',
+          provider: emailProvider,
           to_email: to,
           subject,
           body,
@@ -402,7 +453,7 @@ Deno.serve(async (req) => {
         } as any);
       } else if (leadId) {
         await supabase.from('message_logs').insert({
-          lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+          lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
           to_number: to, body: `${subject}\n\n${body}`, status: 'failed',
           error_message: errorText,
         } as any);
@@ -416,11 +467,11 @@ Deno.serve(async (req) => {
       }
       await notify(supabase, {
         type: 'system_error',
-        title: 'Gmail send failed',
-        message: `${to}: Gmail API returned ${resp.status}.`,
-        payload: { leadId: leadId || '', partnerProspectId: partnerProspectId || '', to, status: resp.status, error: JSON.stringify(data).slice(0, 300) },
+        title: 'Email send failed',
+        message: `${to}: ${emailProvider} returned ${result.status}.`,
+        payload: { leadId: leadId || '', partnerProspectId: partnerProspectId || '', to, provider: emailProvider, status: result.status, error: JSON.stringify(data).slice(0, 300) },
       });
-      return jsonResp({ error: 'gmail_send_failed', status: resp.status, details: data }, 502);
+      return jsonResp({ error: 'email_send_failed', provider: emailProvider, status: result.status, details: data }, 502);
     }
 
     if (partnerProspectId) {
@@ -428,12 +479,12 @@ Deno.serve(async (req) => {
         partner_prospect_id: partnerProspectId,
         channel: 'email',
         direction: 'outbound',
-        provider: 'gmail',
+        provider: emailProvider,
         to_email: to,
         subject,
         body,
         status: 'sent',
-        provider_message_id: data.id || null,
+        provider_message_id: messageId,
       } as any);
       await supabase.from('partner_prospects').update({
         status: partnerRecord?.status === 'qualified' ? 'qualified' : 'contacted',
@@ -442,9 +493,9 @@ Deno.serve(async (req) => {
       } as any).eq('id', partnerProspectId);
     } else if (leadId) {
       await supabase.from('message_logs').insert({
-        lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+        lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'sent',
-        provider_message_sid: data.id || null,
+        provider_message_sid: messageId,
       } as any);
       await supabase.from('leads').update({
         last_outbound_at: new Date().toISOString(),
@@ -462,11 +513,11 @@ Deno.serve(async (req) => {
         last_message_preview: subject.slice(0, 140),
       } as any).eq('id', leadId);
       await supabase.from('activities').insert({
-        lead_id: leadId, type: 'email_sent', payload: { to, subject, gmail_id: data.id },
+        lead_id: leadId, type: 'email_sent', payload: { to, subject, provider: emailProvider, message_id: messageId },
       } as any);
     }
 
-    return jsonResp({ success: true, id: data.id, sentToday: (sentToday ?? 0) + 1, dailyCap, partner: !!partnerProspectId });
+    return jsonResp({ success: true, provider: emailProvider, id: messageId, sentToday: (sentToday ?? 0) + 1, dailyCap, partner: !!partnerProspectId });
   } catch (e: any) {
     return jsonResp({ error: e?.message || 'unknown' }, 500);
   }

@@ -6,7 +6,17 @@ const corsHeaders = {
 
 Deno.serve((req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  const keys = ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY', 'RETELL_AGENT_ID', 'RETELL_API_KEY', 'RETELL_FROM_NUMBER', 'SUPABASE_SERVICE_ROLE_KEY'];
+  const keys = [
+    'RESEND_API_KEY',
+    'EMAIL_FROM',
+    'LOVABLE_API_KEY',
+    'GOOGLE_MAIL_API_KEY',
+    'CRON_SECRET',
+    'RETELL_AGENT_ID',
+    'RETELL_API_KEY',
+    'RETELL_FROM_NUMBER',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ];
   const out: Record<string, string> = {};
   for (const k of keys) {
     const v = Deno.env.get(k) || '';
