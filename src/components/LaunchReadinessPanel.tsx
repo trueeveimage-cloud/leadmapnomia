@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -65,7 +66,7 @@ type Diagnostics = {
 
 const DEFAULT_SETTINGS: Record<string, string> = {
   gmail_autosend_enabled: 'true',
-  gmail_autosend_daily: '120',
+  gmail_autosend_daily: '100',
   ai_calls_enabled: 'true',
   ai_calls_daily_connected_cap: '15',
   ai_calls_daily: '15',
@@ -110,6 +111,10 @@ function formatTime(value?: string | null) {
 function isMissing(value?: string | null) {
   const text = String(value || '').toUpperCase();
   return !text || text.includes('MISSING') || text.includes('NOT SET');
+}
+
+function hasSecret(health: Record<string, string>, key: string) {
+  return !isMissing(health[key]);
 }
 
 function intSetting(settings: Record<string, string>, key: string, fallback: number) {
@@ -264,7 +269,14 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   const health = diagRes.status === 'fulfilled' && !diagRes.value.error ? (diagRes.value.data || {}) as Record<string, string> : {};
   const preview = previewRes.status === 'fulfilled' && !previewRes.value.error ? (previewRes.value.data || {}) as any : null;
 
+  const hasResend = hasSecret(health, 'RESEND_API_KEY') && hasSecret(health, 'EMAIL_FROM');
   const missingGmail = REQUIRED_GMAIL_KEYS.filter(key => isMissing(health[key]));
+  const gmailReady = hasResend || missingGmail.length === 0;
+  const gmailDetail = hasResend
+    ? 'Resend sender is configured in Supabase secrets.'
+    : missingGmail.length
+      ? `${missingGmail.join(', ')} missing in Supabase secrets`
+      : 'Lovable Gmail connector secrets are present.';
   const missingRetell = REQUIRED_RETELL_KEYS.filter(key => isMissing(health[key]));
   const schedule = scheduleStatus(settings);
   const connectedCallsToday = connectedRows.filter((row: any) => {
@@ -279,9 +291,9 @@ async function loadDiagnostics(): Promise<Diagnostics> {
     {
       key: 'gmail',
       label: 'Gmail sender',
-      value: missingGmail.length ? 'Blocked' : 'Connected',
-      detail: missingGmail.length ? `${missingGmail.join(', ')} missing in Supabase secrets` : 'Required Gmail secrets are present.',
-      status: missingGmail.length ? 'blocked' : 'ready',
+      value: gmailReady ? (hasResend ? 'Resend ready' : 'Connected') : 'Blocked',
+      detail: gmailDetail,
+      status: gmailReady ? 'ready' : 'blocked',
     },
     {
       key: 'retell',
