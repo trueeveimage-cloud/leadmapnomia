@@ -69,7 +69,8 @@ Deno.serve(async (req) => {
   if (!rawLead) return json({ error: 'lead_not_found' }, 404);
   const lead = rawLead as JsonRecord;
 
-  const toNumber = normalizeE164(String(lead.phone_e164 || '')) || normalizeE164(String(lead.phone || ''));
+  const country = String(lead.country || '');
+  const toNumber = normalizeE164(String(lead.phone_e164 || ''), country) || normalizeE164(String(lead.phone || ''), country);
   if (!toNumber) return json({ error: 'phone_not_e164', message: 'Lead phone must be in E.164 format, for example +46701234567.' }, 400);
   if (lead.do_not_contact || lead.outreach_opt_out) return json({ error: 'do_not_contact' }, 409);
   if (lead.call_status === 'Calling') return json({ error: 'already_calling' }, 409);
