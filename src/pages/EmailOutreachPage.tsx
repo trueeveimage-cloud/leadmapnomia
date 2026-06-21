@@ -108,6 +108,10 @@ export default function EmailOutreachPage() {
       setSetting('gmail_autosend_enabled', next.enabled ? 'true' : 'false'),
       setSetting('gmail_autosend_daily', next.dailyLimit),
       setSetting('gmail_daily_cap', next.dailyLimit),
+      setSetting('gmail_autosend_daily_se', '80'),
+      setSetting('gmail_autosend_daily_uk', '20'),
+      setSetting('gmail_autosend_daily_es', '0'),
+      setSetting('gmail_autosend_supply_min', '500'),
       setSetting('gmail_autosend_subject', next.subject),
       setSetting('gmail_autosend_body', next.body),
       setSetting('gmail_sender_name', next.senderName),
@@ -223,7 +227,7 @@ export default function EmailOutreachPage() {
               </div>
               <div className="rounded-lg border border-border bg-background/40 p-3 text-xs leading-relaxed text-muted-foreground">
                 <div className="font-medium text-foreground">Recommended</div>
-                The automation target is 100/day every weekday. Keep 120+ seconds between emails and a batch size of 10 while warming up the sender.
+                The automation target is 100/day every weekday: 80 Swedish leads and 20 UK leads for that day's niche. Keep 120+ seconds between emails and a batch size of 10 while warming up the sender.
               </div>
             </div>
 

@@ -631,6 +631,10 @@ export default function AutomationPage() {
         setSetting('gmail_autosend_enabled', next.gmailEnabled ? 'true' : 'false'),
         setSetting('gmail_autosend_daily', next.gmailDaily),
         setSetting('gmail_daily_cap', next.gmailDaily),
+        setSetting('gmail_autosend_daily_se', '80'),
+        setSetting('gmail_autosend_daily_uk', '20'),
+        setSetting('gmail_autosend_daily_es', '0'),
+        setSetting('gmail_autosend_supply_min', '500'),
         setSetting('gmail_autosend_delay_seconds', next.gmailDelaySeconds),
         setSetting('gmail_autosend_batch_size', next.gmailBatchSize),
         setSetting('gmail_autosend_subject', next.gmailSubject),
@@ -835,7 +839,7 @@ export default function AutomationPage() {
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Gmail and AI calls use the same daily niche: 100 emails and 15 connected calls target one market each weekday. Missed volume does not roll into the next day.
+                Gmail and AI calls use the same daily niche: 80 Swedish emails, 20 UK emails, and 15 Swedish connected calls target one market each weekday. Missed volume does not roll into the next day.
               </p>
             </div>
             <div className="grid min-w-[17rem] gap-2 sm:grid-cols-2 lg:grid-cols-1">
@@ -871,7 +875,7 @@ export default function AutomationPage() {
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{niche.day}</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">{niche.shortLabel}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    100 Gmail + 15 connected calls
+                    80 SE + 20 UK Gmail, 15 SE connected calls
                   </div>
                 </div>
               );

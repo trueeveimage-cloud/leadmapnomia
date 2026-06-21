@@ -67,6 +67,9 @@ type Diagnostics = {
 const DEFAULT_SETTINGS: Record<string, string> = {
   gmail_autosend_enabled: 'true',
   gmail_autosend_daily: '100',
+  gmail_autosend_daily_se: '80',
+  gmail_autosend_daily_uk: '20',
+  gmail_autosend_daily_es: '0',
   ai_calls_enabled: 'true',
   ai_calls_daily_connected_cap: '15',
   ai_calls_daily: '15',
@@ -202,6 +205,9 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   const settingsKeys = [
     'gmail_autosend_enabled',
     'gmail_autosend_daily',
+    'gmail_autosend_daily_se',
+    'gmail_autosend_daily_uk',
+    'gmail_autosend_daily_es',
     'ai_calls_enabled',
     'ai_calls_daily_connected_cap',
     'ai_calls_daily',
@@ -259,7 +265,13 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   }
 
   const buckets = supplyRes.status === 'fulfilled' ? supplyRes.value : EMPTY_LEAD_SUPPLY_STATS;
-  const emailCap = gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 100));
+  const emailCapSe = intSetting(settings, 'gmail_autosend_daily_se', 80);
+  const emailCapUk = intSetting(settings, 'gmail_autosend_daily_uk', 20);
+  const emailCapEs = intSetting(settings, 'gmail_autosend_daily_es', 0);
+  const splitEmailCap = emailCapSe + emailCapUk + emailCapEs;
+  const emailCap = splitEmailCap > 0
+    ? Math.max(intSetting(settings, 'gmail_autosend_daily', 100), splitEmailCap)
+    : gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 100));
   const callCap = intSetting(settings, 'ai_calls_daily_connected_cap', intSetting(settings, 'ai_calls_daily', 15));
   const emailSentToday = emailTodayRes.status === 'fulfilled' ? (emailTodayRes.value.count || 0) : 0;
   const messageRows = messageRowsRes.status === 'fulfilled' ? (messageRowsRes.value.data || []) : [];
@@ -286,6 +298,16 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   const callsStartedToday = activityRows.filter((row: any) => new Date(row.created_at) >= new Date(today)).length;
   const previewEligible = Number(preview?.eligibleCalls ?? preview?.eligible ?? buckets.readyCall);
   const previewLabel = preview?.nicheLabel ? `${preview.nicheLabel} queue` : 'today queue';
+  const readySeEmails = buckets.readyEmailByCountry.SE || 0;
+  const readyUkEmails = (buckets.readyEmailByCountry.UK || 0) + (buckets.readyEmailByCountry.GB || 0);
+  const readyEsEmails = buckets.readyEmailByCountry.ES || 0;
+  const emailSupplyReady = buckets.readyEmail >= emailCap
+    && readySeEmails >= emailCapSe
+    && readyUkEmails >= emailCapUk
+    && readyEsEmails >= emailCapEs;
+  const emailSupplyDetail = emailSupplyReady
+    ? `Enough for ${emailCap}/day: ${emailCapSe} SE + ${emailCapUk} UK.`
+    : `Need ${Math.max(0, emailCapSe - readySeEmails)} SE, ${Math.max(0, emailCapUk - readyUkEmails)} UK and ${Math.max(0, emailCap - buckets.readyEmail)} total more ready emails.`;
 
   const items: LaunchItem[] = [
     {
@@ -306,8 +328,8 @@ async function loadDiagnostics(): Promise<Diagnostics> {
       key: 'email-supply',
       label: 'Email supply',
       value: buckets.readyEmail.toLocaleString(),
-      detail: buckets.readyEmail >= emailCap ? `Enough for today's ${emailCap} Gmail cap.` : `Need ${Math.max(0, emailCap - buckets.readyEmail)} more ready email leads.`,
-      status: buckets.readyEmail >= emailCap ? 'ready' : buckets.readyEmail > 0 ? 'warning' : 'blocked',
+      detail: emailSupplyDetail,
+      status: emailSupplyReady ? 'ready' : buckets.readyEmail > 0 ? 'warning' : 'blocked',
     },
     {
       key: 'phone-supply',

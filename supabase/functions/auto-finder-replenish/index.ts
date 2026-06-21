@@ -39,6 +39,157 @@ function pickKeywords(country: string, count = 4): string[] {
   return out;
 }
 
+function sectionFor(candidate: any, email?: string | null) {
+  const hasPhone = !!String(candidate?.phone || '').trim();
+  const hasEmail = !!String(email || candidate?.email || '').trim();
+  if (hasPhone && hasEmail) return 'both';
+  if (hasEmail) return 'email';
+  if (hasPhone) return 'phone';
+  return 'missing';
+}
+
+async function findDuplicateLead(supabase: any, candidate: any) {
+  if (candidate.place_id) {
+    const { data } = await supabase.from('leads').select('*').eq('place_id', candidate.place_id).maybeSingle();
+    if (data) return data;
+  }
+  if (candidate.name && candidate.address) {
+    const normName = String(candidate.name).toLowerCase().trim();
+    const normAddr = String(candidate.address).toLowerCase().trim().slice(0, 50);
+    const { data } = await supabase
+      .from('leads')
+      .select('*')
+      .ilike('name', normName)
+      .ilike('address', `${normAddr}%`)
+      .maybeSingle();
+    if (data) return data;
+  }
+  return null;
+}
+
+async function promoteCandidateLead(
+  supabase: any,
+  candidate: any,
+  input: { city: string; country: string; keywords: string[]; email?: string | null; emailSource?: string | null },
+) {
+  const email = input.email || candidate.email || null;
+  if (!candidate.phone && !email) return { added: 0, updated: 0 };
+
+  const duplicate = await findDuplicateLead(supabase, candidate);
+  const nicheText = candidate.category?.split(',')[0]?.trim() || input.keywords[0] || null;
+  const basePatch: Record<string, unknown> = {
+    place_id: candidate.place_id,
+    maps_url: candidate.maps_url,
+    name: candidate.name,
+    category: candidate.category,
+    niche_label: nicheText,
+    detected_niche: input.keywords.join(', '),
+    rating: candidate.rating,
+    reviews_count: candidate.reviews_count,
+    phone: candidate.phone,
+    email,
+    address: candidate.address,
+    city: input.city,
+    country: input.country,
+    website: candidate.website,
+    section: sectionFor(candidate, email),
+    status: 'not_contacted',
+    email_source: email ? (input.emailSource || 'website_scrape') : null,
+    product: 'leadmap',
+    lead_tier: 'A',
+    potential_score: 78,
+    why_good_lead: `Auto-found ${input.country} ${input.keywords.join(' / ')} lead with public contact data.`,
+  };
+
+  if (duplicate) {
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(basePatch)) {
+      if (value !== null && value !== undefined && value !== '' && !duplicate[key]) patch[key] = value;
+    }
+    if (email && !duplicate.email) {
+      patch.email = email;
+      patch.email_source = input.emailSource || 'website_scrape';
+    }
+    if (candidate.phone && !duplicate.phone) patch.phone = candidate.phone;
+    if (Object.keys(patch).length === 0) return { added: 0, updated: 0 };
+    patch.section = sectionFor({ phone: patch.phone || duplicate.phone, email: patch.email || duplicate.email });
+    await supabase.from('leads').update(patch).eq('id', duplicate.id);
+    return { added: 0, updated: 1 };
+  }
+
+  await supabase.from('leads').insert(basePatch as any);
+  return { added: 1, updated: 0 };
+}
+
+async function scrapeAndPromoteCandidates(
+  supabase: any,
+  supabaseUrl: string,
+  serviceKey: string,
+  input: { runId: string; city: string; country: string; keywords: string[] },
+) {
+  const { data: candidates } = await supabase
+    .from('finder_candidates')
+    .select('*')
+    .eq('run_id', input.runId);
+
+  const allCandidates = candidates || [];
+  let checked = 0;
+  let found = 0;
+  let added = 0;
+  let updated = 0;
+
+  for (const candidate of allCandidates) {
+    const result = await promoteCandidateLead(supabase, candidate, input);
+    added += result.added;
+    updated += result.updated;
+  }
+
+  const websiteCandidates = allCandidates.filter((candidate: any) => candidate.website && !candidate.email);
+  for (let i = 0; i < websiteCandidates.length; i += 4) {
+    const slice = websiteCandidates.slice(i, i + 4);
+    checked += slice.length;
+    const resp = await fetch(`${supabaseUrl}/functions/v1/scrape-emails`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+      body: JSON.stringify({
+        urls: slice.map((candidate: any) => ({
+          leadId: candidate.id,
+          website: candidate.website,
+          businessName: candidate.name,
+        })),
+      }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    for (const item of data?.results || []) {
+      const candidate = slice.find((row: any) => row.id === item.leadId);
+      const email = item?.email || item?.emails?.[0];
+      if (!candidate || !email) continue;
+      found += 1;
+      await supabase.from('finder_candidates').update({ email } as any).eq('id', candidate.id);
+      const result = await promoteCandidateLead(supabase, candidate, {
+        ...input,
+        email,
+        emailSource: item.source || 'website_scrape',
+      });
+      added += result.added;
+      updated += result.updated;
+    }
+  }
+
+  const { data: run } = await supabase.from('finder_runs').select('stats').eq('id', input.runId).maybeSingle();
+  await supabase.from('finder_runs').update({
+    stats: {
+      ...(run?.stats || {}),
+      emailScrapeChecked: checked,
+      emailsFound: found,
+      promotedLeadsAdded: added,
+      promotedLeadsUpdated: updated,
+    },
+  } as any).eq('id', input.runId);
+
+  return { checked, found, added, updated };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -151,6 +302,19 @@ Deno.serve(async (req) => {
           } as any).eq('id', (run as any).id);
           return;
         }
+        const promotion = await scrapeAndPromoteCandidates(supabase, supabaseUrl, serviceKey, {
+          runId: (run as any).id,
+          city,
+          country: nextCountry,
+          keywords,
+        });
+        await supabase.from('app_notifications').insert({
+          type: 'finder_auto_replenish',
+          title: 'Auto-replenish email scrape finished',
+          message: `${promotion.found} emails found; ${promotion.added} leads added and ${promotion.updated} leads updated.`,
+          payload: { runId: (run as any).id, country: nextCountry, city, keywords, ...promotion },
+        });
+
         // Once finder-search returns, immediately re-queue the originating job
         // so newly discovered leads get used right away instead of waiting for cron.
         const requeueTarget = trigger === 'ai_calls_empty'

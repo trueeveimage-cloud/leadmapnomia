@@ -10,11 +10,14 @@ const corsHeaders = {
 };
 
 const DEFAULT_DAILY = 100;
+const DEFAULT_DAILY_SE = 80;
+const DEFAULT_DAILY_UK = 20;
+const DEFAULT_DAILY_ES = 0;
 const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const CRON_INTERVAL_MINUTES = 5;
-const DEFAULT_EMAIL_SUPPLY_MIN = 100;
+const DEFAULT_EMAIL_SUPPLY_MIN = 500;
 const DEFAULT_SUBJECTS: Record<string, string> = {
   sv: 'En snabb fråga om missade samtal hos {{business_name}}',
   en: 'Quick question about missed calls at {{business_name}}',
@@ -312,9 +315,9 @@ Deno.serve(async (req) => {
     const force = cfg.gmail_autosend_force === 'true';
     const configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
     const hasCountryCaps = Boolean(cfg.gmail_autosend_daily_se || cfg.gmail_autosend_daily_uk || cfg.gmail_autosend_daily_es);
-    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || (hasCountryCaps ? 100 : configuredDaily)));
-    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || (hasCountryCaps ? 10 : 0)));
-    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || (hasCountryCaps ? 10 : 0)));
+    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || (hasCountryCaps ? DEFAULT_DAILY_SE : configuredDaily)));
+    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || (hasCountryCaps ? DEFAULT_DAILY_UK : 0)));
+    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || (hasCountryCaps ? DEFAULT_DAILY_ES : 0)));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const supplyMin = Math.max(20, Math.min(1000, parseInt(cfg.gmail_autosend_supply_min || '') || DEFAULT_EMAIL_SUPPLY_MIN));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
@@ -464,6 +467,16 @@ Deno.serve(async (req) => {
         maxDetails: Math.max(60, supplyMin),
         keywords: [nichePlan.selectedLabel || 'service business'],
       });
+      if (capUk > 0) {
+        triggerAutoReplenish(supabaseUrl, serviceKey, {
+          trigger: 'gmail_supply_low_uk',
+          findGmailOnly: true,
+          country: 'UK',
+          maxCandidates: Math.max(30, capUk * 2),
+          maxDetails: Math.max(30, capUk * 2),
+          keywords: [nichePlan.selectedLabel || 'service business'],
+        });
+      }
     }
 
     // Auto-replenish: when no emailable leads remain, kick off a finder search in the background.

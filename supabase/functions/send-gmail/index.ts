@@ -22,6 +22,7 @@ const BodySchema = z.object({
   body: z.string().min(1).max(20000),
   manualUnlock: z.boolean().optional(),
   skipCooldown: z.boolean().optional(),
+  allowFollowUp: z.boolean().optional(),
 });
 
 function b64url(s: string): string {
@@ -172,7 +173,7 @@ Deno.serve(async (req) => {
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
-  const { leadId, partnerProspectId, subject, manualUnlock, skipCooldown } = parsed.data;
+  const { leadId, partnerProspectId, subject, manualUnlock, skipCooldown, allowFollowUp } = parsed.data;
   const to = normalizeEmail(parsed.data.to);
   const body = withComplianceFooter(parsed.data.body);
   const emailProvider = mailProvider();
@@ -255,7 +256,7 @@ Deno.serve(async (req) => {
       });
       return jsonResp({ skipped: true, reason: 'opt_out' });
     }
-    if (hasCallContact(lead)) {
+    if (!allowFollowUp && hasCallContact(lead)) {
       await notify(supabase, {
         type: 'outreach_skipped',
         title: 'Gmail skipped: lead already called',
@@ -267,7 +268,7 @@ Deno.serve(async (req) => {
   }
 
   // 2) Dedupe: already emailed this lead successfully
-  if (leadId) {
+  if (leadId && !allowFollowUp) {
     const { data: existing } = await supabase
       .from('message_logs')
       .select('id')
@@ -285,40 +286,42 @@ Deno.serve(async (req) => {
   }
 
   // 2b) Dedupe across duplicate lead rows by recipient email.
-  const normalizedTo = to;
-  const { data: matchingLeads } = await supabase
-    .from('leads')
-    .select('id, name, last_called_at, last_contact_method, outreach_state, call_attempts')
-    .ilike('email', normalizedTo);
-  const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
-  if (matchingLeadIds.length > 0) {
-    const calledMatch = (matchingLeads || []).find((lead: any) => hasCallContact(lead));
-    if (calledMatch) {
-      await notify(supabase, {
-        type: 'outreach_skipped',
-        title: 'Gmail skipped: matching lead already called',
-        message: `${to} matches a business already contacted by AI call.`,
-        payload: { leadId: leadId || '', to, reason: 'matching_lead_already_called', matchedLeadId: calledMatch.id },
-      });
-      return jsonResp({ skipped: true, reason: 'matching_lead_already_called' });
-    }
+  if (!allowFollowUp) {
+    const normalizedTo = to;
+    const { data: matchingLeads } = await supabase
+      .from('leads')
+      .select('id, name, last_called_at, last_contact_method, outreach_state, call_attempts')
+      .ilike('email', normalizedTo);
+    const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
+    if (matchingLeadIds.length > 0) {
+      const calledMatch = (matchingLeads || []).find((lead: any) => hasCallContact(lead));
+      if (calledMatch) {
+        await notify(supabase, {
+          type: 'outreach_skipped',
+          title: 'Gmail skipped: matching lead already called',
+          message: `${to} matches a business already contacted by AI call.`,
+          payload: { leadId: leadId || '', to, reason: 'matching_lead_already_called', matchedLeadId: calledMatch.id },
+        });
+        return jsonResp({ skipped: true, reason: 'matching_lead_already_called' });
+      }
 
-    const { data: existingByEmail } = await supabase
-      .from('message_logs')
-      .select('id, lead_id')
-      .eq('channel', 'email')
-      .eq('direction', 'outbound')
-      .in('status', ['sent', 'queued'])
-      .in('lead_id', matchingLeadIds)
-      .limit(1);
-    if (existingByEmail && existingByEmail.length > 0) {
-      await notify(supabase, {
-        type: 'outreach_skipped',
-        title: 'Gmail skipped: email already contacted',
-        message: `${to} was already contacted on another lead row.`,
-        payload: { leadId: leadId || '', to, reason: 'email_already_contacted', matchedLeadId: existingByEmail[0].lead_id },
-      });
-      return jsonResp({ skipped: true, reason: 'email_already_contacted' });
+      const { data: existingByEmail } = await supabase
+        .from('message_logs')
+        .select('id, lead_id')
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .in('status', ['sent', 'queued'])
+        .in('lead_id', matchingLeadIds)
+        .limit(1);
+      if (existingByEmail && existingByEmail.length > 0) {
+        await notify(supabase, {
+          type: 'outreach_skipped',
+          title: 'Gmail skipped: email already contacted',
+          message: `${to} was already contacted on another lead row.`,
+          payload: { leadId: leadId || '', to, reason: 'email_already_contacted', matchedLeadId: existingByEmail[0].lead_id },
+        });
+        return jsonResp({ skipped: true, reason: 'email_already_contacted' });
+      }
     }
   }
 
@@ -326,7 +329,7 @@ Deno.serve(async (req) => {
     const { data: lockResult, error: lockError } = await supabase.rpc('acquire_outreach_lock', {
       p_lead_id: leadId,
       p_method: 'email',
-      p_manual_unlock: !!manualUnlock,
+      p_manual_unlock: !!manualUnlock || !!allowFollowUp,
     });
     if (lockError) return jsonResp({ error: 'outreach_lock_failed', details: lockError.message }, 500);
     if (!lockResult?.allowed) {

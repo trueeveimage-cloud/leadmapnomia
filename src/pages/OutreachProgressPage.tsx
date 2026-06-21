@@ -4,11 +4,15 @@ import AppLayout from '@/components/AppLayout';
 import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchNotifications, getSetting, type AppNotification } from '@/lib/supabase';
 import {
   DEFAULT_CONNECTED_CALL_DAILY,
   DEFAULT_GMAIL_DAILY,
+  DEFAULT_GMAIL_DAILY_ES,
+  DEFAULT_GMAIL_DAILY_SE,
+  DEFAULT_GMAIL_DAILY_UK,
   DEFAULT_OUTREACH_END_HOUR,
   DEFAULT_OUTREACH_END_MINUTE,
   DEFAULT_OUTREACH_START_HOUR,
@@ -19,13 +23,14 @@ import {
   nextOutreachCheckpoint,
 } from '@/lib/outreachPlan';
 import { cn } from '@/lib/utils';
-import { connectedCallStatus } from '@/lib/outreachEligibility';
+import { connectedCallStatus, detectCountry, isCallEligible, isEmailEligible } from '@/lib/outreachEligibility';
 import {
   Activity,
   Bot,
   CalendarDays,
   CheckCircle2,
   Clock,
+  Info,
   Mail,
   RefreshCw,
   Target,
@@ -41,6 +46,7 @@ type DayStats = {
   nicheLabel: string;
   gmailSent: number;
   gmailBatchSent: number;
+  emailReplies: number;
   emailInterested: number;
   emailDemo: number;
   aiStarted: number;
@@ -52,6 +58,9 @@ type DayStats = {
   finderRuns: number;
   finderCandidates: number;
   finderSaved: number;
+  supplySeEmails: number;
+  supplyUkEmails: number;
+  supplySePhones: number;
   failed: number;
   skipped: number;
   summary: string;
@@ -72,9 +81,9 @@ type Settings = {
 
 const DEFAULT_SETTINGS: Settings = {
   gmailDaily: DEFAULT_GMAIL_DAILY,
-  gmailDailySe: DEFAULT_GMAIL_DAILY,
-  gmailDailyUk: 0,
-  gmailDailyEs: 0,
+  gmailDailySe: DEFAULT_GMAIL_DAILY_SE,
+  gmailDailyUk: DEFAULT_GMAIL_DAILY_UK,
+  gmailDailyEs: DEFAULT_GMAIL_DAILY_ES,
   callDaily: DEFAULT_CONNECTED_CALL_DAILY,
   startHour: DEFAULT_OUTREACH_START_HOUR,
   startMinute: DEFAULT_OUTREACH_START_MINUTE,
@@ -127,6 +136,88 @@ function localDateKey(value?: string | Date | null) {
 function isDemoStatus(status?: string | null) {
   const value = String(status || '').toLowerCase();
   return value.includes('demo') || value.includes('meeting') || value.includes('making_demo');
+}
+
+function stripMarks(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+const NICHE_KEYWORDS: Record<string, string[]> = {
+  emergency_trades: ['plumber', 'plumbing', 'vvs', 'ror', 'rorfirma', 'jour', 'locksmith', 'lasser', 'tak', 'roof', 'water damage', 'leak'],
+  dental: ['dental', 'dentist', 'tand', 'tandlakare', 'implant', 'orthodont', 'clinic', 'klin'],
+  electricians: ['electric', 'electrician', 'el ', 'el-', 'elinstallation', 'elektriker', 'belysning', 'automation', 'voltage'],
+  auto_services: ['auto', 'car', 'vehicle', 'bil', 'verkstad', 'mechanic', 'garage', 'dack', 'rekond', 'detailing', 'repair'],
+  cleaning: ['clean', 'cleaning', 'stad', 'stadning', 'hemstad', 'flyttstad', 'sanering', 'housekeeping', 'facility'],
+};
+
+function leadNicheText(lead: Record<string, unknown>) {
+  return stripMarks([
+    lead.category,
+    lead.niche_label,
+    lead.detected_niche,
+    lead.business_type,
+    lead.name,
+    lead.website,
+  ].filter(Boolean).join(' '));
+}
+
+function matchesNiche(lead: Record<string, unknown>, niche: string) {
+  const text = leadNicheText(lead);
+  const keywords = NICHE_KEYWORDS[niche] || [];
+  return keywords.some(keyword => text.includes(stripMarks(keyword)));
+}
+
+async function loadLeadmapSupplyLeads(sb: any) {
+  const columns = [
+    'id',
+    'created_at',
+    'name',
+    'email',
+    'phone',
+    'phone_e164',
+    'lead_tier',
+    'outreach_stage',
+    'outreach_state',
+    'outreach_opt_out',
+    'do_not_contact',
+    'last_called_at',
+    'last_contacted_at',
+    'last_contact_method',
+    'last_message_status',
+    'call_attempts',
+    'no_answer_count',
+    'next_call_after',
+    'call_status',
+    'call_connected',
+    'product',
+    'status',
+    'potential_score',
+    'country',
+    'address',
+    'city',
+    'category',
+    'niche_label',
+    'detected_niche',
+    'business_type',
+    'website',
+  ].join(',');
+  const rows: any[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await sb
+      .from('leads')
+      .select(columns)
+      .eq('product', 'leadmap')
+      .order('created_at', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
 }
 
 function gmailTargetForDay(_day: Pick<DayStats, 'dateKey'>, settings: Settings) {
@@ -200,6 +291,7 @@ export default function OutreachProgressPage() {
   const [history, setHistory] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<DayStats | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
@@ -277,13 +369,21 @@ export default function OutreachProgressPage() {
       const since = startOfDayIso(first);
       const until = endOfDayIso(last);
       const sb = supabase as any;
-      const [{ data: emailRows }, { data: aiRows }, { data: connectedRows }, { data: finderRows }, notifications] = await Promise.all([
+      const [{ data: emailRows }, { data: inboundEmailRows }, { data: aiRows }, { data: connectedRows }, { data: finderRows }, supplyLeads, notifications] = await Promise.all([
         sb
           .from('message_logs')
-          .select('id, created_at, lead_id, leads(status)')
+          .select('id, created_at, lead_id, leads(status, name, category, niche_label, detected_niche, business_type, website)')
           .eq('channel', 'email')
           .eq('direction', 'outbound')
           .eq('status', 'sent')
+          .gte('created_at', since)
+          .lte('created_at', until)
+          .limit(10000),
+        sb
+          .from('message_logs')
+          .select('id, created_at, lead_id, body, leads(status, name, category, niche_label, detected_niche, business_type, website)')
+          .eq('channel', 'email')
+          .eq('direction', 'inbound')
           .gte('created_at', since)
           .lte('created_at', until)
           .limit(10000),
@@ -308,6 +408,7 @@ export default function OutreachProgressPage() {
           .lte('created_at', until)
           .order('created_at', { ascending: false })
           .limit(300),
+        loadLeadmapSupplyLeads(sb),
         fetchNotifications(300),
       ]);
 
@@ -322,6 +423,7 @@ export default function OutreachProgressPage() {
           nicheLabel: day.nicheLabel,
           gmailSent: 0,
           gmailBatchSent: 0,
+          emailReplies: 0,
           emailInterested: 0,
           emailDemo: 0,
           aiStarted: 0,
@@ -333,6 +435,9 @@ export default function OutreachProgressPage() {
           finderRuns: 0,
           finderCandidates: 0,
           finderSaved: 0,
+          supplySeEmails: 0,
+          supplyUkEmails: 0,
+          supplySePhones: 0,
           failed: 0,
           skipped: 0,
           summary: '',
@@ -346,6 +451,16 @@ export default function OutreachProgressPage() {
         if (bucket) {
           const status = row.leads?.status;
           bucket.gmailSent += 1;
+          if (isInterestedStatus(status)) bucket.emailInterested += 1;
+          if (isDemoStatus(status)) bucket.emailDemo += 1;
+        }
+      }
+      for (const row of inboundEmailRows || []) {
+        const foundNiche = weekDays.find(day => row.leads && matchesNiche(row.leads, day.niche));
+        const bucket = (foundNiche ? bucketsByNiche.get(foundNiche.niche) : null) || buckets.get(localDateKey(row.created_at));
+        if (bucket) {
+          const status = row.leads?.status;
+          bucket.emailReplies += 1;
           if (isInterestedStatus(status)) bucket.emailInterested += 1;
           if (isDemoStatus(status)) bucket.emailDemo += 1;
         }
@@ -377,6 +492,23 @@ export default function OutreachProgressPage() {
           bucket.finderRuns += 1;
           bucket.finderCandidates += Number(stats.candidatesFound || stats.totalCandidates || 0);
           bucket.finderSaved += Number(stats.savedLeads || stats.emailsFound || stats.noWebsiteEmailOnly || stats.noWebsiteWithPhone || 0);
+        }
+      }
+
+      for (const day of weekDays) {
+        const bucket = bucketsByNiche.get(day.niche);
+        if (!bucket) continue;
+        const seenEmails = new Set<string>();
+        for (const lead of supplyLeads || []) {
+          if (!matchesNiche(lead, day.niche)) continue;
+          const country = detectCountry(lead);
+          if (isEmailEligible(lead, seenEmails)) {
+            if (country === 'SE') bucket.supplySeEmails += 1;
+            if (country === 'UK' || country === 'GB') bucket.supplyUkEmails += 1;
+          }
+          if (isCallEligible(lead, { product: 'leadmap', countries: ['SE'] })) {
+            bucket.supplySePhones += 1;
+          }
         }
       }
 
@@ -518,7 +650,7 @@ export default function OutreachProgressPage() {
             <CountryCap code="ES" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Each weekday runs its own niche with a clean {normalEmailTarget} Gmail target and {settings.callDaily} connected AI calls. Missed volume does not roll into the next day.
+            Each weekday runs its own niche with {settings.gmailDailySe} Swedish emails, {settings.gmailDailyUk} UK emails, and {settings.callDaily} Swedish connected AI calls. Missed volume does not roll into the next day.
           </p>
         </section>
 
@@ -550,6 +682,17 @@ export default function OutreachProgressPage() {
                     </Badge>
                   </div>
 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3 h-8 w-full justify-start gap-2 text-xs"
+                    onClick={() => setSelectedDay(day)}
+                  >
+                    <Info size={13} />
+                    View niche/day details
+                  </Button>
+
                   <div className="mt-4 space-y-3">
                     <ProgressLine label="Gmail" value={day.gmailSent} target={dayEmailTarget} percent={emailPct} />
                     <ProgressLine label="Connected calls" value={day.aiConnected} target={settings.callDaily} percent={callPct} />
@@ -557,10 +700,12 @@ export default function OutreachProgressPage() {
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <MiniStat label="Email interest" value={`${emailInterestPct}%`} />
+                    <MiniStat label="Replies" value={day.emailReplies} />
                     <MiniStat label="Call interest" value={`${callInterestPct}%`} />
                     <MiniStat label="AI started" value={day.aiStarted} />
-                    <MiniStat label="Finder runs" value={day.finderRuns} />
-                    <MiniStat label="Supply found" value={day.finderSaved || day.finderCandidates} />
+                    <MiniStat label="SE emails ready" value={`${day.supplySeEmails}/${settings.gmailDailySe}`} />
+                    <MiniStat label="UK emails ready" value={`${day.supplyUkEmails}/${settings.gmailDailyUk}`} />
+                    <MiniStat label="SE phones ready" value={`${day.supplySePhones}/${settings.callDaily}`} />
                     <MiniStat label="Failed" value={day.failed} />
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{day.summary}</p>
@@ -610,6 +755,54 @@ export default function OutreachProgressPage() {
             </div>
           </div>
         </section>
+
+        <Dialog open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>
+          {selectedDay && (
+            <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{selectedDay.shortLabel} {selectedDay.dateKey.slice(5)} · {selectedDay.nicheLabel}</DialogTitle>
+                <DialogDescription>
+                  Niche-specific targets, lead supply, and measured outcomes for this day.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <MiniStat label="Swedish email supply" value={`${selectedDay.supplySeEmails}/${settings.gmailDailySe}`} />
+                <MiniStat label="UK email supply" value={`${selectedDay.supplyUkEmails}/${settings.gmailDailyUk}`} />
+                <MiniStat label="Swedish call supply" value={`${selectedDay.supplySePhones}/${settings.callDaily}`} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-border bg-background/40 p-4">
+                  <div className="text-sm font-semibold text-foreground">Email outcome</div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <MiniStat label="Sent" value={`${selectedDay.gmailSent}/${gmailTargetForDay(selectedDay, settings)}`} />
+                    <MiniStat label="Replies" value={selectedDay.emailReplies} />
+                    <MiniStat label="Interested" value={`${Math.round((selectedDay.emailInterested / Math.max(1, selectedDay.gmailSent)) * 100)}%`} />
+                    <MiniStat label="Demo/meeting" value={selectedDay.emailDemo} />
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-background/40 p-4">
+                  <div className="text-sm font-semibold text-foreground">AI call outcome</div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <MiniStat label="Started" value={selectedDay.aiStarted} />
+                    <MiniStat label="Connected" value={`${selectedDay.aiConnected}/${settings.callDaily}`} />
+                    <MiniStat label="Interested" value={`${Math.round((selectedDay.callInterested / Math.max(1, selectedDay.aiConnected)) * 100)}%`} />
+                    <MiniStat label="Not interested" value={selectedDay.callNotInterested} />
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-background/40 p-4">
+                <div className="text-sm font-semibold text-foreground">Run health</div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                  <MiniStat label="Finder runs" value={selectedDay.finderRuns} />
+                  <MiniStat label="Supply found" value={selectedDay.finderSaved || selectedDay.finderCandidates} />
+                  <MiniStat label="Skipped" value={selectedDay.skipped} />
+                  <MiniStat label="Failed" value={selectedDay.failed} />
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{selectedDay.summary}</p>
+              </div>
+            </DialogContent>
+          )}
+        </Dialog>
       </div>
     </AppLayout>
   );

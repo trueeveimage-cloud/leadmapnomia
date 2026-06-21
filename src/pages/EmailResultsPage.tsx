@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { AlertCircle, CheckCircle2, Mail, MessageSquareReply, RefreshCw, Search, Target, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mail, MessageSquareReply, RefreshCw, Search, Send, Target, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -70,6 +72,10 @@ export default function EmailResultsPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
+  const [replyRow, setReplyRow] = useState<EmailRow | null>(null);
+  const [replySubject, setReplySubject] = useState('Re: Leadmap');
+  const [replyBody, setReplyBody] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -133,7 +139,63 @@ export default function EmailResultsPage() {
 
   useEffect(() => {
     load();
+    const intervalId = window.setInterval(load, 30_000);
+    return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const scheduleLoad = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(load, 800);
+    };
+    const channel = supabase
+      .channel('email-results-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_logs' }, scheduleLoad)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: 'product=eq.leadmap' }, scheduleLoad)
+      .subscribe();
+    return () => {
+      window.clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const openReply = (row: EmailRow) => {
+    if (!row.lead?.email) {
+      toast.error('This lead has no email address');
+      return;
+    }
+    setReplyRow(row);
+    setReplySubject('Re: Leadmap');
+    setReplyBody('');
+  };
+
+  const sendReply = async () => {
+    if (!replyRow?.lead?.email || !replyBody.trim() || !replySubject.trim()) return;
+    setSendingReply(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-gmail', {
+        body: {
+          leadId: replyRow.leadId,
+          to: replyRow.lead.email,
+          subject: replySubject.trim(),
+          body: replyBody.trim(),
+          allowFollowUp: true,
+          manualUnlock: true,
+          skipCooldown: true,
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || 'Reply failed');
+      toast.success('Reply sent');
+      setReplyRow(null);
+      setReplyBody('');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Reply failed');
+    } finally {
+      setSendingReply(false);
+    }
+  };
 
   const stats = useMemo(() => {
     const sentLeads = rows.filter(row => row.sent > 0).length;
@@ -304,6 +366,17 @@ export default function EmailResultsPage() {
                     <div className="text-xs text-muted-foreground">
                       <div>{dateLabel(row.lastReplyAt || row.lastSentAt)}</div>
                       {row.lastReplyAt && <div className="mt-1 text-cyan-400">latest reply</div>}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 h-8 gap-1.5"
+                        onClick={() => openReply(row)}
+                        disabled={!row.lead?.email}
+                      >
+                        <Send size={12} />
+                        Reply
+                      </Button>
                     </div>
                   </div>
                 );
@@ -311,6 +384,53 @@ export default function EmailResultsPage() {
             </div>
           </div>
         )}
+
+        <Dialog open={!!replyRow} onOpenChange={(open) => !open && setReplyRow(null)}>
+          {replyRow && (
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Reply to {replyRow.lead?.name || replyRow.lead?.email}</DialogTitle>
+                <DialogDescription>
+                  Sends through the same verified Leadmap email sender and logs the reply in Email Results.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">To</label>
+                  <div className="mt-1 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+                    {replyRow.lead?.email}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Subject</label>
+                  <input
+                    value={replySubject}
+                    onChange={(event) => setReplySubject(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Message</label>
+                  <Textarea
+                    value={replyBody}
+                    onChange={(event) => setReplyBody(event.target.value)}
+                    placeholder="Write a short, human reply..."
+                    className="mt-1 min-h-40"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setReplyRow(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" className="gap-2" onClick={sendReply} disabled={sendingReply || !replyBody.trim() || !replySubject.trim()}>
+                    <Send size={14} />
+                    {sendingReply ? 'Sending...' : 'Send reply'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          )}
+        </Dialog>
       </div>
     </AppLayout>
   );
