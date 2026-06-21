@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
@@ -437,7 +438,7 @@ export default function AutomationPage() {
       emailDaily,
       emailBatch,
       delay,
-      safeEmail: emailDaily <= 240 && emailBatch <= 20 && delay >= 60,
+      safeEmail: emailDaily <= 100 && emailBatch <= 20 && delay >= 60,
     };
   }, [settings.aiDaily, settings.aiPerRun, settings.gmailDaily, settings.gmailBatchSize, settings.gmailDelaySeconds]);
 
@@ -775,7 +776,7 @@ export default function AutomationPage() {
               </div>
               <h2 className="mt-3 text-lg font-semibold text-foreground">Automatic schedule is the default</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail auto-sizes catch-up batches before the window closes with validation, dedupe, opt-out, suppression and no-call-overlap checks.
+                Cron checks every {AUTOMATION_INTERVAL_MINUTES} minutes in the work window. AI calls are one-by-one only; Gmail spreads the same-day quota across the window with validation, dedupe, opt-out, suppression and no-call-overlap checks.
               </p>
             </div>
             <StatusTile
@@ -834,7 +835,7 @@ export default function AutomationPage() {
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Gmail and AI calls use the same daily niche: 120 emails on normal weekdays, 240 on Tuesday catch-up, and 15 connected calls target one market each weekday. After enough contacts, the highest-success niche gets priority automatically.
+                Gmail and AI calls use the same daily niche: 100 emails and 15 connected calls target one market each weekday. Missed volume does not roll into the next day.
               </p>
             </div>
             <div className="grid min-w-[17rem] gap-2 sm:grid-cols-2 lg:grid-cols-1">
@@ -870,7 +871,7 @@ export default function AutomationPage() {
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{niche.day}</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">{niche.shortLabel}</div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    {niche.key === 'dental' ? '240 Tuesday Gmail + 15 calls' : '120 Gmail + 15 connected calls'}
+                    100 Gmail + 15 connected calls
                   </div>
                 </div>
               );
@@ -1059,7 +1060,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Every ${AUTOMATION_INTERVAL_MINUTES} min, catch-up max 20/run`} />
+              <StatusTile icon={<Clock size={15} />} label="Frequency" value={`Every ${AUTOMATION_INTERVAL_MINUTES} min, max 20/run`} />
               <StatusTile icon={<ShieldCheck size={15} />} label="Deliverability" value="Validation, suppression, unsubscribe" />
             </div>
 
@@ -1077,7 +1078,7 @@ export default function AutomationPage() {
             </div>
 
             <div className="mt-4 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground leading-relaxed">
-              Smart setup keeps Gmail controlled at 120/day on normal weekdays and 240 on Tuesday catch-up, with email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
+              Smart setup keeps Gmail controlled at 100/day every weekday, with email validation, duplicate prevention, no AI-call overlap, opt-out checks, suppression list, and unsubscribe footer.
             </div>
 
             <details className="mt-4 rounded-md border border-border bg-background/40 p-3">

@@ -2,19 +2,19 @@
 // Daily Gmail auto-sender for cold outreach.
 // Sends small batches only. send-gmail enforces daily caps, suppression, dedupe and opt-out checks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { chooseNichePlan, filterCandidatesByNiche, labelForNiche } from "../_shared/outreach-niches.ts";
+import { chooseNichePlan, filterCandidatesByNiche } from "../_shared/outreach-niches.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const DEFAULT_DAILY = 120;
+const DEFAULT_DAILY = 100;
 const DEFAULT_BATCH_SIZE = 10;
 const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const CRON_INTERVAL_MINUTES = 5;
-const DEFAULT_EMAIL_SUPPLY_MIN = 120;
+const DEFAULT_EMAIL_SUPPLY_MIN = 100;
 const DEFAULT_SUBJECTS: Record<string, string> = {
   sv: 'En snabb fråga om missade samtal hos {{business_name}}',
   en: 'Quick question about missed calls at {{business_name}}',
@@ -310,34 +310,21 @@ Deno.serve(async (req) => {
 
     const enabled = cfg.gmail_autosend_enabled === 'true';
     const force = cfg.gmail_autosend_force === 'true';
-    let configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
+    const configuredDaily = Math.max(1, Math.min(500, parseInt(cfg.gmail_autosend_daily || '') || DEFAULT_DAILY));
     const hasCountryCaps = Boolean(cfg.gmail_autosend_daily_se || cfg.gmail_autosend_daily_uk || cfg.gmail_autosend_daily_es);
-    let capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || (hasCountryCaps ? 100 : configuredDaily)));
-    let capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || (hasCountryCaps ? 10 : 0)));
-    let capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || (hasCountryCaps ? 10 : 0)));
+    const capSe = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_se || '') || (hasCountryCaps ? 100 : configuredDaily)));
+    const capUk = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_uk || '') || (hasCountryCaps ? 10 : 0)));
+    const capEs = Math.max(0, Math.min(500, parseInt(cfg.gmail_autosend_daily_es || '') || (hasCountryCaps ? 10 : 0)));
     const configuredBatchSize = Math.max(1, Math.min(20, parseInt(cfg.gmail_autosend_batch_size || '') || DEFAULT_BATCH_SIZE));
     const supplyMin = Math.max(20, Math.min(1000, parseInt(cfg.gmail_autosend_supply_min || '') || DEFAULT_EMAIL_SUPPLY_MIN));
     const delaySeconds = Math.max(0, Math.min(900, parseInt(cfg.gmail_autosend_delay_seconds || '') || 0));
     const startHour = intSetting(cfg, 'ai_calls_start_hour', DEFAULT_START_HOUR, 0, 23);
     const startMinute = intSetting(cfg, 'ai_calls_start_minute', 0, 0, 59);
-    let endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
-    let endMinute = intSetting(cfg, 'ai_calls_end_minute', 0, 0, 59);
+    const endHour = intSetting(cfg, 'ai_calls_end_hour', DEFAULT_END_HOUR, 1, 24);
+    const endMinute = intSetting(cfg, 'ai_calls_end_minute', 0, 0, 59);
     const days = csvSetting(cfg.ai_calls_days, ['1', '2', '3', '4', '5']).map(Number);
     const timeZone = cfg.ai_calls_timezone || 'Europe/Stockholm';
     const nowLocal = localParts(timeZone);
-    const regularCountryCapTotal = capSe + capUk + capEs;
-    const regularDaily = Math.max(1, Math.min(500, Math.max(configuredDaily, regularCountryCapTotal || configuredDaily)));
-    const isTuesday = nowLocal.day === 2;
-    if (!force && isTuesday) {
-      configuredDaily = Math.max(configuredDaily, 240);
-      capSe = Math.max(capSe, 200);
-      capUk = Math.max(capUk, 20);
-      capEs = Math.max(capEs, 20);
-      if (minutesOfDay(endHour, endMinute) < minutesOfDay(18, 0)) {
-        endHour = 18;
-        endMinute = 0;
-      }
-    }
     const countryCapTotal = capSe + capUk + capEs;
     const daily = Math.max(1, Math.min(500, Math.max(configuredDaily, countryCapTotal || configuredDaily)));
     const initialNichePlan = await chooseNichePlan(supabase, cfg, nowLocal.day);
@@ -409,54 +396,10 @@ Deno.serve(async (req) => {
     }
 
     const slotsLeft = checksLeftToday(nowLocal.hour, nowLocal.minute, endHour, endMinute);
-    const catchUpBatchSize = Math.ceil(remaining / slotsLeft);
-    const batchSize = Math.max(configuredBatchSize, Math.min(20, catchUpBatchSize));
+    const sameDayBatchSize = Math.ceil(remaining / slotsLeft);
+    const batchSize = Math.max(configuredBatchSize, Math.min(20, sameDayBatchSize));
 
     let nichePlan = initialNichePlan;
-    let catchUpStatus: Record<string, unknown> | null = null;
-    if (!force && nowLocal.day === 2) {
-      const mondayStart = utcDayOffset(startOfDay, -1);
-      const { data: mondayRows } = await supabase
-        .from('message_logs')
-        .select('id')
-        .eq('channel', 'email')
-        .eq('direction', 'outbound')
-        .eq('status', 'sent')
-        .gte('created_at', mondayStart.toISOString())
-        .lt('created_at', startOfDay.toISOString())
-        .limit(10000);
-      const mondaySent = mondayRows?.length || 0;
-      const mondayDeficit = Math.max(0, regularDaily - mondaySent);
-      const catchUpBudgetToday = mondayDeficit > 0 ? regularDaily : 0;
-      const usingCatchUp = mondayDeficit > 0 && sentToday < catchUpBudgetToday;
-      catchUpStatus = {
-        enabled: mondayDeficit > 0,
-        mondaySent,
-        mondayTarget: regularDaily,
-        mondayDeficit,
-        catchUpBudgetToday,
-        selected: usingCatchUp ? 'monday_emergency_trades' : 'tuesday_dental',
-      };
-      if (usingCatchUp) {
-        nichePlan = {
-          ...initialNichePlan,
-          selectedKey: 'emergency_trades',
-          selectedLabel: labelForNiche('emergency_trades'),
-          plannedKey: 'dental',
-          plannedLabel: labelForNiche('dental'),
-          reason: `Tuesday catch-up: using the first ${catchUpBudgetToday} Gmail slots for Monday's missed VVS and emergency trades batch, then switching to Dental clinics.`,
-        };
-      } else if (mondayDeficit > 0) {
-        nichePlan = {
-          ...initialNichePlan,
-          selectedKey: 'dental',
-          selectedLabel: labelForNiche('dental'),
-          plannedKey: 'dental',
-          plannedLabel: labelForNiche('dental'),
-          reason: `Monday catch-up allocation is filled for today; Tuesday Dental clinics batch is active.`,
-        };
-      }
-    }
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
@@ -602,12 +545,11 @@ Deno.serve(async (req) => {
         batchSize,
         configuredBatchSize,
         supplyMin,
-        catchUpBatchSize,
+        sameDayBatchSize,
         slotsLeft,
         delaySeconds,
         remaining: remaining - sent,
         dailyCap: daily,
-        catchUpStatus,
         details: details.slice(0, 20),
         forced: force,
         scheduled: !force,
@@ -639,7 +581,7 @@ Deno.serve(async (req) => {
       batchSize,
       configuredBatchSize,
       supplyMin,
-      catchUpBatchSize,
+      sameDayBatchSize,
       slotsLeft,
       delaySeconds,
       niche: nichePlan.selectedKey,
@@ -648,7 +590,6 @@ Deno.serve(async (req) => {
       plannedNiche: nichePlan.plannedKey,
       plannedNicheLabel: nichePlan.plannedLabel,
       nicheReason: nichePlan.reason,
-      catchUpStatus,
       timestamp: new Date().toISOString(),
       details: details.slice(0, 20),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

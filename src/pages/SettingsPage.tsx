@@ -120,7 +120,7 @@ export default function SettingsPage() {
   const [gmailSentToday, setGmailSentToday] = useState<number | null>(null);
   const [gmailFromAddress, setGmailFromAddress] = useState('');
 
-  // Gmail auto-send (120/business-day, with Tuesday catch-up handled by automation)
+  // Gmail auto-send (100/business-day)
   const [autosendEnabled, setAutosendEnabled] = useState(false);
   const [autosendDaily, setAutosendDaily] = useState(String(NORMAL_GMAIL_DAILY_TARGET));
   const [autosendSubject, setAutosendSubject] = useState(LEADMAP_EMAIL_SUBJECT_SV);

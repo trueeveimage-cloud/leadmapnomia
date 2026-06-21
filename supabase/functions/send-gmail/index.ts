@@ -11,7 +11,6 @@ const corsHeaders = {
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
 const DEFAULT_DAILY_CAP = 100;
-const TUESDAY_DAILY_CAP = 240;
 const UNSUBSCRIBE_MAILBOX = 'leadmapai.se@gmail.com';
 const DEFAULT_FROM_NAME = 'Leadmap';
 
@@ -145,15 +144,6 @@ function hasCallContact(lead: any) {
     || lead?.last_contact_method === 'AI Call'
     || lead?.outreach_state === 'called'
     || (Number(lead?.call_attempts || 0) > 0);
-}
-
-function stockholmDay() {
-  const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Europe/Stockholm',
-    weekday: 'short',
-  }).format(new Date());
-  const days: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return days[weekday] ?? new Date().getUTCDay();
 }
 
 function settingNumber(value: string | null | undefined, fallback: number) {
@@ -381,7 +371,6 @@ Deno.serve(async (req) => {
     const splitCap = [seCapSetting, ukCapSetting, esCapSetting]
       .reduce((sum, row) => sum + Math.max(0, settingNumber(row?.value, 0)), 0);
     dailyCap = Math.max(baseCap, autoCap, splitCap || 0);
-    if (stockholmDay() === 2) dailyCap = Math.max(dailyCap, TUESDAY_DAILY_CAP);
     dailyCap = Math.max(0, Math.min(500, dailyCap));
     delaySeconds = Math.max(0, Math.min(900, parseInt(delaySetting?.value || '') || 0));
     const { count } = await supabase

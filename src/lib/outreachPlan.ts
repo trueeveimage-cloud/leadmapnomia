@@ -27,7 +27,7 @@ export const DEFAULT_OUTREACH_START_HOUR = 10;
 export const DEFAULT_OUTREACH_START_MINUTE = 0;
 export const DEFAULT_OUTREACH_END_HOUR = 17;
 export const DEFAULT_OUTREACH_END_MINUTE = 30;
-export const DEFAULT_GMAIL_DAILY = 120;
+export const DEFAULT_GMAIL_DAILY = 100;
 export const DEFAULT_CONNECTED_CALL_DAILY = 15;
 
 export function dayKey(value: string | Date) {

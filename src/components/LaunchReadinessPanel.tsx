@@ -259,7 +259,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
   }
 
   const buckets = supplyRes.status === 'fulfilled' ? supplyRes.value : EMPTY_LEAD_SUPPLY_STATS;
-  const emailCap = gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 120));
+  const emailCap = gmailTargetForToday(intSetting(settings, 'gmail_autosend_daily', 100));
   const callCap = intSetting(settings, 'ai_calls_daily_connected_cap', intSetting(settings, 'ai_calls_daily', 15));
   const emailSentToday = emailTodayRes.status === 'fulfilled' ? (emailTodayRes.value.count || 0) : 0;
   const messageRows = messageRowsRes.status === 'fulfilled' ? (messageRowsRes.value.data || []) : [];
@@ -328,7 +328,7 @@ async function loadDiagnostics(): Promise<Diagnostics> {
       label: 'Daily caps',
       value: `${emailCap} Gmail / ${callCap} calls`,
       detail: `${emailSentToday}/${emailCap} Gmail sent and ${connectedCallsToday}/${callCap} connected calls counted today.`,
-      status: emailCap <= 240 && callCap <= 15 ? 'ready' : 'warning',
+      status: emailCap <= 100 && callCap <= 15 ? 'ready' : 'warning',
     },
   ];
 

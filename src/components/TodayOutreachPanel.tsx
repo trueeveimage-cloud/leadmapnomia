@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, Mail, Phone, Play, Search, CalendarOff } from "lucide-react";
@@ -208,7 +209,7 @@ export default function TodayOutreachPanel() {
 
     setState({
       emailsSent: emailsSent.count || 0,
-      emailsCap: gmailTargetForToday(parseInt(cfg.gmail_autosend_daily || "120", 10)),
+      emailsCap: gmailTargetForToday(parseInt(cfg.gmail_autosend_daily || "100", 10)),
       emailsEligible,
       callsConnected: connectedCalls,
       callsCap: parseInt(cfg.ai_calls_daily_connected_cap || cfg.ai_calls_daily || "15", 10),

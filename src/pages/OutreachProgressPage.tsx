@@ -72,9 +72,9 @@ type Settings = {
 
 const DEFAULT_SETTINGS: Settings = {
   gmailDaily: DEFAULT_GMAIL_DAILY,
-  gmailDailySe: 100,
-  gmailDailyUk: 10,
-  gmailDailyEs: 10,
+  gmailDailySe: DEFAULT_GMAIL_DAILY,
+  gmailDailyUk: 0,
+  gmailDailyEs: 0,
   callDaily: DEFAULT_CONNECTED_CALL_DAILY,
   startHour: DEFAULT_OUTREACH_START_HOUR,
   startMinute: DEFAULT_OUTREACH_START_MINUTE,
@@ -129,10 +129,8 @@ function isDemoStatus(status?: string | null) {
   return value.includes('demo') || value.includes('meeting') || value.includes('making_demo');
 }
 
-function gmailTargetForDay(day: Pick<DayStats, 'dateKey'>, settings: Settings) {
-  const normalTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
-  const date = new Date(`${day.dateKey}T00:00:00`);
-  return date.getDay() === 2 ? Math.max(240, normalTarget * 2) : normalTarget;
+function gmailTargetForDay(_day: Pick<DayStats, 'dateKey'>, settings: Settings) {
+  return Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
 }
 
 function formatDate(value: Date) {
@@ -235,13 +233,7 @@ export default function OutreachProgressPage() {
     .slice(0, elapsedDays)
     .reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0) || Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
   const elapsedCallTarget = settings.callDaily * elapsedDays;
-  const monday = days.find(day => day.dateKey === weekDays[0]?.dateKey);
-  const tuesday = days.find(day => day.dateKey === weekDays[1]?.dateKey);
   const normalEmailTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
-  const mondayEmailDeficit = Math.max(0, normalEmailTarget - (monday?.gmailSent || 0));
-  const tuesdayCatchUpBudget = mondayEmailDeficit > 0 ? normalEmailTarget : 0;
-  const tuesdayCatchUpProgress = Math.min(tuesdayCatchUpBudget, tuesday?.gmailSent || 0);
-  const showTuesdayCatchUp = now.getDay() <= 2 && weekDays[1]?.dateKey >= now.toISOString().slice(0, 10);
 
   const load = async () => {
     setLoading(true);
@@ -526,29 +518,9 @@ export default function OutreachProgressPage() {
             <CountryCap code="ES" label="Spain" cap={settings.gmailDailyEs} note="Test batch — Spanish template" />
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Tuesday is the catch-up exception: up to 240 Gmail total, with the send window extended to 18:00. Plus {settings.callDaily} connected AI calls/day (Sweden).
+            Each weekday runs its own niche with a clean {normalEmailTarget} Gmail target and {settings.callDaily} connected AI calls. Missed volume does not roll into the next day.
           </p>
         </section>
-
-        {showTuesdayCatchUp && (
-        <section className="mt-5 rounded-lg border border-border bg-card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <RefreshCw size={17} className="text-primary" />
-            <h2 className="font-semibold text-foreground">Tuesday catch-up</h2>
-            <Badge variant={mondayEmailDeficit > 0 ? 'destructive' : 'secondary'} className="ml-auto">
-              {mondayEmailDeficit > 0 ? `${mondayEmailDeficit} Monday emails missing` : 'No Monday gap'}
-            </Badge>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <MiniStat label="Monday VVS sent" value={`${monday?.gmailSent || 0} / ${normalEmailTarget}`} />
-            <MiniStat label="Tuesday catch-up allocation" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpBudget} max` : 'Not needed'} />
-            <MiniStat label="Tuesday catch-up progress" value={mondayEmailDeficit > 0 ? `${tuesdayCatchUpProgress} / ${tuesdayCatchUpBudget}` : 'Complete'} />
-          </div>
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            If Monday Gmail missed quota, Tuesday can use the first {normalEmailTarget} Gmail slots for Monday's VVS and emergency trades catch-up, then switch to Tuesday's dental batch. Tuesday's special Gmail cap is 240; AI calls stay capped at {settings.callDaily} connected calls.
-          </p>
-        </section>
-        )}
 
         <section className="mt-5 rounded-lg border border-border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
