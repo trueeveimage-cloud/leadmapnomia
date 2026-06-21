@@ -24,10 +24,24 @@ function appendHistory(lead: JsonRecord, item: JsonRecord) {
   return [...history, { ...item, at: new Date().toISOString() }];
 }
 
-function normalizeE164(value?: string | null) {
-  const cleaned = String(value || '').trim().replace(/[\s().-]/g, '');
-  const withPlus = cleaned.startsWith('00') ? `+${cleaned.slice(2)}` : cleaned;
-  return /^\+[1-9]\d{7,14}$/.test(withPlus) ? withPlus : null;
+const COUNTRY_DIAL: Record<string, string> = {
+  SE: '46', SWEDEN: '46', SVERIGE: '46',
+  NO: '47', NORWAY: '47', NORGE: '47',
+  DK: '45', DENMARK: '45', DANMARK: '45',
+  FI: '358', FINLAND: '358',
+  US: '1', USA: '1', GB: '44', UK: '44',
+};
+
+function normalizeE164(value?: string | null, country?: string | null) {
+  let cleaned = String(value || '').trim().replace(/[\s().\-‐-―]/g, '');
+  if (!cleaned) return null;
+  if (cleaned.startsWith('00')) cleaned = `+${cleaned.slice(2)}`;
+  if (!cleaned.startsWith('+')) {
+    const dial = COUNTRY_DIAL[String(country || '').trim().toUpperCase()] || '46';
+    cleaned = cleaned.replace(/^0+/, '');
+    cleaned = `+${dial}${cleaned}`;
+  }
+  return /^\+[1-9]\d{7,14}$/.test(cleaned) ? cleaned : null;
 }
 
 Deno.serve(async (req) => {
