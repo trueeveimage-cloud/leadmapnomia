@@ -25,6 +25,7 @@ import {
 } from '@/lib/partners';
 import {
   BriefcaseBusiness,
+  CalendarDays,
   CheckCircle2,
   ExternalLink,
   Loader2,
@@ -33,6 +34,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Target,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,6 +43,8 @@ const COUNTRIES: Country[] = ['SE', 'NO', 'DK', 'UK', 'ES'];
 const PARTNER_BATCH_LIMIT = 100;
 const PARTNER_BATCH_DELAY_MS = 2000;
 const PARTNER_DAILY_TARGET = 100;
+const PARTNER_SEND_WINDOW = 'Mon-Fri 08:00-18:00';
+const PARTNER_SUPPLY_MIN = 140;
 
 function unique<T>(values: T[]) {
   return Array.from(new Set(values));
@@ -482,6 +486,33 @@ export default function PartnerAcquisitionPage() {
           <Metric icon={<ShieldCheck size={15} />} label="Qualified" value={metrics.qualified} tone="good" />
         </section>
 
+        <section className="mb-5 grid gap-3 lg:grid-cols-4">
+          <RuleCard
+            icon={<CalendarDays size={15} />}
+            label="Weekday sender"
+            value={PARTNER_SEND_WINDOW}
+            note="Partner Gmail runs only on business weekdays unless you manually override it."
+          />
+          <RuleCard
+            icon={<Send size={15} />}
+            label="Partner cap"
+            value={`${PARTNER_DAILY_TARGET}/day`}
+            note="Partner outreach is separate from normal customer Gmail automation."
+          />
+          <RuleCard
+            icon={<Target size={15} />}
+            label="Best-fit search"
+            value="Telecom, PBX, agencies"
+            note="The default search prioritizes partners that already sell calls, websites, IT or automation."
+          />
+          <RuleCard
+            icon={<ShieldCheck size={15} />}
+            label="Supply guard"
+            value={`${PARTNER_SUPPLY_MIN}+ ready`}
+            note="Low partner supply can trigger replenishment without polluting customer leads."
+          />
+        </section>
+
         <section className="mb-5 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-wrap gap-2">
             <button
@@ -607,6 +638,12 @@ export default function PartnerAcquisitionPage() {
                   <div className="rounded-md border border-border bg-card/60 px-3 py-2">Company name, website, phone, city, country and partner type</div>
                   <div className="rounded-md border border-border bg-card/60 px-3 py-2">Emails get scraped after the search and moved into the contact queue</div>
                   <div className="rounded-md border border-border bg-card/60 px-3 py-2">Saved prospects stay separate from customer leads, AI calls and Gmail rotation</div>
+                </div>
+                <div className="mt-4 text-sm font-medium text-foreground">Best launch partner mix</div>
+                <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">1. Telecom and PBX/VoIP firms: strongest fit because missed-call capture extends what they already sell.</div>
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">2. Web and marketing agencies: useful referral channel for service businesses chasing more booked jobs.</div>
+                  <div className="rounded-md border border-border bg-card/60 px-3 py-2">3. IT installers and consultants: smaller but good for local trust and warm introductions.</div>
                 </div>
               </div>
             </div>
@@ -757,8 +794,23 @@ export default function PartnerAcquisitionPage() {
           ) : visible.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <BriefcaseBusiness size={34} className="mx-auto mb-3 text-muted-foreground" />
-              <p className="text-sm font-medium text-foreground">No partner prospects in this view</p>
-              <p className="mt-1 text-xs text-muted-foreground">Run a partner search or change filters.</p>
+              <p className="text-sm font-medium text-foreground">
+                {activeTab === 'search' ? 'No partner prospects saved yet' : 'No partners ready to contact yet'}
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+                {activeTab === 'search'
+                  ? 'The page is connected. Run a partner search to save telecom, PBX, agency, installer and consultant prospects here.'
+                  : 'Search for partners first, then scrape public emails. Contactable partners with fresh emails will appear in this tab.'}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => setActiveTab('search')}
+              >
+                Go to partner search
+              </Button>
             </div>
           ) : (
             <div className="divide-y divide-border">
@@ -851,6 +903,16 @@ function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; labe
     <div className="rounded-md border border-border bg-card px-4 py-3">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">{icon}{label}</div>
       <div className={cn('mt-1 text-2xl font-semibold text-foreground', tone === 'good' && 'text-emerald-400')}>{value}</div>
+    </div>
+  );
+}
+
+function RuleCard({ icon, label, value, note }: { icon: ReactNode; label: string; value: ReactNode; note: string }) {
+  return (
+    <div className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-1.5 text-xs uppercase tracking-[0.14em] text-muted-foreground">{icon}{label}</div>
+      <div className="mt-1 text-base font-semibold text-foreground">{value}</div>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{note}</p>
     </div>
   );
 }

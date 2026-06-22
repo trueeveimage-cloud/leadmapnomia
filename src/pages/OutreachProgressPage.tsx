@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Target,
   TrendingUp,
+  Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -64,6 +65,18 @@ type DayStats = {
   failed: number;
   skipped: number;
   summary: string;
+};
+
+type NicheLeaderboardRow = {
+  day: DayStats;
+  rank: number;
+  contacts: number;
+  totalInterested: number;
+  totalDemo: number;
+  interestRate: number;
+  emailReplyRate: number;
+  emailInterestRate: number;
+  callInterestRate: number;
 };
 
 type Settings = {
@@ -252,6 +265,64 @@ function summarizeDay(day: DayStats, settings: Settings, emailTarget: number) {
   return `${emailLeft} emails and ${callLeft} connected calls left.`;
 }
 
+function percent(value: number, total: number) {
+  return Math.round((value / Math.max(1, total)) * 100);
+}
+
+function buildNicheLeaderboard(days: DayStats[]): NicheLeaderboardRow[] {
+  const rows = days.map(day => {
+    const contacts = day.gmailSent + day.aiConnected;
+    const totalInterested = day.emailInterested + day.callInterested;
+    const totalDemo = day.emailDemo + day.callDemo;
+    return {
+      day,
+      rank: 0,
+      contacts,
+      totalInterested,
+      totalDemo,
+      interestRate: percent(totalInterested, contacts),
+      emailReplyRate: percent(day.emailReplies, day.gmailSent),
+      emailInterestRate: percent(day.emailInterested, day.gmailSent),
+      callInterestRate: percent(day.callInterested, day.aiConnected),
+    };
+  });
+
+  return rows
+    .sort((a, b) => {
+      const rateDiff = b.interestRate - a.interestRate;
+      if (rateDiff) return rateDiff;
+      const interestedDiff = b.totalInterested - a.totalInterested;
+      if (interestedDiff) return interestedDiff;
+      const demoDiff = b.totalDemo - a.totalDemo;
+      if (demoDiff) return demoDiff;
+      return b.contacts - a.contacts;
+    })
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function leaderboardReadiness(days: DayStats[], weekOver: boolean) {
+  const touched = days.filter(day => day.gmailSent > 0 || day.aiConnected > 0 || day.aiStarted > 0).length;
+  const completeEnough = days.length > 0 && touched >= Math.min(5, days.length);
+  return {
+    touched,
+    ready: weekOver || completeEnough,
+  };
+}
+
+function leaderboardConclusion(rows: NicheLeaderboardRow[], ready: boolean) {
+  const leader = rows[0];
+  if (!leader || leader.contacts === 0) {
+    return 'No conclusion yet. The leaderboard needs sent emails or connected calls before it can judge interest.';
+  }
+  if (!ready) {
+    return `${leader.day.nicheLabel} is the current live leader, but the final conclusion waits until all five niches have been contacted or Friday night arrives.`;
+  }
+  if (leader.interestRate === 0 && leader.emailReplyRate === 0) {
+    return 'No niche has produced a clear interest signal yet. Keep the same split, inspect deliverability, and use call outcomes before shifting focus.';
+  }
+  return `${leader.day.nicheLabel} is the strongest niche so far: ${leader.interestRate}% interested across ${leader.contacts} completed touches, with ${leader.totalDemo} demo or meeting signal${leader.totalDemo === 1 ? '' : 's'}. Next week should bias extra follow-up and content toward this niche while keeping a smaller test lane for the others.`;
+}
+
 function conclusion(days: DayStats[], settings: Settings, weekOver: boolean) {
   const totals = days.reduce((acc, day) => ({
     gmailSent: acc.gmailSent + day.gmailSent,
@@ -263,12 +334,14 @@ function conclusion(days: DayStats[], settings: Settings, weekOver: boolean) {
   const emailTarget = days.reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0);
   const callTarget = settings.callDaily * days.length;
   const completion = Math.round(((totals.gmailSent / Math.max(1, emailTarget)) * 0.55 + (totals.aiConnected / Math.max(1, callTarget)) * 0.45) * 100);
-  const best = [...days].sort((a, b) => (b.gmailSent + b.aiConnected * 6) - (a.gmailSent + a.aiConnected * 6))[0];
+  const leaderboard = buildNicheLeaderboard(days);
+  const readiness = leaderboardReadiness(days, weekOver);
+  const best = leaderboard[0]?.day;
 
   if (!weekOver) {
     return {
       title: 'Week still running',
-      text: best ? `${best.nicheLabel} is currently carrying the strongest activity signal. Keep watching replies and connected-call outcomes before shifting focus too hard.` : 'The week has not started yet.',
+      text: best ? leaderboardConclusion(leaderboard, readiness.ready) : 'The week has not started yet.',
       completion,
       totals,
     };
@@ -326,6 +399,12 @@ export default function OutreachProgressPage() {
     .reduce((sum, day) => sum + gmailTargetForDay(day, settings), 0) || Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
   const elapsedCallTarget = settings.callDaily * elapsedDays;
   const normalEmailTarget = Math.max(settings.gmailDaily, settings.gmailDailySe + settings.gmailDailyUk + settings.gmailDailyEs);
+  const nicheLeaderboard = useMemo(() => buildNicheLeaderboard(days), [days]);
+  const leaderboardReady = useMemo(() => leaderboardReadiness(days, weekOver), [days, weekOver]);
+  const leaderboardSummary = useMemo(
+    () => leaderboardConclusion(nicheLeaderboard, leaderboardReady.ready),
+    [leaderboardReady.ready, nicheLeaderboard],
+  );
 
   const load = async () => {
     setLoading(true);
@@ -713,6 +792,67 @@ export default function OutreachProgressPage() {
               );
             })}
           </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-border bg-card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Trophy size={17} className="text-primary" />
+              <h2 className="font-semibold text-foreground">Niche results leaderboard</h2>
+            </div>
+            <Badge variant={leaderboardReady.ready ? 'default' : 'outline'}>
+              {leaderboardReady.ready ? 'Conclusion ready' : `${leaderboardReady.touched}/5 niches contacted`}
+            </Badge>
+          </div>
+          <div className="mt-4 rounded-md border border-border bg-background/40 p-4">
+            <div className="text-sm font-semibold text-foreground">
+              {leaderboardReady.ready ? 'Friday-night conclusion' : 'Live preview before Friday night'}
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{leaderboardSummary}</p>
+          </div>
+          <div className="mt-4 grid gap-3 xl:grid-cols-5">
+            {nicheLeaderboard.map(row => {
+              const isLeader = row.rank === 1 && row.contacts > 0;
+              return (
+                <div
+                  key={row.day.dateKey}
+                  className={cn(
+                    'rounded-lg border p-4',
+                    isLeader
+                      ? 'border-primary/50 bg-primary/10'
+                      : 'border-border bg-background/40',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">#{row.rank}</div>
+                      <div className="mt-1 font-semibold text-foreground">{row.day.nicheLabel}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{row.day.shortLabel} {row.day.dateKey.slice(5)}</div>
+                    </div>
+                    {isLeader && <Badge className="shrink-0">Leading</Badge>}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <MiniStat label="Interest" value={`${row.interestRate}%`} />
+                    <MiniStat label="Touches" value={row.contacts} />
+                    <MiniStat label="Email replies" value={`${row.day.emailReplies} (${row.emailReplyRate}%)`} />
+                    <MiniStat label="Demo signals" value={row.totalDemo} />
+                    <MiniStat label="Email intent" value={`${row.emailInterestRate}%`} />
+                    <MiniStat label="Call intent" value={`${row.callInterestRate}%`} />
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {row.contacts > 0
+                      ? `${row.totalInterested} interested signal${row.totalInterested === 1 ? '' : 's'} from ${row.day.gmailSent} emails and ${row.day.aiConnected} connected calls.`
+                      : 'Waiting for outreach data before this niche can be ranked.'}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {!leaderboardReady.ready && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Final ranking unlocks after Friday {String(settings.endHour).padStart(2, '0')}:{String(settings.endMinute).padStart(2, '0')} or when all five niches have at least one recorded outreach touch.
+            </p>
+          )}
         </section>
 
         <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
