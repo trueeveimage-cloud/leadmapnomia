@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { ManualCallModal } from '@/components/ManualCallModal';
 
 const statusTone: Record<string, string> = {
   Calling: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
@@ -49,6 +50,7 @@ function hasAiCallResult(lead: Lead) {
 }
 
 function normalizedStatus(lead: Lead) {
+  if (String(lead.status || '').toLowerCase() === 'answered' && (!lead.call_status || lead.call_status === 'New')) return 'Answered';
   return String(lead.call_status || 'New').trim();
 }
 
@@ -84,6 +86,7 @@ export default function CallListPage() {
   const [statusFilter, setStatusFilter] = useState<StatusGroup>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [manualCallOpen, setManualCallOpen] = useState(false);
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
 
   const totalWithSummary = leads.filter((lead) => !!lead.call_summary).length;
@@ -195,6 +198,14 @@ export default function CallListPage() {
           <div className="flex items-center gap-2">
             {lastLoadedAt && <span className="hidden text-xs text-muted-foreground sm:inline">Updated {format(lastLoadedAt, 'h:mma')}</span>}
             <Button
+              variant="default"
+              size="sm"
+              onClick={() => setManualCallOpen(true)}
+              className="gap-1.5"
+            >
+              <Phone size={13} /> Call number
+            </Button>
+            <Button
               variant={autoRefresh ? 'default' : 'outline'}
               size="sm"
               onClick={() => setAutoRefresh(value => !value)}
@@ -207,6 +218,12 @@ export default function CallListPage() {
             </Button>
           </div>
         </div>
+
+        <ManualCallModal
+          open={manualCallOpen}
+          onOpenChange={setManualCallOpen}
+          onDone={() => load()}
+        />
 
         <div className="grid gap-3 md:grid-cols-5 mb-4">
           <div className="rounded-md border border-border bg-muted/20 px-4 py-3">
@@ -320,7 +337,7 @@ export default function CallListPage() {
                 </div>
                 <div className="divide-y divide-border">
                   {group.rows.map((lead) => {
-                    const callStatus = lead.call_status || 'New';
+                    const callStatus = normalizedStatus(lead);
                     const tone = statusTone[callStatus] || 'border-border bg-muted text-muted-foreground';
                     return (
                       <div key={lead.id} className="px-4 py-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
