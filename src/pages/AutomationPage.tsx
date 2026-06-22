@@ -349,6 +349,9 @@ function reasonLabel(reason?: string) {
     day_blocked: 'outside selected days',
     disabled: 'automation paused',
     no_candidates: 'no eligible leads',
+    duplicate_business_identity: 'duplicate business skipped',
+    outreach_locked: 'already contacted / locked',
+    matching_lead_already_called: 'already in AI-call lane',
   };
   return reason ? (labels[reason] || reason.replace(/_/g, ' ')) : '';
 }
@@ -358,9 +361,11 @@ function lastRunText(items: AppNotification[], predicate: (item: AppNotification
   if (!item) return 'No history yet';
   const payload = (item.payload || {}) as Record<string, any>;
   const reason = reasonLabel(payload.reason);
-  const count = payload.started ?? payload.sent ?? 0;
+  const isGmail = isGmailAutomationNotification(item);
+  const count = isGmail ? (payload.sent ?? 0) : (payload.started ?? 0);
+  const action = isGmail ? 'sent' : 'started';
   const suffix = reason ? ` - ${reason}` : '';
-  return `${formatShortTime(item.created_at)}: ${count} started/sent${suffix}`;
+  return `${formatShortTime(item.created_at)}: ${count} ${action}${suffix}`;
 }
 
 function latestPayload(items: AppNotification[], predicate: (item: AppNotification) => boolean) {
@@ -411,8 +416,17 @@ export default function AutomationPage() {
   const nextNiche = useMemo(() => nextRotationDay(settings.aiDays), [settings.aiDays]);
   const activeNicheLabel = latestAi.nicheLabel || latestGmail.nicheLabel || todaysNiche?.label || nextNiche?.label || 'Launch niches';
   const activeNicheMode = latestAi.nicheMode || latestGmail.nicheMode || (settings.nicheAdaptiveEnabled ? 'scheduled + adaptive' : 'scheduled');
+  const hasResendSender = useMemo(() => {
+    if (!integrationHealth) return false;
+    const resendReady = !integrationHealth.RESEND_API_KEY?.toUpperCase().includes('MISSING');
+    const fromReady = !integrationHealth.EMAIL_FROM?.toUpperCase().includes('MISSING');
+    return resendReady && fromReady;
+  }, [integrationHealth]);
   const missingGmailSecrets = useMemo(() => {
     if (!integrationHealth) return [];
+    const resendReady = !integrationHealth.RESEND_API_KEY?.toUpperCase().includes('MISSING');
+    const fromReady = !integrationHealth.EMAIL_FROM?.toUpperCase().includes('MISSING');
+    if (resendReady && fromReady) return [];
     return ['LOVABLE_API_KEY', 'GOOGLE_MAIL_API_KEY'].filter(key => integrationHealth[key]?.toUpperCase().includes('MISSING'));
   }, [integrationHealth]);
 
@@ -807,7 +821,7 @@ export default function AutomationPage() {
                   {missingGmailSecrets.length > 0 ? (
                     <span className="text-destructive">blocked</span>
                   ) : integrationHealth ? (
-                    <span className="text-emerald-600">ready</span>
+                    <span className="text-emerald-600">{hasResendSender ? 'Resend ready' : 'ready'}</span>
                   ) : (
                     <span className="text-muted-foreground">checking</span>
                   )}

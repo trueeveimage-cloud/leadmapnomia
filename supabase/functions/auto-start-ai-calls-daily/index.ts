@@ -357,12 +357,10 @@ Deno.serve(async (req) => {
     }
 
     if (!preview) {
-      const activeSince = new Date(Date.now() - activeGuardMinutes * 60 * 1000).toISOString();
       const { data: activeCall } = await supabase
         .from('leads')
-        .select('id, name, retell_call_id')
+        .select('id, name, retell_call_id, last_called_at')
         .eq('call_status', 'Calling')
-        .gte('last_called_at', activeSince)
         .order('last_called_at', { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle();
@@ -377,6 +375,7 @@ Deno.serve(async (req) => {
             reason: 'active_call_in_progress',
             activeLeadId: activeCall.id,
             retell_call_id: activeCall.retell_call_id,
+            lastCalledAt: activeCall.last_called_at,
             dailyCap,
             callsToday,
             remainingToday,
@@ -388,6 +387,7 @@ Deno.serve(async (req) => {
           skipped: true,
           reason: 'active_call_in_progress',
           activeLeadId: activeCall.id,
+          lastCalledAt: activeCall.last_called_at,
           dailyCap,
           callsToday,
           remainingToday,

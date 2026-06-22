@@ -335,8 +335,8 @@ Deno.serve(async (req) => {
     if (!lockResult?.allowed) {
       await notify(supabase, {
         type: 'outreach_skipped',
-        title: 'Gmail skipped: outreach locked',
-        message: `${leadRecord?.name || to} was blocked by the outreach lock.`,
+        title: 'Gmail skipped: duplicate/lock',
+        message: `${leadRecord?.name || to} was skipped because it was already contacted or matched an outreach lock.`,
         payload: { leadId, to, reason: lockResult?.reason || 'outreach_locked' },
       });
       return jsonResp({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }, 409);
@@ -376,10 +376,12 @@ Deno.serve(async (req) => {
     dailyCap = Math.max(baseCap, autoCap, splitCap || 0);
     dailyCap = Math.max(0, Math.min(500, dailyCap));
     delaySeconds = Math.max(0, Math.min(900, parseInt(delaySetting?.value || '') || 0));
-    const { count } = await supabase
+    let sentTodayQuery = supabase
       .from('message_logs').select('id', { count: 'exact', head: true })
       .eq('channel', 'email').eq('direction', 'outbound').eq('status', 'sent')
       .gte('created_at', startOfDay.toISOString());
+    if (leadRecord?.product) sentTodayQuery = sentTodayQuery.eq('product', leadRecord.product);
+    const { count } = await sentTodayQuery;
     sentToday = count ?? 0;
   }
   if ((sentToday ?? 0) >= dailyCap) {
@@ -399,6 +401,7 @@ Deno.serve(async (req) => {
       await supabase.from('message_logs').insert({
         lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'skipped',
+        product: leadRecord?.product || 'nomia',
         error_message: `daily_cap reached (${sentToday}/${dailyCap})`,
       } as any);
     }
@@ -447,6 +450,7 @@ Deno.serve(async (req) => {
         await supabase.from('message_logs').insert({
           lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
           to_number: to, body: `${subject}\n\n${body}`, status: 'failed',
+          product: leadRecord?.product || 'nomia',
           error_message: errorText,
         } as any);
         if (/bounce|invalid|rejected|does not exist|550/i.test(errorText)) {
@@ -488,6 +492,7 @@ Deno.serve(async (req) => {
         lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'sent',
         provider_message_sid: messageId,
+        product: leadRecord?.product || 'nomia',
       } as any);
       await supabase.from('leads').update({
         last_outbound_at: new Date().toISOString(),

@@ -59,6 +59,26 @@ Deno.serve(async (req) => {
   if (!toNumber) return json({ error: 'phone_not_e164', message: 'Lead phone must be in E.164 format, for example +46701234567.' }, 400);
   if (lead.do_not_contact || lead.outreach_opt_out) return json({ error: 'do_not_contact' }, 409);
   if (lead.call_status === 'Calling') return json({ error: 'already_calling' }, 409);
+  if (!parsed.data.manualUnlock) {
+    const { data: activeLead } = await supabase
+      .from('leads')
+      .select('id,name,retell_call_id,last_called_at')
+      .eq('product', lead.product || 'leadmap')
+      .eq('call_status', 'Calling')
+      .neq('id', String(lead.id))
+      .order('last_called_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (activeLead) {
+      return json({
+        error: 'active_call_in_progress',
+        message: `${activeLead.name || 'Another lead'} is still marked Calling.`,
+        activeLeadId: activeLead.id,
+        retell_call_id: activeLead.retell_call_id,
+        lastCalledAt: activeLead.last_called_at,
+      }, 409);
+    }
+  }
   const callAttempts = typeof lead.call_attempts === 'number' ? lead.call_attempts : 0;
   if (callAttempts >= 3 && !parsed.data.manualUnlock) return json({ error: 'call_attempt_limit' }, 409);
 
@@ -105,7 +125,7 @@ Deno.serve(async (req) => {
       country: String(lead.country || ''),
       demo_link: String(LEADMAP_DEMO_LINK || ''),
       my_name: 'Maged',
-      company_name: 'Leadmap AI',
+      company_name: 'Leadmap',
     },
   };
 

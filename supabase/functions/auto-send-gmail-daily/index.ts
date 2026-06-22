@@ -371,6 +371,7 @@ Deno.serve(async (req) => {
       .eq('channel', 'email')
       .eq('direction', 'outbound')
       .eq('status', 'sent')
+      .eq('product', 'leadmap')
       .gte('created_at', startOfDay.toISOString());
 
     const sentByBucket: Record<CountryBucket, number> = { SE: 0, UK: 0, ES: 0, OTHER: 0 };
@@ -406,7 +407,8 @@ Deno.serve(async (req) => {
 
     const { data: candidates, error: candErr } = await supabase
       .from('leads')
-      .select('id, name, owner_name, email, address, city, country, category, niche_label, detected_niche, business_type, website, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, phone, phone_e164')
+      .select('id, name, owner_name, email, address, city, country, product, category, niche_label, detected_niche, business_type, website, potential_score, lead_tier, outreach_stage, outreach_state, outreach_opt_out, do_not_contact, last_called_at, last_contact_method, call_attempts, phone, phone_e164')
+      .eq('product', 'leadmap')
       .not('email', 'is', null)
       .neq('email', '')
       .in('lead_tier', ['S', 'A+', 'A'])
@@ -442,16 +444,21 @@ Deno.serve(async (req) => {
 
     // Bucket by country and pick per-country up to that country's remaining cap.
     const perBucketBudget: Record<CountryBucket, number> = { ...remainingByBucket };
+    const attemptBudget = Math.min(
+      eligible.length,
+      remaining,
+      Math.max(batchSize * 4, batchSize + 30),
+    );
     const batch: any[] = [];
     for (const lead of eligible) {
-      if (batch.length >= batchSize || batch.length >= remaining) break;
+      if (batch.length >= attemptBudget) break;
       const b = detectLeadCountryBucket(lead);
       if (b === 'OTHER') { addReason(rejectionTrace, 'country_not_targeted'); continue; }
       if (perBucketBudget[b] <= 0) { addReason(rejectionTrace, `country_cap_reached_${b}`); continue; }
       perBucketBudget[b]--;
       batch.push(lead);
     }
-    console.log('[gmail-auto] batch', { len: batch.length, rejectionTrace, remainingByBucket, sentByBucket });
+    console.log('[gmail-auto] batch', { len: batch.length, attemptBudget, batchSize, rejectionTrace, remainingByBucket, sentByBucket });
     const diagnostics = batch.length === 0 ? await getEmailEligibilityDiagnostics(supabase) : null;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -556,6 +563,7 @@ Deno.serve(async (req) => {
         rejectionSummary: diagnostics?.rejectionSummary,
         topReasons: diagnostics?.topReasons,
         batchSize,
+        attemptBudget,
         configuredBatchSize,
         supplyMin,
         sameDayBatchSize,
