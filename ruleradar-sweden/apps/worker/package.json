@@ -1,0 +1,23 @@
+{
+  "name": "@ruleradar/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ruleradar/ai": "0.1.0",
+    "@ruleradar/db": "0.1.0",
+    "@ruleradar/monitoring": "0.1.0",
+    "@ruleradar/notifications": "0.1.0",
+    "@ruleradar/shared": "0.1.0",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

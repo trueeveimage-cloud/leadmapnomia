@@ -1,0 +1,51 @@
+{
+  "name": "ruleradar-sweden",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @ruleradar/web",
+    "worker": "npm run dev -w @ruleradar/worker",
+    "build": "npm run build --workspaces",
+    "start": "npm run start -w @ruleradar/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "db:migrate": "tsx packages/db/src/migrate.ts",
+    "db:seed": "tsx packages/db/src/seed.ts",
+    "scan:run": "tsx apps/worker/src/run-once.ts",
+    "backup:logical": "node scripts/logical-backup.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "cheerio": "^1.0.0",
+    "diff": "^5.2.0",
+    "drizzle-orm": "^0.36.4",
+    "next": "^15.0.3",
+    "openai": "^5.0.0",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.13.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "resend": "^4.0.1",
+    "stripe": "^17.3.1",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/diff": "^5.2.3",
+    "@types/node": "^22.10.2",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

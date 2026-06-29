@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ruleradar
+      POSTGRES_PASSWORD: ruleradar
+      POSTGRES_DB: ruleradar
+    ports:
+      - "5432:5432"
+    volumes:
+      - ruleradar_pg:/var/lib/postgresql/data
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web
+    env_file: .env
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    env_file: .env
+    depends_on:
+      - postgres
+volumes:
+  ruleradar_pg:

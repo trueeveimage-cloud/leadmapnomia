@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ruleradar/shared": ["packages/shared/src/index.ts"],
+      "@ruleradar/db": ["packages/db/src/index.ts"],
+      "@ruleradar/monitoring": ["packages/monitoring/src/index.ts"],
+      "@ruleradar/ai": ["packages/ai/src/index.ts"],
+      "@ruleradar/notifications": ["packages/notifications/src/index.ts"]
+    }
+  }
+}

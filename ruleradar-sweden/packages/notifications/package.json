@@ -1,0 +1,20 @@
+{
+  "name": "@ruleradar/notifications",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates": "./src/templates.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ruleradar/shared": "0.1.0",
+    "resend": "^4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
