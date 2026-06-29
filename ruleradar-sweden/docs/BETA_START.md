@@ -4,11 +4,11 @@ This is the operator checklist for moving RuleRadar Sweden from local MVP to pai
 
 ## 1. Accounts You Need Open
 
-- Render for hosting, Postgres, worker, and cron.
-- Stripe for paid trial subscriptions.
-- Resend for alert email sending.
-- OpenAI for structured summaries.
-- Domain/DNS provider for app URL and email DNS records.
+- Render for the free public demo web app.
+- Stripe for paid trial subscriptions later.
+- Resend for alert email sending later.
+- OpenAI for structured summaries later.
+- Domain/DNS provider for app URL and email DNS records later.
 
 Do not paste passwords into the repo. Add API keys as environment variables in Render or local `.env`.
 
@@ -36,36 +36,37 @@ Open:
 - `http://localhost:3000/admin/review`
 - `http://localhost:3000/app`
 
-## 3. Render Setup
+## 3. Render Free Demo Setup
 
-Use the root `render.yaml`. It points every service at the `ruleradar-sweden/` monorepo folder.
+Use the root `render.yaml`. It deploys one free Render web service from the `ruleradar-sweden/` monorepo folder.
 
-Set these variables:
+The free demo intentionally does not create paid Postgres, worker, or cron services. Without `DATABASE_URL`, the app serves fixture data so the UI can be reviewed without infrastructure cost.
 
-- `DATABASE_URL`
-- `OPENAI_MODEL`
-- `ALERT_FROM_EMAIL`
-- `SYSTEM_CRON_SECRET`
-- `SESSION_SECRET`
-
-The root Blueprint fills the demo-safe defaults for those. After the demo is live, add these when you are ready for real summaries, email, and paid checkout:
+After the demo is live, add these when you are ready for real summaries, email, and paid checkout:
 
 - `APP_URL`
+- `DATABASE_URL`
+- `SYSTEM_CRON_SECRET`
+- `SESSION_SECRET`
 - `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 - `RESEND_API_KEY`
 - `ADMIN_ALERT_EMAIL`
+- `ALERT_FROM_EMAIL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_SOLO_PRICE_ID`
 - `STRIPE_TEAM_PRICE_ID`
 - `STRIPE_MULTI_OFFICE_PRICE_ID`
 
-After first deploy:
+When you upgrade to the paid beta infrastructure, add managed Postgres, run:
 
 ```bash
 npm run db:migrate
 npm run db:seed
 ```
+
+Then extend the Blueprint with managed Postgres, the background worker, and the scan cron when you intentionally move to paid beta infrastructure.
 
 ## 4. Paid Beta Setup
 
