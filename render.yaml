@@ -5,8 +5,7 @@ services:
     plan: free
     branch: codex/ruleradar-demo
     rootDir: ruleradar-sweden
-    dockerContext: ruleradar-sweden
-    dockerfilePath: ruleradar-sweden/infra/docker/Dockerfile.web
+    dockerfilePath: ./infra/docker/Dockerfile.web
     envVars:
       - key: NODE_ENV
         value: production
