@@ -2,13 +2,18 @@ databases:
   - name: ruleradar-postgres
     plan: basic-1gb
 
-envVarGroups:
-  - name: ruleradar-shared
+services:
+  - type: web
+    name: ruleradar-web
+    runtime: docker
+    plan: starter
+    branch: codex/ruleradar-demo
+    dockerfilePath: ./infra/docker/Dockerfile.web
     envVars:
       - key: NODE_ENV
         value: production
       - key: APP_URL
-        sync: false
+        value: https://ruleradar-web.onrender.com
       - key: DATABASE_URL
         fromDatabase:
           name: ruleradar-postgres
@@ -21,32 +26,50 @@ envVarGroups:
         value: gpt-5
       - key: ALERT_FROM_EMAIL
         value: RuleRadar Sweden <alerts@example.com>
-
-services:
-  - type: web
-    name: ruleradar-web
-    runtime: docker
-    plan: starter
-    dockerfilePath: ./infra/docker/Dockerfile.web
-    envVarGroups:
-      - ruleradar-shared
     healthCheckPath: /api/health
     preDeployCommand: npm run db:migrate
+    autoDeployTrigger: off
 
   - type: worker
     name: ruleradar-worker
     runtime: docker
     plan: starter
+    branch: codex/ruleradar-demo
     dockerfilePath: ./infra/docker/Dockerfile.worker
-    envVarGroups:
-      - ruleradar-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        value: https://ruleradar-web.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ruleradar-postgres
+          property: connectionString
+      - key: OPENAI_MODEL
+        value: gpt-5
+      - key: ALERT_FROM_EMAIL
+        value: RuleRadar Sweden <alerts@example.com>
+    autoDeployTrigger: off
 
   - type: cron
     name: ruleradar-scan-cron
     runtime: docker
     plan: starter
+    branch: codex/ruleradar-demo
     dockerfilePath: ./infra/docker/Dockerfile.worker
     schedule: "*/30 * * * *"
-    envVarGroups:
-      - ruleradar-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        value: https://ruleradar-web.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ruleradar-postgres
+          property: connectionString
+      - key: OPENAI_MODEL
+        value: gpt-5
+      - key: ALERT_FROM_EMAIL
+        value: RuleRadar Sweden <alerts@example.com>
     dockerCommand: npm run scan:run
+    autoDeployTrigger: off
