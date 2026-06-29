@@ -42,20 +42,23 @@ Use the root `render.yaml`. It points every service at the `ruleradar-sweden/` m
 
 Set these variables:
 
-- `APP_URL`
 - `DATABASE_URL`
-- `OPENAI_API_KEY`
 - `OPENAI_MODEL`
-- `RESEND_API_KEY`
 - `ALERT_FROM_EMAIL`
+- `SYSTEM_CRON_SECRET`
+- `SESSION_SECRET`
+
+The root Blueprint fills the demo-safe defaults for those. After the demo is live, add these when you are ready for real summaries, email, and paid checkout:
+
+- `APP_URL`
+- `OPENAI_API_KEY`
+- `RESEND_API_KEY`
 - `ADMIN_ALERT_EMAIL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_SOLO_PRICE_ID`
 - `STRIPE_TEAM_PRICE_ID`
 - `STRIPE_MULTI_OFFICE_PRICE_ID`
-- `SYSTEM_CRON_SECRET`
-- `SESSION_SECRET`
 
 After first deploy:
 
