@@ -9,15 +9,15 @@ const faqs = [
 
 export default function FaqPage() {
   return (
-    <main className="page">
-      <section className="page-hero compact-hero">
+    <main className="premium-page inner-page">
+      <section className="premium-page-hero reveal">
         <div>
-          <div className="eyebrow">Questions</div>
-          <h1>FAQ for the demo and paid beta.</h1>
-          <p className="lead">The key boundary: the public site shows the product workflow with sample data. The paid beta adds live monitoring, persistence, scheduled scans, and email delivery.</p>
+          <div className="kicker">Questions</div>
+          <h1>FAQ for the demo, beta, and safety boundaries.</h1>
+          <p className="hero-lead">The public site shows the product workflow with sample data. The paid beta adds live monitoring, persistence, scheduled scans, and email delivery.</p>
         </div>
       </section>
-      <div className="faq-list">
+      <div className="faq-list stagger">
         {faqs.map(([question, answer]) => (
           <article className="faq-item" key={question}>
             <h2>{question}</h2>

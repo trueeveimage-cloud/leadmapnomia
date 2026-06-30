@@ -26,21 +26,21 @@ const plans = [
 
 export default function PricingPage() {
   return (
-    <main className="page">
-      <section className="page-hero compact-hero">
+    <main className="premium-page inner-page">
+      <section className="premium-page-hero reveal">
         <div>
-          <div className="eyebrow">Beta pricing</div>
-          <h1>Start small. Upgrade only when the alerts prove useful.</h1>
-          <p className="lead">Launch pricing for Swedish accounting and payroll firms. The current public demo is free to inspect; paid plans are for the database-backed beta with real monitoring and email delivery.</p>
+          <div className="kicker">Beta pricing</div>
+          <h1>Upgrade only when the alert workflow proves useful.</h1>
+          <p className="hero-lead">The current public demo is free to inspect. Paid plans are for the database-backed beta with real monitoring, scheduled scanning, and email delivery.</p>
         </div>
-        <div className="summary-panel">
+        <div className="summary-panel premium-glass">
           <strong>14 days</strong>
           <span>trial target</span>
           <p>Use the trial to measure whether alerts reduce manual checking and missed source changes.</p>
         </div>
       </section>
 
-      <div className="pricing-grid">
+      <div className="premium-pricing-grid stagger">
         {plans.map((plan) => (
           <article className={`price-card ${plan.id === "team" ? "featured-plan" : ""}`} key={plan.id}>
             {plan.id === "team" ? <div className="plan-label">Suggested beta default</div> : null}
@@ -51,19 +51,17 @@ export default function PricingPage() {
             <ul className="feature-list">
               {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
             </ul>
-            <form action={`/api/billing/checkout?plan=${plan.id}`} method="post">
-              <button className="button" type="submit">Start trial</button>
-            </form>
+            <Link className="button premium" href="/app">Inspect demo first</Link>
           </article>
         ))}
       </div>
 
-      <section className="note-band">
+      <section className="note-band reveal">
         <div>
           <h2>Keep SMS and paid infrastructure off until the beta earns it.</h2>
           <p>Alerts are informational and include official source links. RuleRadar is not legal advice software. The free demo uses fixture data; live monitoring requires paid hosting, a database, source scanning, and email configuration.</p>
         </div>
-        <Link className="button secondary" href="/faq">Read FAQ</Link>
+        <Link className="button ghost dark" href="/faq">Read FAQ</Link>
       </section>
     </main>
   );
