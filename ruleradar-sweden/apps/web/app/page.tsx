@@ -20,9 +20,29 @@ const buyerPoints = [
 
 const productSignals = ["official source", "diff excerpt", "review state", "recommended action"];
 
+const fallbackFeatured = {
+  id: "empty-state-featured",
+  source_name: "RuleRadar Sweden",
+  source_url: "https://ruleradar-web.onrender.com",
+  change_type: "monitoring_ready",
+  topics: ["official_source_monitoring"],
+  severity: "low" as const,
+  confidence: 1,
+  summary_plain_english: "Live monitoring is connected. New source changes will appear here after future scans detect a difference.",
+  who_is_affected: "Payroll and accounting teams monitoring Swedish official guidance.",
+  recommended_action: "Run scheduled scans and review any detected changes before sending customer alerts.",
+  needs_human_review: false,
+  evidence_excerpts: ["The database is ready and baseline snapshots can be compared against future official-source updates."],
+  title: "Monitoring ready",
+  agency: "RuleRadar Sweden",
+  status: "ready",
+  createdAt: new Date().toISOString(),
+  diffExcerpt: "Waiting for the next detected official-source change."
+};
+
 export default async function HomePage() {
   const [alerts, sources] = await Promise.all([listAlerts(3), listSources()]);
-  const featured = alerts[0]!;
+  const featured = alerts[0] ?? fallbackFeatured;
 
   return (
     <main className="premium-page">
