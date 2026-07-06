@@ -2,6 +2,7 @@ import { getPool } from "./client";
 import { sampleSummaries, seedSources, severityRank } from "./fixtures";
 import { idempotencyKey, loadConfig, type AlertStatus, type ContentSnapshot, type DetectedChangeDraft, type FetchStrategy, type MonitoredSource, type Severity, type SummaryResult } from "@ruleradar/shared";
 import { renderAlertEmail } from "@ruleradar/notifications/templates";
+import { sendEmail } from "@ruleradar/notifications";
 
 export interface AlertView extends SummaryResult {
   id: string;
@@ -24,6 +25,8 @@ export interface AdminMetrics {
   reviewQueue: number;
   organizations: number;
   sentAlerts: number;
+  queuedDeliveries: number;
+  failedDeliveries: number;
 }
 
 export interface NotificationRecipientView {
@@ -33,6 +36,13 @@ export interface NotificationRecipientView {
   immediate: boolean;
   dailyDigest: boolean;
   topics: string[];
+}
+
+export interface DeliveryRunResult {
+  attempted: number;
+  sent: number;
+  skipped: number;
+  failed: number;
 }
 
 export function databaseConfigured() {
@@ -124,7 +134,9 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
       sources: seedSources.length,
       reviewQueue: fixtureAlerts().filter((alert) => alert.needs_human_review).length,
       organizations: 1,
-      sentAlerts: fixtureAlerts().filter((alert) => alert.status === "sent").length
+      sentAlerts: fixtureAlerts().filter((alert) => alert.status === "sent").length,
+      queuedDeliveries: fixtureAlerts().filter((alert) => alert.status === "approved").length,
+      failedDeliveries: 0
     };
   }
   const pool = getPool();
@@ -133,13 +145,17 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
       (select count(*)::int from sources) as sources,
       (select count(*)::int from detected_changes where needs_human_review = true and status in ('draft', 'review_required')) as review_queue,
       (select count(*)::int from organizations) as organizations,
-      (select count(*)::int from alerts where status = 'sent') as sent_alerts
+      (select count(*)::int from alerts where status = 'sent') as sent_alerts,
+      (select count(*)::int from alert_deliveries where status in ('queued', 'queued_missing_resend_key')) as queued_deliveries,
+      (select count(*)::int from alert_deliveries where status = 'failed') as failed_deliveries
   `);
   return {
     sources: rows[0]?.sources || 0,
     reviewQueue: rows[0]?.review_queue || 0,
     organizations: rows[0]?.organizations || 0,
-    sentAlerts: rows[0]?.sent_alerts || 0
+    sentAlerts: rows[0]?.sent_alerts || 0,
+    queuedDeliveries: rows[0]?.queued_deliveries || 0,
+    failedDeliveries: rows[0]?.failed_deliveries || 0
   };
 }
 
@@ -380,6 +396,77 @@ export async function reviewChange(changeId: string, decision: "approved" | "sup
   return { mode: "database" as const, changeId, decision };
 }
 
+export async function deliverApprovedAlerts(limit = Number(process.env.ALERT_DELIVERY_LIMIT || 25)): Promise<DeliveryRunResult> {
+  const result: DeliveryRunResult = { attempted: 0, sent: 0, skipped: 0, failed: 0 };
+  if (!databaseConfigured()) return result;
+
+  const config = loadConfig();
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      ad.id::text as delivery_id,
+      ad.recipient_email,
+      a.id::text as alert_id,
+      a.subject,
+      a.html_body,
+      a.text_body
+    from alert_deliveries ad
+    join alerts a on a.id = ad.alert_id
+    join detected_changes dc on dc.id = a.change_id
+    where a.status = 'approved'
+      and dc.status = 'approved'
+      and ad.status in ('queued', 'queued_missing_resend_key', 'failed')
+    order by ad.created_at asc
+    limit $1
+  `, [limit]);
+
+  for (const row of rows) {
+    result.attempted += 1;
+    try {
+      if (!config.RESEND_API_KEY) {
+        await pool.query(`
+          update alert_deliveries
+          set status = 'queued_missing_resend_key', error = 'RESEND_API_KEY is not configured.'
+          where id = $1
+        `, [row.delivery_id]);
+        result.skipped += 1;
+        continue;
+      }
+
+      const sent = await sendEmail({
+        to: row.recipient_email,
+        subject: row.subject,
+        html: row.html_body,
+        text: row.text_body
+      });
+      await pool.query(`
+        update alert_deliveries
+        set status = 'sent', provider_message_id = $2, error = null
+        where id = $1
+      `, [row.delivery_id, sent.id]);
+      await pool.query(`
+        update alerts
+        set status = 'sent', sent_at = coalesce(sent_at, now())
+        where id = $1
+          and not exists (
+            select 1 from alert_deliveries
+            where alert_id = $1 and status <> 'sent'
+          )
+      `, [row.alert_id]);
+      result.sent += 1;
+    } catch (error) {
+      await pool.query(`
+        update alert_deliveries
+        set status = 'failed', error = $2
+        where id = $1
+      `, [row.delivery_id, error instanceof Error ? error.message : String(error)]);
+      result.failed += 1;
+    }
+  }
+
+  return result;
+}
+
 async function createAlertDrafts(changeId: string) {
   const pool = getPool();
   const alert = await getAlertById(changeId);
@@ -395,11 +482,16 @@ async function createAlertDrafts(changeId: string) {
     const { rows } = await pool.query(`
       insert into alerts (organization_id, change_id, status, subject, html_body, text_body)
       values ($1, $2, 'approved', $3, $4, $5)
+      on conflict (organization_id, change_id) do update set
+        subject = excluded.subject,
+        html_body = excluded.html_body,
+        text_body = excluded.text_body
       returning id::text
     `, [recipient.organizationId, changeId, email.subject, email.html, email.text]);
     await pool.query(`
       insert into alert_deliveries (alert_id, recipient_email, provider, status)
-      values ($1, $2, 'resend', 'queued_for_manual_beta_send')
+      values ($1, $2, 'resend', 'queued')
+      on conflict (alert_id, recipient_email) do nothing
     `, [rows[0].id, recipient.recipientEmail]);
   }
 }

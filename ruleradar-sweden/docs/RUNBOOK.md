@@ -16,6 +16,23 @@
 4. Tighten source extraction or severity rules.
 5. Re-run scans and resume alerting only after review.
 
+## Cron Scan
+
+Use the protected endpoint from Render Cron or a one-off terminal:
+
+```bash
+curl -X POST https://YOUR_APP_URL/api/cron/scan \
+  -H "Authorization: Bearer $SYSTEM_CRON_SECRET"
+```
+
+Expected result:
+
+- Baseline run stores snapshots without customer alerts.
+- Changed sources create detected changes.
+- Review-required changes wait in `/admin/review`.
+- Approved changes create queued deliveries.
+- Missing Resend keys leave deliveries queued instead of marking them sent.
+
 ## Low Confidence AI Summary
 
 1. Keep status as review required.

@@ -29,6 +29,13 @@ Then run a worker pass:
 npm run scan:run
 ```
 
+Or run the same pipeline through the protected web cron endpoint:
+
+```bash
+curl -X POST http://localhost:3000/api/cron/scan \
+  -H "Authorization: Bearer $SYSTEM_CRON_SECRET"
+```
+
 Open:
 
 - `http://localhost:3000`
@@ -66,7 +73,18 @@ npm run db:migrate
 npm run db:seed
 ```
 
-Then extend the Blueprint with managed Postgres, the background worker, and the scan cron when you intentionally move to paid beta infrastructure.
+Then extend the Blueprint with managed Postgres, the background worker, and the scan cron when you intentionally move to paid beta infrastructure. The cron should call:
+
+```text
+POST /api/cron/scan
+Authorization: Bearer YOUR_SYSTEM_CRON_SECRET
+```
+
+Optional query parameters:
+
+- `sourceLimit=10`
+- `deliveryLimit=25`
+- `deliverApproved=false` for scan-only runs
 
 ## 4. Paid Beta Setup
 
@@ -99,6 +117,7 @@ In Resend:
 Production alert rule:
 
 - No customer alert sends until a change is stored, summarized, reviewed when required, and approved.
+- If `RESEND_API_KEY` is missing, approved alert deliveries stay queued as `queued_missing_resend_key`; they are not marked sent.
 
 ## 6. First Outreach Batch
 
@@ -122,4 +141,5 @@ After 2 weeks, focus on whichever segment books more demos and asks fewer "why w
 - Keep SMS off unless a customer specifically pays for critical alerts.
 - Treat OpenAI summaries as drafts until reviewed for high-impact topics.
 - Every alert must include official source URL and "not legal advice" language.
+- Approval attempts delivery immediately, but only for approved alerts and only when Resend is configured.
 - Do not publish, push, deploy, or email real customers without explicit owner approval.

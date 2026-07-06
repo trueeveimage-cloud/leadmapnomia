@@ -30,10 +30,10 @@ export default async function DashboardPage() {
           <tbody>
             {alerts.map((summary) => (
               <tr key={summary.id}>
-                <td>{summary.source_name}</td>
-                <td><Link href={`/app/alerts/${summary.id}`}>{summary.summary_plain_english}</Link></td>
-                <td><SeverityBadge severity={summary.severity} /></td>
-                <td>{summary.status}<br/><span className="muted">{summary.deliveryStatus}</span></td>
+                <td data-label="Source">{summary.source_name}</td>
+                <td data-label="Summary"><Link href={`/app/alerts/${summary.id}`}>{summary.summary_plain_english}</Link></td>
+                <td data-label="Severity"><SeverityBadge severity={summary.severity} /></td>
+                <td data-label="Status">{summary.status}<br/><span className="muted">{summary.deliveryStatus}</span></td>
               </tr>
             ))}
           </tbody>

@@ -14,15 +14,17 @@ RuleRadar Sweden is split into a Next.js web service, a background worker, share
 
 ## Flow
 
-1. Cron or worker selects enabled sources.
+1. Cron endpoint or worker selects enabled sources.
 2. Fetcher retrieves HTML or PDF content using a RuleRadar user agent.
 3. Normalizer removes page noise, canonicalizes text, and hashes content.
 4. Diff engine compares the latest snapshot with the prior snapshot.
 5. Severity classifier marks high-impact topics and large changes for review.
 6. OpenAI summarizes the diff using strict schema output and `store: false`.
-7. Review-required changes wait for admin approval; low-risk approved changes can render alerts.
-8. Email delivery is logged with immutable alert history.
+7. Review-required changes wait for admin approval; low-risk approved changes create alert drafts.
+8. Approved alerts are delivered through Resend and every delivery attempt is recorded.
 
 ## Safety
 
 Every customer-facing alert must include the official source URL, diff excerpt, and informational-only footer. High-impact topics include tax rates, contribution rates, filing deadlines, form-field layout changes, employer reporting workflows, low-confidence summaries, new sources, and unusually large changes.
+
+The `/api/cron/scan` endpoint requires `SYSTEM_CRON_SECRET`. It can scan sources and deliver queued approved alerts, but it cannot send unapproved or review-required changes.

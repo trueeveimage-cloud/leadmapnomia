@@ -15,6 +15,8 @@ export default async function AdminPage() {
         <div className="card"><div className="metric">{metrics.reviewQueue}</div><p className="muted">review queue</p></div>
         <div className="card"><div className="metric">{metrics.organizations}</div><p className="muted">beta workspaces</p></div>
         <div className="card"><div className="metric">{metrics.sentAlerts}</div><p className="muted">sent alerts</p></div>
+        <div className="card"><div className="metric">{metrics.queuedDeliveries}</div><p className="muted">queued emails</p></div>
+        <div className="card"><div className="metric">{metrics.failedDeliveries}</div><p className="muted">failed emails</p></div>
       </div>
     </main>
   );

@@ -51,7 +51,9 @@ export default function PricingPage() {
             <ul className="feature-list">
               {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
             </ul>
-            <Link className="button premium" href="/app">Inspect demo first</Link>
+            <form action={`/api/billing/checkout?plan=${plan.id}`} method="post">
+              <button className="button premium" type="submit">Start 14-day trial</button>
+            </form>
           </article>
         ))}
       </div>

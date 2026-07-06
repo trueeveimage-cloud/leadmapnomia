@@ -29,6 +29,19 @@ Run a one-off scan:
 npm run scan:run
 ```
 
+Run the web cron endpoint once the app has `SYSTEM_CRON_SECRET`:
+
+```bash
+curl -X POST http://localhost:3000/api/cron/scan \
+  -H "Authorization: Bearer $SYSTEM_CRON_SECRET"
+```
+
+The production loop is:
+
+```text
+official source -> stored snapshot -> diff -> AI summary -> review if needed -> approved alert -> Resend delivery
+```
+
 For the paid beta setup sequence, use `docs/BETA_START.md`.
 
 Run verification:
@@ -39,4 +52,4 @@ npm test
 npm run build
 ```
 
-The app intentionally falls back to seeded fixture data when `DATABASE_URL` is absent so UI and tests remain inspectable without live infrastructure. Production paths require a real Postgres database, Stripe secrets, Resend key, and OpenAI key.
+The app intentionally falls back to seeded fixture data when `DATABASE_URL` is absent so UI and tests remain inspectable without live infrastructure. Production paths require a real Postgres database, Stripe secrets, Resend key, OpenAI key, and a protected cron or worker schedule.

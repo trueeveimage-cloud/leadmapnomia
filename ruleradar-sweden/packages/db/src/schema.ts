@@ -141,7 +141,8 @@ export const alerts = pgTable("alerts", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 }, (table) => ({
-  alertOrgIdx: index("alerts_org_idx").on(table.organizationId)
+  alertOrgIdx: index("alerts_org_idx").on(table.organizationId),
+  alertOrgChangeUnique: uniqueIndex("alerts_org_change_unique").on(table.organizationId, table.changeId)
 }));
 
 export const alertDeliveries = pgTable("alert_deliveries", {
@@ -153,7 +154,9 @@ export const alertDeliveries = pgTable("alert_deliveries", {
   status: text("status").notNull(),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
-});
+}, (table) => ({
+  alertDeliveryRecipientUnique: uniqueIndex("alert_deliveries_alert_recipient_unique").on(table.alertId, table.recipientEmail)
+}));
 
 export const notificationSettings = pgTable("notification_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
