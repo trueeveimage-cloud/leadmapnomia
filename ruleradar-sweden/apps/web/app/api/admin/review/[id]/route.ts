@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deliverApprovedAlerts, reviewChange } from "@ruleradar/db";
+import { requireApiAdmin } from "../../../../auth";
+import { isSameOrigin } from "../../../../request-guard";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  const auth = await requireApiAdmin();
+  if (auth.response) return auth.response;
+
   const { id } = await params;
   const form = await request.formData();
   const decision = String(form.get("decision") || "");

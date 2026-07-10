@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fetchSourceSnapshot } from "@ruleradar/monitoring";
+import { requireApiAdmin } from "../../../../auth";
+import { isSameOrigin } from "../../../../request-guard";
 
 const inputSchema = z.object({
   name: z.string().min(1),
@@ -11,6 +13,10 @@ const inputSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  const auth = await requireApiAdmin();
+  if (auth.response) return auth.response;
+
   const input = inputSchema.parse(await request.json());
   const snapshot = await fetchSourceSnapshot({
     id: "test-source",

@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSource } from "@ruleradar/db";
 import type { FetchStrategy } from "@ruleradar/shared";
+import { requireApiAdmin } from "../../../auth";
+import { isSameOrigin } from "../../../request-guard";
 
 const strategies = new Set(["html", "news_index", "pdf", "document_page", "browser_fallback"]);
 
 export async function POST(request: NextRequest) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  const auth = await requireApiAdmin();
+  if (auth.response) return auth.response;
+
   const form = await request.formData();
   const name = String(form.get("name") || "").trim();
   const agency = String(form.get("agency") || "").trim();

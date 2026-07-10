@@ -38,6 +38,34 @@ export interface NotificationRecipientView {
   topics: string[];
 }
 
+export interface UserAuthProfile {
+  userId: string;
+  email: string;
+  name?: string | null;
+  passwordHash?: string | null;
+  isPlatformAdmin: boolean;
+  organizationId?: string | null;
+  role?: string | null;
+}
+
+export interface SubscriptionView {
+  organizationId: string;
+  planId: string;
+  status: string;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  currentPeriodEnd?: string | null;
+}
+
+export interface SubscriptionSyncInput {
+  organizationId?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  planId?: string | null;
+  status: string;
+  currentPeriodEnd?: Date | null;
+}
+
 export interface DeliveryRunResult {
   attempted: number;
   sent: number;
@@ -45,8 +73,260 @@ export interface DeliveryRunResult {
   failed: number;
 }
 
+export interface ContactRequestInput {
+  name: string;
+  email: string;
+  company: string;
+  teamSize?: string;
+  message: string;
+  source?: string;
+}
+
+export interface OrganizationMemberView {
+  membershipId: string;
+  userId: string;
+  name?: string | null;
+  email: string;
+  role: string;
+  joinedAt: string;
+}
+
+export interface OrganizationInviteView {
+  id: string;
+  email: string;
+  role: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ConversionEventInput {
+  anonymousId: string;
+  eventName: string;
+  path: string;
+  referrerHost?: string;
+  utm?: Record<string, string>;
+  metadata?: Record<string, string>;
+}
+
 export function databaseConfigured() {
   return Boolean(loadConfig().DATABASE_URL);
+}
+
+export async function createContactRequest(input: ContactRequestInput) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    insert into contact_requests (name, email, company, team_size, message, source)
+    values ($1, $2, $3, $4, $5, $6)
+    returning id::text
+  `, [input.name, input.email.toLowerCase(), input.company, input.teamSize || null, input.message, input.source || "website"]);
+  return { mode: "database" as const, requestId: rows[0].id as string };
+}
+
+export async function createConversionEvent(input: ConversionEventInput) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  await pool.query(`
+    insert into conversion_events (anonymous_id, event_name, path, referrer_host, utm, metadata)
+    values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+  `, [input.anonymousId, input.eventName, input.path, input.referrerHost || null, JSON.stringify(input.utm || {}), JSON.stringify(input.metadata || {})]);
+  return { mode: "database" as const };
+}
+
+export async function getConversionMetrics() {
+  if (!databaseConfigured()) return { visitors: 0, pricingViews: 0, trialClicks: 0, contactRequests: 0 };
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      count(distinct anonymous_id) filter (where event_name = 'page_view')::int as visitors,
+      count(*) filter (where event_name = 'page_view' and path = '/pricing')::int as pricing_views,
+      count(*) filter (where event_name = 'trial_click')::int as trial_clicks,
+      (select count(*)::int from contact_requests where created_at >= now() - interval '30 days') as contact_requests
+    from conversion_events
+    where created_at >= now() - interval '30 days'
+  `);
+  const row = rows[0] || {};
+  return { visitors: row.visitors || 0, pricingViews: row.pricing_views || 0, trialClicks: row.trial_clicks || 0, contactRequests: row.contact_requests || 0 };
+}
+
+export async function claimStripeWebhookEvent(eventId: string, eventType: string) {
+  if (!databaseConfigured()) return true;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    insert into stripe_webhook_events (event_id, event_type, status)
+    values ($1, $2, 'processing')
+    on conflict (event_id) do update set
+      event_type = excluded.event_type,
+      status = 'processing',
+      error = null,
+      updated_at = now()
+    where stripe_webhook_events.status = 'failed'
+       or (stripe_webhook_events.status = 'processing' and stripe_webhook_events.updated_at < now() - interval '5 minutes')
+    returning event_id
+  `, [eventId, eventType]);
+  return rows.length > 0;
+}
+
+export async function completeStripeWebhookEvent(eventId: string, status: "processed" | "failed", result?: unknown, error?: string) {
+  if (!databaseConfigured()) return;
+  const pool = getPool();
+  await pool.query(`update stripe_webhook_events set status = $2, result = $3::jsonb, error = $4, updated_at = now() where event_id = $1`, [eventId, status, JSON.stringify(result ?? null), error || null]);
+}
+
+export async function getOrganizationBillingContact(organizationId?: string | null) {
+  if (!databaseConfigured() || !organizationId) return null;
+  const pool = getPool();
+  const { rows } = await pool.query(`select billing_email, name from organizations where id = $1 limit 1`, [organizationId]);
+  return rows[0] ? { email: rows[0].billing_email as string | null, organizationName: rows[0].name as string } : null;
+}
+
+export async function createPasswordResetToken(email: string, tokenHash: string, expiresAt: Date) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  const { rows: users } = await pool.query(`select id::text, email, name from users where lower(email) = lower($1) limit 1`, [email]);
+  const user = users[0];
+  if (!user) return { mode: "missing" as const };
+  await pool.query(`update password_reset_tokens set used_at = now() where user_id = $1 and used_at is null`, [user.id]);
+  await pool.query(`insert into password_reset_tokens (user_id, token_hash, expires_at) values ($1, $2, $3)`, [user.id, tokenHash, expiresAt]);
+  return { mode: "created" as const, email: user.email as string, name: user.name as string | null };
+}
+
+export async function consumePasswordResetToken(tokenHash: string, passwordHash: string) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query(`
+      select id::text, user_id::text
+      from password_reset_tokens
+      where token_hash = $1 and used_at is null and expires_at > now()
+      for update
+    `, [tokenHash]);
+    const token = rows[0];
+    if (!token) {
+      await client.query("rollback");
+      return { mode: "invalid" as const };
+    }
+    await client.query(`update users set password_hash = $2, updated_at = now() where id = $1`, [token.user_id, passwordHash]);
+    await client.query(`update password_reset_tokens set used_at = now() where id = $1`, [token.id]);
+    await client.query("commit");
+    return { mode: "updated" as const, userId: token.user_id as string };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listOrganizationMembers(organizationId?: string | null): Promise<OrganizationMemberView[]> {
+  if (!databaseConfigured() || !organizationId) return [];
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select om.id::text as membership_id, u.id::text as user_id, u.name, u.email, om.role, om.created_at
+    from organization_members om
+    join users u on u.id = om.user_id
+    where om.organization_id = $1
+    order by case om.role when 'owner' then 1 when 'admin' then 2 else 3 end, om.created_at asc
+  `, [organizationId]);
+  return rows.map((row) => ({ membershipId: row.membership_id, userId: row.user_id, name: row.name, email: row.email, role: row.role, joinedAt: new Date(row.created_at).toISOString() }));
+}
+
+export async function listOrganizationInvites(organizationId?: string | null): Promise<OrganizationInviteView[]> {
+  if (!databaseConfigured() || !organizationId) return [];
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select id::text, email, role, expires_at, created_at
+    from organization_invites
+    where organization_id = $1 and accepted_at is null and expires_at > now()
+    order by created_at desc
+  `, [organizationId]);
+  return rows.map((row) => ({ id: row.id, email: row.email, role: row.role, expiresAt: new Date(row.expires_at).toISOString(), createdAt: new Date(row.created_at).toISOString() }));
+}
+
+export async function getOrganizationSeatUsage(organizationId?: string | null) {
+  if (!databaseConfigured() || !organizationId) return { includedSeats: 1, members: 0, pendingInvites: 0 };
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      coalesce(p.included_seats, 1)::int as included_seats,
+      (select count(*)::int from organization_members where organization_id = $1) as members,
+      (select count(*)::int from organization_invites where organization_id = $1 and accepted_at is null and expires_at > now()) as pending_invites
+    from subscriptions s
+    join plans p on p.id = s.plan_id
+    where s.organization_id = $1
+    limit 1
+  `, [organizationId]);
+  return rows[0] ? { includedSeats: rows[0].included_seats as number, members: rows[0].members as number, pendingInvites: rows[0].pending_invites as number } : { includedSeats: 1, members: 0, pendingInvites: 0 };
+}
+
+export async function createOrganizationInvite(input: { organizationId: string; email: string; role?: "member" | "admin"; tokenHash: string; invitedByUserId: string; expiresAt: Date }) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  await pool.query(`delete from organization_invites where organization_id = $1 and lower(email) = lower($2) and accepted_at is null and expires_at <= now()`, [input.organizationId, input.email]);
+  const usage = await getOrganizationSeatUsage(input.organizationId);
+  if (usage.members + usage.pendingInvites >= usage.includedSeats) return { mode: "seat_limit" as const };
+  const { rows: existingMember } = await pool.query(`select 1 from organization_members om join users u on u.id = om.user_id where om.organization_id = $1 and lower(u.email) = lower($2) limit 1`, [input.organizationId, input.email]);
+  if (existingMember.length) return { mode: "member_exists" as const };
+  const { rows: existingInvite } = await pool.query(`select 1 from organization_invites where organization_id = $1 and lower(email) = lower($2) and accepted_at is null and expires_at > now() limit 1`, [input.organizationId, input.email]);
+  if (existingInvite.length) return { mode: "invite_exists" as const };
+  const { rows } = await pool.query(`
+    insert into organization_invites (organization_id, email, role, token_hash, invited_by_user_id, expires_at)
+    values ($1, $2, $3, $4, $5, $6)
+    returning id::text
+  `, [input.organizationId, input.email.toLowerCase(), input.role || "member", input.tokenHash, input.invitedByUserId, input.expiresAt]);
+  return { mode: "created" as const, inviteId: rows[0].id as string };
+}
+
+export async function revokeOrganizationInvite(inviteId: string, organizationId: string) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  await pool.query(`delete from organization_invites where id = $1 and organization_id = $2 and accepted_at is null`, [inviteId, organizationId]);
+  return { mode: "deleted" as const };
+}
+
+export async function acceptOrganizationInvite(input: { tokenHash: string; name: string; passwordHash: string }) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query(`
+      select id::text, organization_id::text, email, role
+      from organization_invites
+      where token_hash = $1 and accepted_at is null and expires_at > now()
+      for update
+    `, [input.tokenHash]);
+    const invite = rows[0];
+    if (!invite) {
+      await client.query("rollback");
+      return { mode: "invalid" as const };
+    }
+    const existing = await client.query(`select id::text from users where lower(email) = lower($1) limit 1`, [invite.email]);
+    let userId: string;
+    if (existing.rows[0]) {
+      userId = existing.rows[0].id;
+      const otherMembership = await client.query(`select 1 from organization_members where user_id = $1 and organization_id <> $2 limit 1`, [userId, invite.organization_id]);
+      if (otherMembership.rows.length) {
+        await client.query("rollback");
+        return { mode: "existing_other_workspace" as const };
+      }
+      await client.query(`update users set name = coalesce(nullif($2, ''), name), password_hash = $3, updated_at = now() where id = $1`, [userId, input.name, input.passwordHash]);
+    } else {
+      const created = await client.query(`insert into users (email, name, password_hash) values ($1, $2, $3) returning id::text`, [invite.email, input.name, input.passwordHash]);
+      userId = created.rows[0].id;
+    }
+    await client.query(`insert into organization_members (organization_id, user_id, role) values ($1, $2, $3) on conflict (organization_id, user_id) do update set role = excluded.role`, [invite.organization_id, userId, invite.role]);
+    await client.query(`update organization_invites set accepted_at = now() where id = $1`, [invite.id]);
+    await client.query("commit");
+    return { mode: "accepted" as const, userId };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listSources(): Promise<SourceView[]> {
@@ -71,9 +351,11 @@ export async function listEnabledSources(limit = Number(process.env.SCAN_LIMIT |
   return sources.filter((source) => source.enabled).slice(0, limit);
 }
 
-export async function listAlerts(limit = 50): Promise<AlertView[]> {
+export async function listAlerts(limit = 50, organizationId?: string): Promise<AlertView[]> {
   if (!databaseConfigured()) return fixtureAlerts().slice(0, limit);
   const pool = getPool();
+  const alertJoin = organizationId ? "join alerts a on a.change_id = dc.id" : "left join alerts a on a.change_id = dc.id";
+  const orgFilter = organizationId ? "where a.organization_id = $2::uuid" : "";
   const { rows } = await pool.query(`
     select dc.id::text, dc.severity, dc.topics, dc.diff_excerpt, dc.summary_json, dc.status,
       dc.needs_human_review, dc.created_at, s.name as source_name, s.agency, s.url,
@@ -82,12 +364,13 @@ export async function listAlerts(limit = 50): Promise<AlertView[]> {
     from detected_changes dc
     join sources s on s.id = dc.source_id
     left join source_snapshots ss on ss.id = dc.current_snapshot_id
-    left join alerts a on a.change_id = dc.id
+    ${alertJoin}
     left join alert_deliveries ad on ad.alert_id = a.id
+    ${orgFilter}
     group by dc.id, s.id, ss.id
     order by dc.created_at desc
     limit $1
-  `, [limit]);
+  `, organizationId ? [limit, organizationId] : [limit]);
   return rows.map(mapAlertRow);
 }
 
@@ -108,10 +391,12 @@ export async function listReviewQueue(limit = 50): Promise<AlertView[]> {
   return rows.map(mapAlertRow);
 }
 
-export async function getAlertById(id: string): Promise<AlertView | null> {
+export async function getAlertById(id: string, organizationId?: string): Promise<AlertView | null> {
   const fallback = fixtureAlerts().find((alert) => alert.id === id) || null;
   if (!databaseConfigured()) return fallback;
   const pool = getPool();
+  const alertJoin = organizationId ? "join alerts a on a.change_id = dc.id" : "left join alerts a on a.change_id = dc.id";
+  const orgFilter = organizationId ? "and a.organization_id = $2::uuid" : "";
   const { rows } = await pool.query(`
     select dc.id::text, dc.severity, dc.topics, dc.diff_excerpt, dc.summary_json, dc.status,
       dc.needs_human_review, dc.created_at, s.name as source_name, s.agency, s.url,
@@ -120,12 +405,13 @@ export async function getAlertById(id: string): Promise<AlertView | null> {
     from detected_changes dc
     join sources s on s.id = dc.source_id
     left join source_snapshots ss on ss.id = dc.current_snapshot_id
-    left join alerts a on a.change_id = dc.id
+    ${alertJoin}
     left join alert_deliveries ad on ad.alert_id = a.id
     where dc.id = $1
+      ${orgFilter}
     group by dc.id, s.id, ss.id
-  `, [id]);
-  return rows[0] ? mapAlertRow(rows[0]) : fallback;
+  `, organizationId ? [id, organizationId] : [id]);
+  return rows[0] ? mapAlertRow(rows[0]) : null;
 }
 
 export async function getAdminMetrics(): Promise<AdminMetrics> {
@@ -159,7 +445,7 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
   };
 }
 
-export async function listNotificationRecipients(): Promise<NotificationRecipientView[]> {
+export async function listNotificationRecipients(organizationId?: string, deliverableOnly = false): Promise<NotificationRecipientView[]> {
   if (!databaseConfigured()) {
     return [{
       id: "fixture-recipient",
@@ -175,8 +461,17 @@ export async function listNotificationRecipients(): Promise<NotificationRecipien
     select id::text, organization_id::text, recipient_email, immediate, daily_digest, topics
     from notification_settings
     where unsubscribed_at is null
+      and ($1::uuid is null or organization_id = $1::uuid)
+      and (
+        $2::boolean = false
+        or exists (
+          select 1 from subscriptions
+          where subscriptions.organization_id = notification_settings.organization_id
+            and subscriptions.status in ('trialing', 'active', 'cancel_at_period_end')
+        )
+      )
     order by created_at asc
-  `);
+  `, [organizationId || null, deliverableOnly]);
   return rows.map((row) => ({
     id: row.id,
     organizationId: row.organization_id,
@@ -187,19 +482,19 @@ export async function listNotificationRecipients(): Promise<NotificationRecipien
   }));
 }
 
-export async function createBetaWorkspace(input: { organizationName: string; email: string; name?: string }) {
+export async function createBetaWorkspace(input: { organizationName: string; email: string; name?: string; passwordHash?: string; planId?: string }) {
   const config = loadConfig();
   if (!config.DATABASE_URL) return { mode: "fixture" as const, organizationId: "fixture-org", userId: "fixture-user" };
+  const planId = normalizePlanId(input.planId);
   const pool = getPool();
   const client = await pool.connect();
   try {
     await client.query("begin");
     const user = await client.query(`
-      insert into users (email, name)
-      values ($1, $2)
-      on conflict (email) do update set name = coalesce(excluded.name, users.name), updated_at = now()
+      insert into users (email, name, password_hash)
+      values ($1, $2, $3)
       returning id::text
-    `, [input.email.toLowerCase(), input.name || null]);
+    `, [input.email.toLowerCase(), input.name || null, input.passwordHash || null]);
     const org = await client.query(`
       insert into organizations (name, billing_email, trial_ends_at)
       values ($1, $2, now() + interval '14 days')
@@ -212,8 +507,9 @@ export async function createBetaWorkspace(input: { organizationName: string; ema
     `, [org.rows[0].id, user.rows[0].id]);
     await client.query(`
       insert into subscriptions (organization_id, plan_id, status)
-      values ($1, 'team', 'trialing')
-    `, [org.rows[0].id]);
+      values ($1, $2, 'signup_started')
+      on conflict (organization_id) do update set plan_id = excluded.plan_id, updated_at = now()
+    `, [org.rows[0].id, planId]);
     await client.query(`
       insert into notification_settings (organization_id, recipient_email, immediate, daily_digest, topics)
       values ($1, $2, true, true, '[]'::jsonb)
@@ -226,6 +522,62 @@ export async function createBetaWorkspace(input: { organizationName: string; ema
   } finally {
     client.release();
   }
+}
+
+export async function getSubscriptionForOrganization(organizationId?: string | null): Promise<SubscriptionView | null> {
+  if (!databaseConfigured() || !organizationId) return null;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select organization_id::text, plan_id, status, stripe_customer_id, stripe_subscription_id, current_period_end
+    from subscriptions
+    where organization_id = $1
+    order by updated_at desc
+    limit 1
+  `, [organizationId]);
+  return rows[0] ? mapSubscriptionRow(rows[0]) : null;
+}
+
+export async function markCheckoutStarted(input: { organizationId: string; planId: string; stripeCustomerId: string }) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  await pool.query(`
+    insert into subscriptions (organization_id, plan_id, stripe_customer_id, status)
+    values ($1, $2, $3, 'checkout_started')
+    on conflict (organization_id) do update set
+      plan_id = excluded.plan_id,
+      stripe_customer_id = excluded.stripe_customer_id,
+      status = excluded.status,
+      updated_at = now()
+  `, [input.organizationId, normalizePlanId(input.planId), input.stripeCustomerId]);
+  return { mode: "database" as const };
+}
+
+export async function syncStripeSubscription(input: SubscriptionSyncInput) {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const organizationId = input.organizationId || await findOrganizationForStripe(input);
+  if (!organizationId) return { mode: "missing_organization" as const };
+  const pool = getPool();
+  await pool.query(`
+    insert into subscriptions (
+      organization_id, plan_id, stripe_customer_id, stripe_subscription_id, status, current_period_end
+    )
+    values ($1, $2, $3, $4, $5, $6)
+    on conflict (organization_id) do update set
+      plan_id = excluded.plan_id,
+      stripe_customer_id = coalesce(excluded.stripe_customer_id, subscriptions.stripe_customer_id),
+      stripe_subscription_id = coalesce(excluded.stripe_subscription_id, subscriptions.stripe_subscription_id),
+      status = excluded.status,
+      current_period_end = excluded.current_period_end,
+      updated_at = now()
+  `, [
+    organizationId,
+    normalizePlanId(input.planId),
+    input.stripeCustomerId || null,
+    input.stripeSubscriptionId || null,
+    input.status,
+    input.currentPeriodEnd || null
+  ]);
+  return { mode: "database" as const, organizationId };
 }
 
 export async function createSource(input: { name: string; agency: string; url: string; strategy: FetchStrategy; topics: string[]; priority?: string; enabled?: boolean; requiresReviewByDefault?: boolean }) {
@@ -257,15 +609,33 @@ export async function createSource(input: { name: string; agency: string; url: s
   return { mode: "database" as const, sourceId: rows[0].id as string };
 }
 
-export async function updateNotificationSettings(input: { organizationId?: string; recipientEmail: string; immediate: boolean; dailyDigest: boolean; topics?: string[] }) {
+export async function updateNotificationSettings(input: { organizationId?: string; recipientId?: string; recipientEmail: string; immediate: boolean; dailyDigest: boolean; topics?: string[] }) {
   if (!databaseConfigured()) return { mode: "fixture" as const };
   const pool = getPool();
   const organizationId = input.organizationId || await getDefaultOrganizationId();
   if (!organizationId) throw new Error("Create an organization before saving notification settings.");
+  if (input.recipientId) {
+    await pool.query(`
+      update notification_settings
+      set recipient_email = $3,
+        immediate = $4,
+        daily_digest = $5,
+        topics = $6::jsonb,
+        unsubscribed_at = null,
+        updated_at = now()
+      where id = $1::uuid and organization_id = $2::uuid
+    `, [input.recipientId, organizationId, input.recipientEmail.toLowerCase(), input.immediate, input.dailyDigest, JSON.stringify(input.topics || [])]);
+    return { mode: "database" as const };
+  }
   await pool.query(`
     insert into notification_settings (organization_id, recipient_email, immediate, daily_digest, topics)
     values ($1, $2, $3, $4, $5::jsonb)
-    on conflict do nothing
+    on conflict (organization_id, recipient_email) do update set
+      immediate = excluded.immediate,
+      daily_digest = excluded.daily_digest,
+      topics = excluded.topics,
+      unsubscribed_at = null,
+      updated_at = now()
   `, [organizationId, input.recipientEmail.toLowerCase(), input.immediate, input.dailyDigest, JSON.stringify(input.topics || [])]);
   return { mode: "database" as const };
 }
@@ -471,7 +841,7 @@ async function createAlertDrafts(changeId: string) {
   const pool = getPool();
   const alert = await getAlertById(changeId);
   if (!alert) return;
-  const recipients = await listNotificationRecipients();
+  const recipients = await listNotificationRecipients(undefined, true);
   const activeRecipients = recipients.filter((recipient) => recipient.immediate && matchesTopics(recipient.topics, alert.topics));
   for (const recipient of activeRecipients) {
     const email = renderAlertEmail({
@@ -496,10 +866,69 @@ async function createAlertDrafts(changeId: string) {
   }
 }
 
+export async function getUserAuthProfileByEmail(email: string): Promise<UserAuthProfile | null> {
+  if (!databaseConfigured()) return null;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      u.id::text as user_id,
+      u.email,
+      u.name,
+      u.password_hash,
+      u.is_platform_admin,
+      om.organization_id::text,
+      om.role
+    from users u
+    left join organization_members om on om.user_id = u.id
+    where lower(u.email) = lower($1)
+    order by
+      case om.role when 'owner' then 1 when 'admin' then 2 when 'member' then 3 else 4 end,
+      om.created_at asc
+    limit 1
+  `, [email]);
+  return rows[0] ? mapUserAuthProfile(rows[0]) : null;
+}
+
+export async function getUserAuthProfileById(userId: string): Promise<UserAuthProfile | null> {
+  if (!databaseConfigured()) return null;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      u.id::text as user_id,
+      u.email,
+      u.name,
+      u.password_hash,
+      u.is_platform_admin,
+      om.organization_id::text,
+      om.role
+    from users u
+    left join organization_members om on om.user_id = u.id
+    where u.id = $1
+    order by
+      case om.role when 'owner' then 1 when 'admin' then 2 when 'member' then 3 else 4 end,
+      om.created_at asc
+    limit 1
+  `, [userId]);
+  return rows[0] ? mapUserAuthProfile(rows[0]) : null;
+}
+
 async function getDefaultOrganizationId(): Promise<string | null> {
   const pool = getPool();
   const { rows } = await pool.query("select id::text from organizations order by created_at asc limit 1");
   return rows[0]?.id || null;
+}
+
+async function findOrganizationForStripe(input: Pick<SubscriptionSyncInput, "stripeCustomerId" | "stripeSubscriptionId">) {
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select organization_id::text
+    from subscriptions
+    where ($1::text is not null and stripe_customer_id = $1)
+       or ($2::text is not null and stripe_subscription_id = $2)
+    order by updated_at desc
+    limit 1
+  `, [input.stripeCustomerId || null, input.stripeSubscriptionId || null]);
+  return rows[0]?.organization_id || null;
 }
 
 function mapSourceRow(row: any): SourceView {
@@ -572,4 +1001,31 @@ function fixtureAlerts(): AlertView[] {
 function matchesTopics(recipientTopics: string[], alertTopics: string[]) {
   if (recipientTopics.length === 0) return true;
   return recipientTopics.some((topic) => alertTopics.includes(topic));
+}
+
+function normalizePlanId(planId?: string | null) {
+  return planId === "solo" || planId === "multi_office" || planId === "team" ? planId : "team";
+}
+
+function mapSubscriptionRow(row: any): SubscriptionView {
+  return {
+    organizationId: row.organization_id,
+    planId: row.plan_id,
+    status: row.status,
+    stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
+    currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end).toISOString() : null
+  };
+}
+
+function mapUserAuthProfile(row: any): UserAuthProfile {
+  return {
+    userId: row.user_id,
+    email: row.email,
+    name: row.name,
+    passwordHash: row.password_hash,
+    isPlatformAdmin: Boolean(row.is_platform_admin),
+    organizationId: row.organization_id,
+    role: row.role
+  };
 }

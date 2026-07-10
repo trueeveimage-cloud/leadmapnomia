@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   test: {
@@ -7,11 +8,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@ruleradar/shared": new URL("./packages/shared/src/index.ts", import.meta.url).pathname,
-      "@ruleradar/db": new URL("./packages/db/src/index.ts", import.meta.url).pathname,
-      "@ruleradar/monitoring": new URL("./packages/monitoring/src/index.ts", import.meta.url).pathname,
-      "@ruleradar/ai": new URL("./packages/ai/src/index.ts", import.meta.url).pathname,
-      "@ruleradar/notifications": new URL("./packages/notifications/src/index.ts", import.meta.url).pathname
+      "@ruleradar/shared": fileURLToPath(new URL("./packages/shared/src/index.ts", import.meta.url)),
+      "@ruleradar/db": fileURLToPath(new URL("./packages/db/src/index.ts", import.meta.url)),
+      "@ruleradar/monitoring": fileURLToPath(new URL("./packages/monitoring/src/index.ts", import.meta.url)),
+      "@ruleradar/ai": fileURLToPath(new URL("./packages/ai/src/index.ts", import.meta.url)),
+      "@ruleradar/notifications": fileURLToPath(new URL("./packages/notifications/src/index.ts", import.meta.url))
     }
   }
 });

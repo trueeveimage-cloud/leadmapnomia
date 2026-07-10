@@ -14,7 +14,7 @@ export async function summarizeChange(change: DetectedChangeDraft): Promise<Summ
       input: [
         {
           role: "system",
-          content: "You summarize detected changes on official Swedish government sources for accounting and payroll firms. Summarize only the detected change, avoid speculation, cite evidence excerpts from the changed text, and recommend human review when uncertain. This is informational, not legal advice."
+          content: "Du sammanfattar upptäckta ändringar i officiella svenska myndighetskällor för redovisnings- och lönebyråer. Skriv all förklarande text på tydlig svenska. Sammanfatta endast den upptäckta ändringen, undvik spekulation, använd evidensutdrag från den ändrade texten och rekommendera mänsklig granskning vid osäkerhet. Detta är information, inte juridisk rådgivning."
         },
         {
           role: "user",
@@ -52,9 +52,9 @@ export function fallbackSummary(change: DetectedChangeDraft, reason: string): Su
     topics: change.topics,
     severity: change.severity,
     confidence: 0,
-    summary_plain_english: "RuleRadar detected a source change, but the AI summary could not be generated safely.",
-    who_is_affected: "Customers subscribed to this official source or topic.",
-    recommended_action: `Open the official source and review the changed excerpt before acting. Summary fallback reason: ${reason}`,
+    summary_plain_english: "RuleRadar upptäckte en källändring, men kunde inte skapa en säker sammanfattning.",
+    who_is_affected: "Kunder som bevakar den här officiella källan eller ämneskategorin.",
+    recommended_action: `Öppna den officiella källan och granska ändringsutdraget innan ni agerar. Teknisk orsak: ${reason}`,
     needs_human_review: true,
     evidence_excerpts: [change.diffExcerpt.slice(0, 500)]
   };

@@ -1,9 +1,12 @@
 .env
 .next
+.next-qa
 node_modules
 dist
 coverage
 playwright-report
 test-results
+.qa
+.dev-server*.log
 backups
 *.tsbuildinfo

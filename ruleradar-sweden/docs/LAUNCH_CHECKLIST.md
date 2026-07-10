@@ -3,14 +3,23 @@
 - [ ] Domain connected.
 - [ ] Render Blueprint deployed.
 - [ ] Postgres migrations applied.
+- [ ] Migrations `0004_public_launch.sql`, `0005_account_recovery_team.sql`, and `0006_release_observability.sql` confirmed on production.
 - [ ] Seed sources reviewed.
-- [ ] Stripe products, prices, portal, and webhook configured.
+- [ ] Stripe products, prices, customer portal, and webhook events configured.
 - [ ] Resend sender domain verified with SPF and DKIM.
 - [ ] OpenAI key configured.
 - [ ] Admin user created.
-- [ ] Privacy notice published.
-- [ ] DPA/vendor list drafted.
+- [ ] Privacy notice published at `/privacy` with final legal identity and contact details.
+- [x] DPA/vendor list drafted in `docs/DATA_PROCESSING.md`.
+- [ ] Vendor DPAs accepted/downloaded in Render, Stripe, Resend, and OpenAI accounts.
 - [ ] Test alert delivered to internal recipient.
+- [ ] Test signup -> checkout -> webhook -> app settings subscription status.
+- [ ] Test failed-payment webhook marks workspace `past_due`.
+- [ ] Test customer portal and cancel-at-period-end flow.
+- [ ] Test password reset email and one-time token consumption.
+- [ ] Test team invite, seat limit, acceptance, and revocation.
+- [ ] Replay one Stripe webhook and confirm it is ignored as a duplicate.
 - [ ] High-severity review workflow tested.
 - [ ] Backup job tested and restore path documented.
+- [ ] Confirm conversion events appear in the admin 30-day summary without personal data.
 - [ ] First 25 target firms prepared for outreach.

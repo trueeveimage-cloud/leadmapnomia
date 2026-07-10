@@ -14,8 +14,10 @@
     "start": "npm run start -w @ruleradar/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "vitest run",
+    "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
+    "qa:auth": "node scripts/auth-smoke.mjs",
+    "qa:visual": "node scripts/visual-qa.mjs",
     "db:migrate": "tsx packages/db/src/migrate.ts",
     "db:seed": "tsx packages/db/src/seed.ts",
     "scan:run": "tsx apps/worker/src/run-once.ts",
@@ -25,7 +27,7 @@
     "@neondatabase/serverless": "^0.10.4",
     "cheerio": "^1.0.0",
     "diff": "^5.2.0",
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "next": "^15.0.3",
     "openai": "^5.0.0",
     "pdf-parse": "^1.1.1",
@@ -46,6 +48,9 @@
     "@types/react-dom": "^19.0.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.16"
   }
 }

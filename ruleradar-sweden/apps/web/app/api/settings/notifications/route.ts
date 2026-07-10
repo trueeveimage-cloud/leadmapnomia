@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateNotificationSettings } from "@ruleradar/db";
+import { requireApiUser } from "../../../auth";
+import { isSameOrigin } from "../../../request-guard";
 
 export async function POST(request: NextRequest) {
+  if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+  const auth = await requireApiUser();
+  if (auth.response) return auth.response;
+
   const form = await request.formData();
   const recipientEmail = String(form.get("recipientEmail") || "").trim();
+  const recipientId = String(form.get("recipientId") || "").trim();
   const deliveryMode = String(form.get("deliveryMode") || "immediate");
   const topics = String(form.get("topics") || "")
     .split(",")
@@ -15,6 +22,8 @@ export async function POST(request: NextRequest) {
   }
 
   await updateNotificationSettings({
+    organizationId: auth.session?.organizationId || undefined,
+    recipientId: recipientId || undefined,
     recipientEmail,
     immediate: deliveryMode === "immediate",
     dailyDigest: true,

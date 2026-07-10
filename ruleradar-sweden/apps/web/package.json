@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint || true",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "@ruleradar/monitoring": "0.1.0",
     "@ruleradar/notifications": "0.1.0",
     "@ruleradar/shared": "0.1.0",
+    "lucide-react": "^0.468.0",
     "next": "^15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -23,9 +24,13 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^15.5.19",
+    "postcss": "^8.5.16",
     "typescript": "^5.7.2"
   }
 }

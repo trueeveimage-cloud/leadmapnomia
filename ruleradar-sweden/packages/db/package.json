@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ruleradar/shared": "0.1.0",
     "@ruleradar/notifications": "0.1.0",
-    "drizzle-orm": "^0.36.4",
+    "@ruleradar/shared": "0.1.0",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.13.1"
   },
   "devDependencies": {

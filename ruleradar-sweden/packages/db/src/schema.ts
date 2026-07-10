@@ -55,7 +55,36 @@ export const subscriptions = pgTable("subscriptions", {
   status: text("status").notNull(),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   ...timestamps
-});
+}, (table) => ({
+  subscriptionOrgUnique: uniqueIndex("subscriptions_org_unique").on(table.organizationId),
+  subscriptionStripeCustomerUnique: uniqueIndex("subscriptions_stripe_customer_unique").on(table.stripeCustomerId),
+  subscriptionStripeSubscriptionUnique: uniqueIndex("subscriptions_stripe_subscription_unique").on(table.stripeSubscriptionId)
+}));
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  userCreatedIdx: index("password_reset_tokens_user_idx").on(table.userId, table.createdAt)
+}));
+
+export const organizationInvites = pgTable("organization_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  email: text("email").notNull(),
+  role: roleEnum("role").default("member").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  invitedByUserId: uuid("invited_by_user_id").references(() => users.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  organizationIdx: index("organization_invites_org_idx").on(table.organizationId, table.createdAt)
+}));
 
 export const sources = pgTable("sources", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -168,6 +197,44 @@ export const notificationSettings = pgTable("notification_settings", {
   unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
   ...timestamps
 });
+
+export const contactRequests = pgTable("contact_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  company: text("company").notNull(),
+  teamSize: text("team_size"),
+  message: text("message").notNull(),
+  source: text("source").default("website").notNull(),
+  status: text("status").default("new").notNull(),
+  ...timestamps
+}, (table) => ({
+  statusCreatedIdx: index("contact_requests_status_created_idx").on(table.status, table.createdAt)
+}));
+
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  status: text("status").default("processing").notNull(),
+  result: jsonb("result"),
+  error: text("error"),
+  ...timestamps
+}, (table) => ({
+  statusIdx: index("stripe_webhook_events_status_idx").on(table.status, table.updatedAt)
+}));
+
+export const conversionEvents = pgTable("conversion_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  anonymousId: text("anonymous_id").notNull(),
+  eventName: text("event_name").notNull(),
+  path: text("path").notNull(),
+  referrerHost: text("referrer_host"),
+  utm: jsonb("utm").default({}).notNull(),
+  metadata: jsonb("metadata").default({}).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  nameCreatedIdx: index("conversion_events_name_created_idx").on(table.eventName, table.createdAt)
+}));
 
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
