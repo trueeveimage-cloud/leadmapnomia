@@ -30,7 +30,7 @@ export const seedSources: MonitoredSource[] = [
     url: "https://verksamt.se/en/employees-recruitment/costs/employer-contributions",
     strategy: "html",
     topics: ["payroll", "employer_contributions"],
-    enabled: true,
+    enabled: false,
     priority: "core"
   },
   {
@@ -55,9 +55,9 @@ export const seedSources: MonitoredSource[] = [
   },
   {
     id: "arbetsmiljoverket-news",
-    name: "Nyhetsarkiv",
+    name: "RSS-nyheter",
     agency: "Arbetsmiljöverket",
-    url: "https://www.av.se/nyhetsarkiv/",
+    url: "https://www.av.se/om-oss/om-webbplatsen/rss-prenumerera/rss-nyheter/",
     strategy: "news_index",
     topics: ["work_environment", "employer_rules", "occupational_safety"],
     enabled: true,
@@ -71,8 +71,9 @@ export const seedSources: MonitoredSource[] = [
     url: "https://www.arbetsgivarverket.se/avtal-och-skrifter/",
     strategy: "html",
     topics: ["public_sector", "payroll"],
-    enabled: false,
-    priority: "optional"
+    enabled: true,
+    priority: "high",
+    requiresReviewByDefault: true
   }
 ];
 

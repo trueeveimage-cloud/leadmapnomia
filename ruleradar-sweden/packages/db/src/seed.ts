@@ -53,6 +53,11 @@ async function main() {
     `, [adminEmail]);
     orgRows = insertedOrg.rows;
   }
+
+  await pool.query(
+    `update sources set enabled = false, updated_at = now() where url = any($1::text[])`,
+    [["https://www.av.se/nyhetsarkiv/"]]
+  );
   await pool.query(`
     insert into organization_members (organization_id, user_id, role)
     values ($1, $2, 'owner')

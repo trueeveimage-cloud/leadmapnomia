@@ -36,7 +36,7 @@ const outcomes = [
 
 const faqs = [
   ["Ersätter RuleRadar vår professionella bedömning?", "Nej. RuleRadar minskar bevakningsarbetet och gör ändringen lättare att granska. Ert team beslutar alltid hur informationen ska användas."],
-  ["Vilka källor bevakas?", "Startpaketet fokuserar på Skatteverket, Försäkringskassan, Bolagsverket, Verksamt och utvalda arbetsgivarrelaterade publikationer. Källor prioriteras efter påverkan och stabilitet."],
+  ["Vilka källor bevakas?", "Startpaketet fokuserar på Skatteverket, Försäkringskassan, Arbetsmiljöverket och Arbetsgivarverket. Källor prioriteras efter påverkan och teknisk stabilitet."],
   ["Kan en felaktig AI-sammanfattning skickas direkt?", "Ändringar med hög påverkan, låg säkerhet eller särskilda riskmönster markeras för mänsklig granskning. Varje alert visar dessutom originalkällan och det ändrade utdraget."],
   ["Vad händer efter de 14 gratis dagarna?", "Vald månadsplan börjar löpa om ni inte avslutar före provperiodens slut. Abonnemang och betalningsmetod hanteras i Stripes säkra kundportal."]
 ];
