@@ -22,8 +22,8 @@ npm run worker
 1. Create a new Blueprint from `infra/render/render.yaml`.
 2. Set `APP_URL`, `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, OpenAI, Stripe, Resend, and sender email environment variables.
 3. Confirm the managed Postgres connection is injected as `DATABASE_URL`.
-4. Let the web service run `npm run db:migrate` as the pre-deploy command.
-5. Run `npm run db:seed` as a one-off job after the first deploy. This creates/updates the platform admin user from `ADMIN_EMAIL` and sets its password when `ADMIN_PASSWORD` is present.
+4. Deploy the web container. Its startup command runs the idempotent `db:migrate` and `db:seed` tasks before Next starts, including on Render's free tier where shell and pre-deploy commands are unavailable.
+5. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before the first deploy to create the platform admin. Later seed runs preserve an existing password when `ADMIN_PASSWORD` is absent.
 6. Configure Stripe Customer Portal so customers can update payment methods from `/app/settings`.
 7. Configure Stripe webhook URL: `https://your-app.example/api/billing/webhook` and subscribe at minimum to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.payment_succeeded`, and `invoice.payment_action_required`.
 8. Configure Resend domain DNS, SPF, and DKIM before sending production alerts.
