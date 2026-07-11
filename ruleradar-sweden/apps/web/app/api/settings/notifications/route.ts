@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateNotificationSettings } from "@ruleradar/db";
 import { requireApiUser } from "../../../auth";
-import { isSameOrigin } from "../../../request-guard";
+import { appUrl, isSameOrigin } from "../../../request-guard";
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
@@ -30,5 +30,5 @@ export async function POST(request: NextRequest) {
     topics
   });
 
-  return NextResponse.redirect(new URL("/app/settings?saved=notifications", request.url), { status: 303 });
+  return NextResponse.redirect(appUrl("/app/settings?saved=notifications"), { status: 303 });
 }

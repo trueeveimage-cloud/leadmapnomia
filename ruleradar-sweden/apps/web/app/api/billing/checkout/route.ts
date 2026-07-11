@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { getSubscriptionForOrganization, markCheckoutStarted } from "@ruleradar/db";
 import { loadConfig } from "@ruleradar/shared";
 import { authIsRequired, getSession } from "../../../auth";
-import { isSameOrigin } from "../../../request-guard";
+import { appUrl, isSameOrigin } from "../../../request-guard";
 
 type PlanId = "solo" | "team" | "multi_office";
 
@@ -29,11 +29,11 @@ async function startCheckout(request: NextRequest) {
   const session = await getSession();
 
   if (authIsRequired() && !session) {
-    return NextResponse.redirect(new URL(`/signup?plan=${plan}`, request.url), { status: 303 });
+    return NextResponse.redirect(appUrl(`/signup?plan=${plan}`), { status: 303 });
   }
 
   if (!authIsRequired() && !session?.organizationId) {
-    return NextResponse.redirect(new URL("/app/settings?checkout=fixture_skipped", request.url), { status: 303 });
+    return NextResponse.redirect(appUrl("/app/settings?checkout=fixture_skipped"), { status: 303 });
   }
 
   if (!session?.organizationId) {

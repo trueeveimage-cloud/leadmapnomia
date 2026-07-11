@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSource } from "@ruleradar/db";
 import type { FetchStrategy } from "@ruleradar/shared";
 import { requireApiAdmin } from "../../../auth";
-import { isSameOrigin } from "../../../request-guard";
+import { appUrl, isSameOrigin } from "../../../request-guard";
 
 const strategies = new Set(["html", "news_index", "pdf", "document_page", "browser_fallback"]);
 
@@ -36,5 +36,5 @@ export async function POST(request: NextRequest) {
     requiresReviewByDefault: true
   });
 
-  return NextResponse.redirect(new URL("/admin/sources?saved=source", request.url), { status: 303 });
+  return NextResponse.redirect(appUrl("/admin/sources?saved=source"), { status: 303 });
 }

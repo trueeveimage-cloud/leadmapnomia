@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { loadConfig } from "@ruleradar/shared";
 
 interface RateEntry {
   count: number;
@@ -8,6 +9,10 @@ interface RateEntry {
 const globalRateStore = globalThis as typeof globalThis & { __ruleRadarRateStore?: Map<string, RateEntry> };
 const rateStore = globalRateStore.__ruleRadarRateStore ?? new Map<string, RateEntry>();
 globalRateStore.__ruleRadarRateStore = rateStore;
+
+export function appUrl(path: string) {
+  return new URL(path, loadConfig().APP_URL);
+}
 
 export function isSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");

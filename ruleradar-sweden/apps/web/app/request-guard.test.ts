@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { isRateLimited, isSameOrigin } from "./request-guard";
+import { appUrl, isRateLimited, isSameOrigin } from "./request-guard";
 
 describe("request guards", () => {
+  it("builds public redirects from APP_URL instead of the internal proxy URL", () => {
+    expect(appUrl("/forgot-password?sent=1").toString()).toBe("http://localhost:3000/forgot-password?sent=1");
+  });
+
   it("accepts same-origin form requests and rejects cross-origin requests", () => {
     expect(isSameOrigin(new NextRequest("https://ruleradar.se/api/contact", { headers: { origin: "https://ruleradar.se" } }))).toBe(true);
     expect(isSameOrigin(new NextRequest("https://ruleradar.se/api/contact", { headers: { origin: "https://attacker.example" } }))).toBe(false);

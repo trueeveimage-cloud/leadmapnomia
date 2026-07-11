@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createContactRequest } from "@ruleradar/db";
 import { sendEmail } from "@ruleradar/notifications";
 import { loadConfig } from "@ruleradar/shared";
-import { isRateLimited, isSameOrigin } from "../../request-guard";
+import { appUrl, isRateLimited, isSameOrigin } from "../../request-guard";
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
   if (isRateLimited(request, "contact", 5, 15 * 60 * 1000)) {
-    return NextResponse.redirect(new URL("/contact?error=rate", request.url), { status: 303 });
+    return NextResponse.redirect(appUrl("/contact?error=rate"), { status: 303 });
   }
 
   const form = await request.formData();
@@ -18,9 +18,9 @@ export async function POST(request: NextRequest) {
   const message = String(form.get("message") || "").trim();
   const website = String(form.get("website") || "").trim();
 
-  if (website) return NextResponse.redirect(new URL("/contact?sent=1", request.url), { status: 303 });
+  if (website) return NextResponse.redirect(appUrl("/contact?sent=1"), { status: 303 });
   if (!name || !company || !isEmail(email) || message.length < 10 || message.length > 4000) {
-    return NextResponse.redirect(new URL("/contact?error=invalid", request.url), { status: 303 });
+    return NextResponse.redirect(appUrl("/contact?error=invalid"), { status: 303 });
   }
 
   try {
@@ -41,12 +41,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (saved.mode === "fixture" && !notified) {
-      return NextResponse.redirect(new URL("/contact?error=setup", request.url), { status: 303 });
+      return NextResponse.redirect(appUrl("/contact?error=setup"), { status: 303 });
     }
 
-    return NextResponse.redirect(new URL("/contact?sent=1", request.url), { status: 303 });
+    return NextResponse.redirect(appUrl("/contact?sent=1"), { status: 303 });
   } catch {
-    return NextResponse.redirect(new URL("/contact?error=send", request.url), { status: 303 });
+    return NextResponse.redirect(appUrl("/contact?error=send"), { status: 303 });
   }
 }
 

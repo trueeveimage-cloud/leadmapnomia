@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createBetaWorkspace, databaseConfigured, getUserAuthProfileByEmail, getUserAuthProfileById } from "@ruleradar/db";
 import { hashPassword, loadConfig } from "@ruleradar/shared";
 import { authIsRequired, createSession, issueSessionCookie } from "../../../auth";
-import { isRateLimited, isSameOrigin } from "../../../request-guard";
+import { appUrl, isRateLimited, isSameOrigin } from "../../../request-guard";
 
 export async function POST(request: NextRequest) {
   const plan = normalizePlan(String(request.nextUrl.searchParams.get("plan") || "team"));
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
-  if (isRateLimited(request, "signup", 6, 15 * 60 * 1000)) return signupRedirect(request, plan, "rate");
+  if (isRateLimited(request, "signup", 6, 15 * 60 * 1000)) return signupRedirect(plan, "rate");
 
   const form = await request.formData();
   const organizationName = String(form.get("organizationName") || "").trim();
@@ -17,19 +17,19 @@ export async function POST(request: NextRequest) {
   const selectedPlan = normalizePlan(String(form.get("plan") || plan));
   const termsAccepted = String(form.get("termsAccepted") || "") === "yes";
 
-  if (!termsAccepted) return signupRedirect(request, selectedPlan, "terms");
-  if (!organizationName || organizationName.length > 160 || !name || name.length > 160 || !isEmail(email)) return signupRedirect(request, selectedPlan, "invalid");
-  if (authIsRequired() && !databaseConfigured()) return signupRedirect(request, selectedPlan, "setup");
+  if (!termsAccepted) return signupRedirect(selectedPlan, "terms");
+  if (!organizationName || organizationName.length > 160 || !name || name.length > 160 || !isEmail(email)) return signupRedirect(selectedPlan, "invalid");
+  if (authIsRequired() && !databaseConfigured()) return signupRedirect(selectedPlan, "setup");
 
   if (authIsRequired() && password.length < 10) {
-    return signupRedirect(request, selectedPlan, "invalid");
+    return signupRedirect(selectedPlan, "invalid");
   }
 
   if (authIsRequired() && !loadConfig().SESSION_SECRET) {
-    return signupRedirect(request, selectedPlan, "setup");
+    return signupRedirect(selectedPlan, "setup");
   }
 
-  if (await getUserAuthProfileByEmail(email)) return signupRedirect(request, selectedPlan, "exists");
+  if (await getUserAuthProfileByEmail(email)) return signupRedirect(selectedPlan, "exists");
 
   try {
     const created = await createBetaWorkspace({
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       passwordHash: password ? await hashPassword(password) : undefined,
       planId: selectedPlan
     });
-    const response = NextResponse.redirect(new URL(`/api/billing/checkout?plan=${selectedPlan}`, request.url), { status: 303 });
+    const response = NextResponse.redirect(appUrl(`/api/billing/checkout?plan=${selectedPlan}`), { status: 303 });
 
     if (created.mode === "database") {
       const profile = await getUserAuthProfileById(created.userId);
@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    if (isUniqueViolation(error)) return signupRedirect(request, selectedPlan, "exists");
-    return signupRedirect(request, selectedPlan, "setup");
+    if (isUniqueViolation(error)) return signupRedirect(selectedPlan, "exists");
+    return signupRedirect(selectedPlan, "setup");
   }
 }
 
@@ -57,8 +57,8 @@ function normalizePlan(plan: string) {
   return plan === "solo" || plan === "multi_office" || plan === "team" ? plan : "team";
 }
 
-function signupRedirect(request: NextRequest, plan: string, error: string) {
-  return NextResponse.redirect(new URL(`/signup?plan=${plan}&error=${error}`, request.url), { status: 303 });
+function signupRedirect(plan: string, error: string) {
+  return NextResponse.redirect(appUrl(`/signup?plan=${plan}&error=${error}`), { status: 303 });
 }
 
 function isEmail(value: string) {

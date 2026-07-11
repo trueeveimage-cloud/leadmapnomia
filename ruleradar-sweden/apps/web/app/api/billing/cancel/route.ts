@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { getSubscriptionForOrganization, syncStripeSubscription } from "@ruleradar/db";
 import { loadConfig } from "@ruleradar/shared";
 import { requireApiUser } from "../../../auth";
-import { isSameOrigin } from "../../../request-guard";
+import { appUrl, isSameOrigin } from "../../../request-guard";
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
@@ -35,5 +35,5 @@ export async function POST(request: NextRequest) {
     currentPeriodEnd: stripeSubscription.current_period_end ? new Date(stripeSubscription.current_period_end * 1000) : null
   });
 
-  return NextResponse.redirect(new URL("/app/settings?billing=cancel_scheduled", request.url), { status: 303 });
+  return NextResponse.redirect(appUrl("/app/settings?billing=cancel_scheduled"), { status: 303 });
 }

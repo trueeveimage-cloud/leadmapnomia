@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deliverApprovedAlerts, reviewChange } from "@ruleradar/db";
 import { requireApiAdmin } from "../../../../auth";
-import { isSameOrigin } from "../../../../request-guard";
+import { appUrl, isSameOrigin } from "../../../../request-guard";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
@@ -19,5 +19,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   await reviewChange(id, decision, note || undefined);
   if (decision === "approved") await deliverApprovedAlerts(10);
-  return NextResponse.redirect(new URL("/admin/review?reviewed=1", request.url), { status: 303 });
+  return NextResponse.redirect(appUrl("/admin/review?reviewed=1"), { status: 303 });
 }
