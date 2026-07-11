@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { claimStripeWebhookEvent, completeStripeWebhookEvent, getOrganizationBillingContact, syncStripeSubscription } from "@ruleradar/db";
 import { renderLifecycleEmail, sendEmail } from "@ruleradar/notifications";
 import { loadConfig, logger } from "@ruleradar/shared";
+import { subscriptionPeriodEnd } from "../stripe-subscription";
 
 export async function POST(request: NextRequest) {
   const config = loadConfig();
@@ -83,15 +84,14 @@ async function reconcileStripeEvent(event: Stripe.Event, config: ReturnType<type
     event.type === "customer.subscription.deleted"
   ) {
     const subscription = event.data.object as Stripe.Subscription;
-    const stripeSubscription = subscription as any;
-    const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
+    const priceId = subscription.items?.data?.[0]?.price?.id;
     return syncStripeSubscription({
       organizationId: subscription.metadata?.organizationId,
       stripeCustomerId: asString(subscription.customer),
       stripeSubscriptionId: subscription.id,
       planId: subscription.metadata?.plan || planFromPrice(priceId, config),
       status: event.type === "customer.subscription.deleted" ? "canceled" : subscription.status,
-      currentPeriodEnd: stripeSubscription.current_period_end ? new Date(stripeSubscription.current_period_end * 1000) : null
+      currentPeriodEnd: subscriptionPeriodEnd(subscription)
     });
   }
 
@@ -113,15 +113,14 @@ async function reconcileStripeEvent(event: Stripe.Event, config: ReturnType<type
     }
 
     const subscription = await new Stripe(config.STRIPE_SECRET_KEY!).subscriptions.retrieve(subscriptionId);
-    const stripeSubscription = subscription as any;
-    const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
+    const priceId = subscription.items?.data?.[0]?.price?.id;
     return syncStripeSubscription({
       organizationId: subscription.metadata?.organizationId || invoice.metadata?.organizationId,
       stripeCustomerId: asString(subscription.customer) || customerId,
       stripeSubscriptionId: subscription.id,
       planId: subscription.metadata?.plan || invoice.metadata?.plan || planFromPrice(priceId, config),
       status: event.type === "invoice.payment_failed" || event.type === "invoice.payment_action_required" ? "past_due" : subscription.status,
-      currentPeriodEnd: stripeSubscription.current_period_end ? new Date(stripeSubscription.current_period_end * 1000) : null
+      currentPeriodEnd: subscriptionPeriodEnd(subscription)
     });
   }
 
