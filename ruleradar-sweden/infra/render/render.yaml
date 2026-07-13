@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: APP_URL
-        value: https://ruleradar-web.onrender.com
+        value: https://ruleradar.se
       - key: OPENAI_MODEL
         value: gpt-5
       - key: ALERT_FROM_EMAIL
