@@ -8,6 +8,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const AI_COLD_CALLS_DISABLED = true;
+const DISABLED_MESSAGE = 'AI cold calls are hard-disabled after live outreach spend leaked through. Manual calling only.';
+
 const BodySchema = z.object({
   leadId: z.string().uuid(),
   manualUnlock: z.boolean().optional(),
@@ -37,6 +40,9 @@ Deno.serve(async (req) => {
   const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
 
+  if (AI_COLD_CALLS_DISABLED) {
+    return json({ error: 'ai_cold_calls_disabled', message: DISABLED_MESSAGE, disabled: true }, 409);
+  }
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return json({ error: 'invalid_body', details: parsed.error.flatten().fieldErrors }, 400);

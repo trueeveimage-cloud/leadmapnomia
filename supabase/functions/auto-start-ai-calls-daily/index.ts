@@ -14,6 +14,8 @@ const DEFAULT_ACTIVE_GUARD_MINUTES = 8;
 const DEFAULT_STALE_CALL_MINUTES = 35;
 const DEFAULT_CALL_SUPPLY_MIN = 30;
 const EXCLUDED_STATUSES = ['interested', 'not_interested', 'callback', 'closed_won', 'closed_lost'];
+const AI_COLD_CALLS_DISABLED = true;
+const DISABLED_MESSAGE = 'AI cold calls are hard-disabled after live outreach spend leaked through. Manual calling only.';
 
 type Settings = Record<string, string>;
 type ReasonSummary = Record<string, number>;
@@ -225,6 +227,18 @@ Deno.serve(async (req) => {
   const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
   const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
+
+  if (AI_COLD_CALLS_DISABLED) {
+    return json({
+      error: 'ai_cold_calls_disabled',
+      message: DISABLED_MESSAGE,
+      disabled: true,
+      eligible: 0,
+      started: 0,
+      skipped: 0,
+      failed: 0,
+    }, 409);
+  }
 
   const body = await req.json().catch(() => ({}));
   const force = body?.force === true;

@@ -12,6 +12,8 @@ const DEFAULT_DAILY = 100;
 const DEFAULT_BATCH = 10;
 const DEFAULT_SUPPLY_MIN = 140;
 const CRON_INTERVAL_MINUTES = 20;
+const PARTNER_GMAIL_AUTOMATION_DISABLED = true;
+const DISABLED_MESSAGE = 'Partner Gmail automation is hard-disabled after live outreach spend leaked through. Manual review only.';
 
 function intSetting(settings: Record<string, string>, key: string, fallback: number, min: number, max: number) {
   const value = Number.parseInt(settings[key] || '', 10);
@@ -87,6 +89,17 @@ Deno.serve(async (req) => {
   const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
   const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
+
+  if (PARTNER_GMAIL_AUTOMATION_DISABLED) {
+    return new Response(JSON.stringify({
+      skipped: true,
+      reason: 'disabled',
+      disabled: true,
+      message: DISABLED_MESSAGE,
+      sent: 0,
+      failed: 0,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

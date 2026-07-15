@@ -18,6 +18,8 @@ const DEFAULT_START_HOUR = 10;
 const DEFAULT_END_HOUR = 16;
 const CRON_INTERVAL_MINUTES = 5;
 const DEFAULT_EMAIL_SUPPLY_MIN = 500;
+const GMAIL_AUTOMATION_DISABLED = true;
+const DISABLED_MESSAGE = 'Gmail automation is hard-disabled after live outreach spend leaked through. Manual review only.';
 const DEFAULT_SUBJECTS: Record<string, string> = {
   sv: 'En snabb fråga om missade samtal hos {{business_name}}',
   en: 'Quick question about missed calls at {{business_name}}',
@@ -269,6 +271,17 @@ Deno.serve(async (req) => {
   const { requireCronServiceOrUserJwt } = await import('../_shared/auth.ts');
   const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
+
+  if (GMAIL_AUTOMATION_DISABLED) {
+    return new Response(JSON.stringify({
+      skipped: true,
+      reason: 'disabled',
+      disabled: true,
+      message: DISABLED_MESSAGE,
+      sent: 0,
+      failed: 0,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
