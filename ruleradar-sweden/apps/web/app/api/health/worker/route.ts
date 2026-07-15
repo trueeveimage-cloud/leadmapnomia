@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server";
+import { getWorkerHealth } from "@ruleradar/db";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    service: "ruleradar-worker",
-    check: "worker heartbeats are stored in source_runs when DATABASE_URL is configured",
-    time: new Date().toISOString()
-  });
+  try {
+    const health = await getWorkerHealth();
+    return NextResponse.json({ ...health, service: "ruleradar-worker", time: new Date().toISOString() }, {
+      status: health.ok ? 200 : 503,
+      headers: { "cache-control": "no-store" }
+    });
+  } catch {
+    return NextResponse.json({ ok: false, service: "ruleradar-worker", reason: "health_check_failed", time: new Date().toISOString() }, {
+      status: 503,
+      headers: { "cache-control": "no-store" }
+    });
+  }
 }

@@ -27,3 +27,11 @@ test("admin review queue exposes guarded decisions in fixture mode", async ({ pa
   await expect(page.getByRole("heading", { name: "Granskningskö" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Godkänn och leverera" }).first()).toBeVisible();
 });
+
+test("admin dashboard exposes worker proof and the pilot pipeline", async ({ page }) => {
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Driftöversikt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pilotpipeline" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Driftbevis" })).toBeVisible();
+  await expect(page.locator("dt", { hasText: "Misslyckade leveranser" })).toBeVisible();
+});

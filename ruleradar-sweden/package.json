@@ -17,6 +17,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "qa:auth": "node scripts/auth-smoke.mjs",
+    "qa:sources": "tsx scripts/source-health.ts",
     "qa:visual": "node scripts/visual-qa.mjs",
     "db:migrate": "tsx packages/db/src/migrate.ts",
     "db:seed": "tsx packages/db/src/seed.ts",

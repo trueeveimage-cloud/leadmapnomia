@@ -26,7 +26,8 @@ async function runProtectedScan(request: NextRequest) {
   const sourceLimit = positiveInt(request.nextUrl.searchParams.get("sourceLimit"));
   const deliveryLimit = positiveInt(request.nextUrl.searchParams.get("deliveryLimit"));
   const deliverApproved = request.nextUrl.searchParams.get("deliverApproved") !== "false";
-  const result = await runScanPipeline({ sourceLimit, deliveryLimit, deliverApproved });
+  const deliverDigests = request.nextUrl.searchParams.get("deliverDigests") !== "false";
+  const result = await runScanPipeline({ sourceLimit, deliveryLimit, deliverApproved, deliverDigests });
 
   return NextResponse.json({ ok: true, result, time: new Date().toISOString() });
 }

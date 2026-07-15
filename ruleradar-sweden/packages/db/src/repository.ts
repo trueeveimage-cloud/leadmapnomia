@@ -1,8 +1,7 @@
 import { getPool } from "./client";
 import { sampleSummaries, seedSources, severityRank } from "./fixtures";
 import { idempotencyKey, loadConfig, type AlertStatus, type ContentSnapshot, type DetectedChangeDraft, type FetchStrategy, type MonitoredSource, type Severity, type SummaryResult } from "@ruleradar/shared";
-import { renderAlertEmail } from "@ruleradar/notifications/templates";
-import { sendEmail } from "@ruleradar/notifications";
+import { renderAlertEmail, renderDailyDigestEmail, sendEmail } from "@ruleradar/notifications";
 
 export interface AlertView extends SummaryResult {
   id: string;
@@ -22,11 +21,24 @@ export interface SourceView extends MonitoredSource {
 
 export interface AdminMetrics {
   sources: number;
+  enabledSources: number;
   reviewQueue: number;
   organizations: number;
   sentAlerts: number;
   queuedDeliveries: number;
   failedDeliveries: number;
+}
+
+export interface WorkerHealth {
+  ok: boolean;
+  enabledSources: number;
+  healthySources: number;
+  degradedSources: number;
+  staleSources: number;
+  scans24h: number;
+  failedScans24h: number;
+  lastScanAt: string | null;
+  staleAfterMinutes: number;
 }
 
 export interface NotificationRecipientView {
@@ -73,6 +85,12 @@ export interface DeliveryRunResult {
   failed: number;
 }
 
+export interface DailyDigestOptions {
+  force?: boolean;
+  limit?: number;
+  now?: Date;
+}
+
 export interface ContactRequestInput {
   name: string;
   email: string;
@@ -80,6 +98,13 @@ export interface ContactRequestInput {
   teamSize?: string;
   message: string;
   source?: string;
+}
+
+export interface ContactRequestView extends Required<Omit<ContactRequestInput, "teamSize">> {
+  id: string;
+  teamSize?: string | null;
+  status: string;
+  createdAt: string;
 }
 
 export interface OrganizationMemberView {
@@ -123,6 +148,38 @@ export async function createContactRequest(input: ContactRequestInput) {
   return { mode: "database" as const, requestId: rows[0].id as string };
 }
 
+export async function listContactRequests(limit = 20): Promise<ContactRequestView[]> {
+  if (!databaseConfigured()) return [];
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 20;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select id::text, name, email, company, team_size, message, source, status, created_at
+    from contact_requests
+    order by
+      case status when 'new' then 1 when 'contacted' then 2 when 'qualified' then 3 when 'pilot' then 4 else 5 end,
+      created_at desc
+    limit $1
+  `, [safeLimit]);
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    company: row.company,
+    teamSize: row.team_size,
+    message: row.message,
+    source: row.source,
+    status: row.status,
+    createdAt: new Date(row.created_at).toISOString()
+  }));
+}
+
+export async function updateContactRequestStatus(id: string, status: "new" | "contacted" | "qualified" | "pilot" | "won" | "lost") {
+  if (!databaseConfigured()) return { mode: "fixture" as const };
+  const pool = getPool();
+  const { rowCount } = await pool.query(`update contact_requests set status = $2, updated_at = now() where id = $1::uuid`, [id, status]);
+  return { mode: "database" as const, updated: rowCount === 1 };
+}
+
 export async function createConversionEvent(input: ConversionEventInput) {
   if (!databaseConfigured()) return { mode: "fixture" as const };
   const pool = getPool();
@@ -134,19 +191,30 @@ export async function createConversionEvent(input: ConversionEventInput) {
 }
 
 export async function getConversionMetrics() {
-  if (!databaseConfigured()) return { visitors: 0, pricingViews: 0, trialClicks: 0, contactRequests: 0 };
+  if (!databaseConfigured()) return { visitors: 0, pricingViews: 0, trialClicks: 0, contactRequests: 0, signups: 0, checkouts: 0, activated: 0 };
   const pool = getPool();
   const { rows } = await pool.query(`
     select
       count(distinct anonymous_id) filter (where event_name = 'page_view')::int as visitors,
       count(*) filter (where event_name = 'page_view' and path = '/pricing')::int as pricing_views,
       count(*) filter (where event_name = 'trial_click')::int as trial_clicks,
-      (select count(*)::int from contact_requests where created_at >= now() - interval '30 days') as contact_requests
+      (select count(*)::int from contact_requests where created_at >= now() - interval '30 days') as contact_requests,
+      (select count(*)::int from subscriptions where created_at >= now() - interval '30 days') as signups,
+      (select count(*)::int from subscriptions where created_at >= now() - interval '30 days' and status <> 'signup_started') as checkouts,
+      (select count(*)::int from subscriptions where created_at >= now() - interval '30 days' and status in ('trialing', 'active', 'cancel_at_period_end')) as activated
     from conversion_events
     where created_at >= now() - interval '30 days'
   `);
   const row = rows[0] || {};
-  return { visitors: row.visitors || 0, pricingViews: row.pricing_views || 0, trialClicks: row.trial_clicks || 0, contactRequests: row.contact_requests || 0 };
+  return {
+    visitors: row.visitors || 0,
+    pricingViews: row.pricing_views || 0,
+    trialClicks: row.trial_clicks || 0,
+    contactRequests: row.contact_requests || 0,
+    signups: row.signups || 0,
+    checkouts: row.checkouts || 0,
+    activated: row.activated || 0
+  };
 }
 
 export async function claimStripeWebhookEvent(eventId: string, eventType: string) {
@@ -346,9 +414,10 @@ export async function listSources(): Promise<SourceView[]> {
   return rows.map(mapSourceRow);
 }
 
-export async function listEnabledSources(limit = Number(process.env.SCAN_LIMIT || 5)): Promise<SourceView[]> {
+export async function listEnabledSources(limit?: number): Promise<SourceView[]> {
   const sources = await listSources();
-  return sources.filter((source) => source.enabled).slice(0, limit);
+  const enabled = sources.filter((source) => source.enabled);
+  return limit && limit > 0 ? enabled.slice(0, limit) : enabled;
 }
 
 export async function listAlerts(limit = 50, organizationId?: string): Promise<AlertView[]> {
@@ -360,7 +429,15 @@ export async function listAlerts(limit = 50, organizationId?: string): Promise<A
     select dc.id::text, dc.severity, dc.topics, dc.diff_excerpt, dc.summary_json, dc.status,
       dc.needs_human_review, dc.created_at, s.name as source_name, s.agency, s.url,
       ss.fetch_metadata,
-      coalesce(max(ad.status), 'not_sent') as delivery_status
+      case
+        when count(ad.id) = 0 then 'not_sent'
+        when bool_or(ad.status = 'failed') then 'failed'
+        when bool_or(ad.status = 'queued_missing_resend_key') then 'queued_missing_resend_key'
+        when bool_or(ad.status = 'queued') then 'queued'
+        when bool_or(ad.status = 'digest_pending') then 'digest_pending'
+        when bool_and(ad.status = 'sent') then 'sent'
+        else max(ad.status)
+      end as delivery_status
     from detected_changes dc
     join sources s on s.id = dc.source_id
     left join source_snapshots ss on ss.id = dc.current_snapshot_id
@@ -401,7 +478,15 @@ export async function getAlertById(id: string, organizationId?: string): Promise
     select dc.id::text, dc.severity, dc.topics, dc.diff_excerpt, dc.summary_json, dc.status,
       dc.needs_human_review, dc.created_at, s.name as source_name, s.agency, s.url,
       ss.fetch_metadata,
-      coalesce(max(ad.status), 'not_sent') as delivery_status
+      case
+        when count(ad.id) = 0 then 'not_sent'
+        when bool_or(ad.status = 'failed') then 'failed'
+        when bool_or(ad.status = 'queued_missing_resend_key') then 'queued_missing_resend_key'
+        when bool_or(ad.status = 'queued') then 'queued'
+        when bool_or(ad.status = 'digest_pending') then 'digest_pending'
+        when bool_and(ad.status = 'sent') then 'sent'
+        else max(ad.status)
+      end as delivery_status
     from detected_changes dc
     join sources s on s.id = dc.source_id
     left join source_snapshots ss on ss.id = dc.current_snapshot_id
@@ -418,6 +503,7 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
   if (!databaseConfigured()) {
     return {
       sources: seedSources.length,
+      enabledSources: seedSources.filter((source) => source.enabled).length,
       reviewQueue: fixtureAlerts().filter((alert) => alert.needs_human_review).length,
       organizations: 1,
       sentAlerts: fixtureAlerts().filter((alert) => alert.status === "sent").length,
@@ -429,19 +515,65 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
   const { rows } = await pool.query(`
     select
       (select count(*)::int from sources) as sources,
+      (select count(*)::int from sources where enabled = true) as enabled_sources,
       (select count(*)::int from detected_changes where needs_human_review = true and status in ('draft', 'review_required')) as review_queue,
       (select count(*)::int from organizations) as organizations,
       (select count(*)::int from alerts where status = 'sent') as sent_alerts,
-      (select count(*)::int from alert_deliveries where status in ('queued', 'queued_missing_resend_key')) as queued_deliveries,
+      (select count(*)::int from alert_deliveries where status in ('queued', 'queued_missing_resend_key', 'digest_pending')) as queued_deliveries,
       (select count(*)::int from alert_deliveries where status = 'failed') as failed_deliveries
   `);
   return {
     sources: rows[0]?.sources || 0,
+    enabledSources: rows[0]?.enabled_sources || 0,
     reviewQueue: rows[0]?.review_queue || 0,
     organizations: rows[0]?.organizations || 0,
     sentAlerts: rows[0]?.sent_alerts || 0,
     queuedDeliveries: rows[0]?.queued_deliveries || 0,
     failedDeliveries: rows[0]?.failed_deliveries || 0
+  };
+}
+
+export async function getWorkerHealth(staleAfterMinutes = Number(process.env.WORKER_STALE_AFTER_MINUTES || 90)): Promise<WorkerHealth> {
+  const threshold = Number.isFinite(staleAfterMinutes) && staleAfterMinutes > 0 ? staleAfterMinutes : 90;
+  if (!databaseConfigured()) {
+    return {
+      ok: false,
+      enabledSources: seedSources.filter((source) => source.enabled).length,
+      healthySources: 0,
+      degradedSources: 0,
+      staleSources: seedSources.filter((source) => source.enabled).length,
+      scans24h: 0,
+      failedScans24h: 0,
+      lastScanAt: null,
+      staleAfterMinutes: threshold
+    };
+  }
+
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    select
+      (select count(*)::int from sources where enabled = true) as enabled_sources,
+      (select count(*)::int from sources where enabled = true and health_status = 'ok' and last_checked_at >= now() - ($1 * interval '1 minute')) as healthy_sources,
+      (select count(*)::int from sources where enabled = true and health_status = 'degraded') as degraded_sources,
+      (select count(*)::int from sources where enabled = true and (last_checked_at is null or last_checked_at < now() - ($1 * interval '1 minute'))) as stale_sources,
+      (select count(*)::int from source_runs where finished_at >= now() - interval '24 hours') as scans_24h,
+      (select count(*)::int from source_runs where finished_at >= now() - interval '24 hours' and status = 'failed') as failed_scans_24h,
+      (select max(finished_at) from source_runs) as last_scan_at
+  `, [threshold]);
+  const row = rows[0] || {};
+  const enabledSources = row.enabled_sources || 0;
+  const degradedSources = row.degraded_sources || 0;
+  const staleSources = row.stale_sources || 0;
+  return {
+    ok: enabledSources > 0 && degradedSources === 0 && staleSources === 0,
+    enabledSources,
+    healthySources: row.healthy_sources || 0,
+    degradedSources,
+    staleSources,
+    scans24h: row.scans_24h || 0,
+    failedScans24h: row.failed_scans_24h || 0,
+    lastScanAt: row.last_scan_at ? new Date(row.last_scan_at).toISOString() : null,
+    staleAfterMinutes: threshold
   };
 }
 
@@ -837,12 +969,110 @@ export async function deliverApprovedAlerts(limit = Number(process.env.ALERT_DEL
   return result;
 }
 
+export async function deliverDailyDigests(options: DailyDigestOptions = {}): Promise<DeliveryRunResult> {
+  const result: DeliveryRunResult = { attempted: 0, sent: 0, skipped: 0, failed: 0 };
+  if (!databaseConfigured()) return result;
+
+  const { date, hour } = stockholmDigestClock(options.now || new Date());
+  if (!options.force && hour < 7) return result;
+
+  const config = loadConfig();
+  const pool = getPool();
+  const configuredLimit = Number(process.env.DIGEST_DELIVERY_LIMIT || 25);
+  const limit = options.limit && options.limit > 0 ? options.limit : Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 25;
+  const { rows } = await pool.query(`
+    select
+      a.organization_id::text,
+      ad.recipient_email,
+      array_agg(ad.id::text order by ad.created_at) as delivery_ids,
+      json_agg(dc.summary_json order by dc.created_at) as summaries
+    from alert_deliveries ad
+    join alerts a on a.id = ad.alert_id
+    join detected_changes dc on dc.id = a.change_id
+    where a.status = 'approved'
+      and dc.status = 'approved'
+      and ad.status = 'digest_pending'
+    group by a.organization_id, ad.recipient_email
+    order by min(ad.created_at)
+    limit $1
+  `, [limit]);
+
+  for (const row of rows) {
+    result.attempted += 1;
+    if (!config.RESEND_API_KEY) {
+      result.skipped += 1;
+      continue;
+    }
+
+    const claim = await pool.query(`
+      insert into digest_delivery_runs (organization_id, recipient_email, digest_date, status)
+      values ($1, $2, $3::date, 'processing')
+      on conflict (organization_id, recipient_email, digest_date) do update set
+        status = 'processing',
+        error = null,
+        started_at = now(),
+        updated_at = now()
+      where digest_delivery_runs.status = 'failed'
+         or (digest_delivery_runs.status = 'processing' and digest_delivery_runs.updated_at < now() - interval '15 minutes')
+      returning id::text
+    `, [row.organization_id, row.recipient_email, date]);
+    const runId = claim.rows[0]?.id as string | undefined;
+    if (!runId) {
+      result.skipped += 1;
+      continue;
+    }
+
+    const deliveryIds = (row.delivery_ids || []) as string[];
+    const summaries = (row.summaries || []) as SummaryResult[];
+    try {
+      const email = renderDailyDigestEmail(summaries, `${config.APP_URL}/app/settings`);
+      const sent = await sendEmail({ to: row.recipient_email, ...email });
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(`
+          update alert_deliveries
+          set status = 'sent', provider_message_id = $2, error = null
+          where id = any($1::uuid[]) and status = 'digest_pending'
+        `, [deliveryIds, sent.id]);
+        await client.query(`
+          update alerts a
+          set status = 'sent', sent_at = coalesce(sent_at, now())
+          where a.id in (select alert_id from alert_deliveries where id = any($1::uuid[]))
+            and not exists (select 1 from alert_deliveries pending where pending.alert_id = a.id and pending.status <> 'sent')
+        `, [deliveryIds]);
+        await client.query(`
+          update digest_delivery_runs
+          set status = 'sent', item_count = $2, provider_message_id = $3, error = null, finished_at = now(), updated_at = now()
+          where id = $1
+        `, [runId, summaries.length, sent.id]);
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+      result.sent += 1;
+    } catch (error) {
+      await pool.query(`
+        update digest_delivery_runs
+        set status = 'failed', error = $2, finished_at = now(), updated_at = now()
+        where id = $1
+      `, [runId, error instanceof Error ? error.message : String(error)]);
+      result.failed += 1;
+    }
+  }
+
+  return result;
+}
+
 async function createAlertDrafts(changeId: string) {
   const pool = getPool();
   const alert = await getAlertById(changeId);
   if (!alert) return;
   const recipients = await listNotificationRecipients(undefined, true);
-  const activeRecipients = recipients.filter((recipient) => recipient.immediate && matchesTopics(recipient.topics, alert.topics));
+  const activeRecipients = recipients.filter((recipient) => (recipient.immediate || recipient.dailyDigest) && matchesTopics(recipient.topics, alert.topics));
   for (const recipient of activeRecipients) {
     const email = renderAlertEmail({
       summary: alert,
@@ -858,11 +1088,12 @@ async function createAlertDrafts(changeId: string) {
         text_body = excluded.text_body
       returning id::text
     `, [recipient.organizationId, changeId, email.subject, email.html, email.text]);
+    const deliveryStatus = recipient.immediate ? "queued" : "digest_pending";
     await pool.query(`
       insert into alert_deliveries (alert_id, recipient_email, provider, status)
-      values ($1, $2, 'resend', 'queued')
+      values ($1, $2, 'resend', $3)
       on conflict (alert_id, recipient_email) do nothing
-    `, [rows[0].id, recipient.recipientEmail]);
+    `, [rows[0].id, recipient.recipientEmail, deliveryStatus]);
   }
 }
 
@@ -1001,6 +1232,21 @@ function fixtureAlerts(): AlertView[] {
 function matchesTopics(recipientTopics: string[], alertTopics: string[]) {
   if (recipientTopics.length === 0) return true;
   return recipientTopics.some((topic) => alertTopics.includes(topic));
+}
+
+export function stockholmDigestClock(now: Date) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour)
+  };
 }
 
 function normalizePlanId(planId?: string | null) {

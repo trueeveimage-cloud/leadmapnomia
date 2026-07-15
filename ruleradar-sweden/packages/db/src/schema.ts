@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const severityEnum = pgEnum("severity", ["low", "medium", "high", "critical"]);
 export const fetchStrategyEnum = pgEnum("fetch_strategy", ["html", "news_index", "pdf", "document_page", "browser_fallback"]);
@@ -185,6 +185,23 @@ export const alertDeliveries = pgTable("alert_deliveries", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull()
 }, (table) => ({
   alertDeliveryRecipientUnique: uniqueIndex("alert_deliveries_alert_recipient_unique").on(table.alertId, table.recipientEmail)
+}));
+
+export const digestDeliveryRuns = pgTable("digest_delivery_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  digestDate: date("digest_date").notNull(),
+  status: text("status").default("processing").notNull(),
+  itemCount: integer("item_count").default(0).notNull(),
+  providerMessageId: text("provider_message_id"),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+}, (table) => ({
+  organizationRecipientDateUnique: uniqueIndex("digest_delivery_runs_org_recipient_date_unique").on(table.organizationId, table.recipientEmail, table.digestDate),
+  statusIdx: index("digest_delivery_runs_status_idx").on(table.status, table.updatedAt)
 }));
 
 export const notificationSettings = pgTable("notification_settings", {

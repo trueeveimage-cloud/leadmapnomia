@@ -46,6 +46,12 @@ Expected result:
 2. Switch strategy to `browser_fallback` or monitor a more stable endpoint.
 3. Add a health note to the audit log.
 
+Run `npm run qa:sources` to test every enabled seeded source without creating snapshots or alerts. `/api/health/worker` returns HTTP 503 when an enabled source is stale or degraded.
+
+## Daily Digest
+
+Digest-only recipients accumulate approved changes with `digest_pending` delivery status. The worker sends one digest after 07:00 Europe/Stockholm and records the daily attempt in `digest_delivery_runs`. Failed digest attempts remain pending and are retried without marking the underlying alerts as sent.
+
 ## Billing Failure
 
 Use Stripe as the source of truth. Keep the workspace in grace period, send the billing portal link, then downgrade access at grace-period end.

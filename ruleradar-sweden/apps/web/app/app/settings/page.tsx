@@ -27,7 +27,7 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
           <div className="settings-card-head"><Bell size={21} /><div><h2>Alertleverans</h2><p>Välj primär mottagare och leveranssätt.</p></div></div>
           <form action="/api/settings/notifications" method="post">
             {first?.id ? <input type="hidden" name="recipientId" value={first.id} /> : null}
-            <label className="form-row">Leveranssätt<select name="deliveryMode" className="input" defaultValue={first?.immediate ? "immediate" : "digest"}><option value="immediate">Omedelbart för viktiga ändringar</option><option value="digest">Endast daglig sammanställning</option></select></label>
+            <label className="form-row">Leveranssätt<select name="deliveryMode" className="input" defaultValue={first?.immediate ? "immediate" : "digest"}><option value="immediate">Omedelbart efter godkänd ändring</option><option value="digest">Endast daglig sammanställning</option></select></label>
             <label className="form-row">Mottagarens e-post<input name="recipientEmail" className="input" type="email" defaultValue={first?.recipientEmail || session?.email || ""} required /></label>
             <label className="form-row">Ämnesfilter <span className="field-help">Lämna tomt för alla ämnen.</span><input name="topics" className="input" defaultValue={first?.topics.join(", ") || ""} placeholder="lön, arbetsgivaravgifter, AGI" /></label>
             <button className="button primary" type="submit">Spara alertinställningar</button>

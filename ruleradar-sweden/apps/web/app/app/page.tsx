@@ -94,5 +94,5 @@ function statusLabel(status: string) {
 }
 
 function deliveryLabel(status?: string) {
-  return ({ sent: "levererad", delivered: "levererad", not_sent: "inte skickad", queued: "köad", failed: "misslyckad" } as Record<string, string>)[status || ""] || status || "inte skickad";
+  return ({ sent: "levererad", delivered: "levererad", not_sent: "inte skickad", queued: "köad", queued_missing_resend_key: "köad, e-post saknas", digest_pending: "väntar på sammanställning", failed: "misslyckad" } as Record<string, string>)[status || ""] || status || "inte skickad";
 }

@@ -47,9 +47,17 @@ export function renderAlertEmail(input: AlertEmailInput) {
 }
 
 export function renderDailyDigestEmail(summaries: SummaryResult[], manageUrl: string) {
-  const subject = `RuleRadar daglig sammanställning: ${summaries.length} ändringar`;
-  const text = summaries.map((summary, index) => `${index + 1}. ${summary.source_name}: ${summary.summary_plain_english}\n${summary.source_url}`).join("\n\n");
-  const html = `<div style="font-family:Arial,sans-serif;line-height:1.55"><h1>Daglig sammanställning</h1>${summaries.map((summary) => `<article><h2>${escapeHtml(summary.source_name)}</h2><p>${escapeHtml(summary.summary_plain_english)}</p><p><a href="${escapeHtml(summary.source_url)}">Öppna källa</a></p></article>`).join("")}<p><a href="${escapeHtml(manageUrl)}">Hantera notifieringar</a></p></div>`;
+  const countLabel = summaries.length === 1 ? "1 ändring" : `${summaries.length} ändringar`;
+  const subject = `RuleRadar daglig sammanställning: ${countLabel}`;
+  const disclaimer = "Sammanställningen är information, inte juridisk rådgivning. Kontrollera alltid den officiella källan.";
+  const items = summaries.map((summary, index) => [
+    `${index + 1}. ${summary.source_name}: ${summary.summary_plain_english}`,
+    `Vem berörs: ${summary.who_is_affected}`,
+    `Åtgärd: ${summary.recommended_action}`,
+    summary.source_url
+  ].join("\n")).join("\n\n");
+  const text = `${items}\n\n${disclaimer}\nHantera notifieringar: ${manageUrl}`;
+  const html = `<div style="font-family:Inter,Arial,sans-serif;line-height:1.55;color:#17212b;max-width:680px;margin:0 auto;padding:24px"><h1 style="font-size:22px">Daglig sammanställning</h1><p>${escapeHtml(countLabel)} kräver er uppmärksamhet.</p>${summaries.map((summary) => `<article style="border-top:1px solid #d9e0e8;padding:16px 0"><h2 style="font-size:17px">${escapeHtml(summary.source_name)}</h2><p>${escapeHtml(summary.summary_plain_english)}</p><p><strong>Vem berörs:</strong> ${escapeHtml(summary.who_is_affected)}<br/><strong>Åtgärd:</strong> ${escapeHtml(summary.recommended_action)}</p><p><a href="${escapeHtml(summary.source_url)}">Öppna officiell källa</a></p></article>`).join("")}<p style="font-size:12px;color:#5d6b7a">${escapeHtml(disclaimer)}</p><p style="font-size:12px"><a href="${escapeHtml(manageUrl)}">Hantera notifieringar</a></p></div>`;
   return { subject, text, html };
 }
 

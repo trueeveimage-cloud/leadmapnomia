@@ -17,7 +17,7 @@ export default async function AdminSourcesPage({ searchParams }: { searchParams?
       {params?.saved ? <p className="form-success">Källan är sparad.</p> : null}
       <div className="card table-card">
         <table className="table"><thead><tr><th>Myndighet</th><th>Källa</th><th>Strategi</th><th>Ämnen</th><th>Status</th></tr></thead><tbody>{sources.map((source) => (
-          <tr key={source.id}><td data-label="Myndighet">{source.agency}</td><td data-label="Källa"><a className="source-link" href={source.url} target="_blank" rel="noreferrer">{source.name} <ExternalLink size={12} /></a></td><td data-label="Strategi">{source.strategy}</td><td data-label="Ämnen">{source.topics.join(", ")}</td><td data-label="Status"><span className={source.enabled ? "pill success" : "pill neutral"}>{source.enabled ? "Aktiv" : "Pausad"}</span><br /><span className="muted">{source.healthStatus || "okänd"}</span></td></tr>
+          <tr key={source.id}><td data-label="Myndighet">{source.agency}</td><td data-label="Källa"><a className="source-link" href={source.url} target="_blank" rel="noreferrer">{source.name} <ExternalLink size={12} /></a></td><td data-label="Strategi">{source.strategy}</td><td data-label="Ämnen">{source.topics.join(", ")}</td><td data-label="Status"><span className={source.enabled ? "pill success" : "pill neutral"}>{source.enabled ? "Aktiv" : "Pausad"}</span><br /><span className="muted">{source.healthStatus || "okänd"}</span><br /><span className="muted">{source.lastCheckedAt ? new Date(source.lastCheckedAt).toLocaleString("sv-SE") : "Aldrig kontrollerad"}</span></td></tr>
         ))}</tbody></table>
       </div>
       <section className="card source-form-card">

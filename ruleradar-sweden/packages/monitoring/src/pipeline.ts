@@ -1,6 +1,7 @@
 import {
   databaseConfigured,
   deliverApprovedAlerts,
+  deliverDailyDigests,
   finishSourceRun,
   getLatestSnapshot,
   listEnabledSources,
@@ -19,6 +20,7 @@ export interface ScanPipelineOptions {
   sourceLimit?: number;
   deliveryLimit?: number;
   deliverApproved?: boolean;
+  deliverDigests?: boolean;
 }
 
 export interface ScanPipelineResult {
@@ -32,10 +34,16 @@ export interface ScanPipelineResult {
     skipped: number;
     failed: number;
   };
+  digests: {
+    attempted: number;
+    sent: number;
+    skipped: number;
+    failed: number;
+  };
 }
 
 export async function runScanPipeline(options: ScanPipelineOptions = {}): Promise<ScanPipelineResult> {
-  const enabledSources = await listEnabledSources(options.sourceLimit ?? Number(process.env.SCAN_LIMIT || 5));
+  const enabledSources = await listEnabledSources(options.sourceLimit ?? positiveInt(process.env.SCAN_LIMIT));
   let changes = 0;
   let baselined = 0;
   let failures = 0;
@@ -108,6 +116,15 @@ export async function runScanPipeline(options: ScanPipelineOptions = {}): Promis
   const deliveries = options.deliverApproved === false
     ? { attempted: 0, sent: 0, skipped: 0, failed: 0 }
     : await deliverApprovedAlerts(options.deliveryLimit);
+  const digests = options.deliverApproved === false || options.deliverDigests === false
+    ? { attempted: 0, sent: 0, skipped: 0, failed: 0 }
+    : await deliverDailyDigests({ limit: options.deliveryLimit });
 
-  return { sources: enabledSources.length, baselined, changes, failures, deliveries };
+  return { sources: enabledSources.length, baselined, changes, failures, deliveries, digests };
+}
+
+function positiveInt(value?: string) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }

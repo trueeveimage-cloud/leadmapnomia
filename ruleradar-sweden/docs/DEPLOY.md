@@ -27,8 +27,9 @@ npm run worker
 6. Configure Stripe Customer Portal so customers can update payment methods from `/app/settings`.
 7. Configure Stripe webhook URL: `https://your-app.example/api/billing/webhook` and subscribe at minimum to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `invoice.payment_succeeded`, and `invoice.payment_action_required`.
 8. Configure Resend domain DNS, SPF, and DKIM before sending production alerts.
-9. Confirm all migrations through `0006_release_observability.sql` ran before testing signup, password reset, team invites, or Stripe webhooks.
+9. Confirm all migrations through `0007_digest_delivery_runs.sql` ran before testing signup, password reset, team invites, Stripe webhooks, or daily digests.
 10. Open `/admin` and require `5/5 system klara` before paid traffic is enabled.
+11. Open `/api/health/worker` and require HTTP 200 with no stale or degraded sources.
 
 ## Domain Cutover
 
@@ -52,6 +53,8 @@ Ship compressed logical backups to object storage nightly.
 ## Free-tier limitation
 
 The bundled monitoring worker runs every 30 minutes while the web instance is awake. Render free web services sleep during inactivity, so strict around-the-clock monitoring requires an always-on instance or an external scheduler calling `/api/cron/scan` with `SYSTEM_CRON_SECRET`.
+
+The worker scans every enabled source unless `SCAN_LIMIT` is deliberately configured. Digest-only recipients receive one consolidated email after 07:00 Europe/Stockholm when approved changes are pending.
 
 ## Zero-Downtime Notes
 

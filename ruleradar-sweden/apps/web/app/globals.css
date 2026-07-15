@@ -1812,6 +1812,34 @@ p {
   color: var(--blue);
 }
 
+.table-scroll {
+  overflow-x: auto;
+}
+
+.lead-message {
+  display: block;
+  max-width: 360px;
+  white-space: normal;
+}
+
+.lead-status-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.lead-status-form .input,
+.lead-status-form .button {
+  min-height: 38px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.empty-state.compact {
+  padding: 30px 20px;
+}
+
 .empty-state {
   padding: 52px 25px;
   text-align: center;
@@ -2203,7 +2231,7 @@ dd {
 
 .conversion-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 1px;
   margin-top: 18px;
   background: var(--line);
@@ -2991,6 +3019,11 @@ dd {
 
   .conversion-metrics {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .readiness-list > :last-child:nth-child(odd),
+  .conversion-metrics > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 
   .review-actions {
