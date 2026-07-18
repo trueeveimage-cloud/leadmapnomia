@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
+import AutomationDiagnosticsPanel from '@/components/AutomationDiagnosticsPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -412,6 +413,11 @@ export default function OutreachProgressPage() {
         <div className="mb-5">
           <LaunchReadinessPanel />
         </div>
+
+        <div className="mb-5">
+          <AutomationDiagnosticsPanel />
+        </div>
+
 
         <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-lg border border-primary/25 bg-primary/5 p-5">
