@@ -414,6 +414,11 @@ export default function OutreachProgressPage() {
           <LaunchReadinessPanel />
         </div>
 
+        <div className="mb-5">
+          <AutomationDiagnosticsPanel />
+        </div>
+
+
         <section className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-lg border border-primary/25 bg-primary/5 p-5">
             <div className="flex flex-wrap items-center gap-2">
