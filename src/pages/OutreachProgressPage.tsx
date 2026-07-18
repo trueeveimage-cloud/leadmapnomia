@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import LaunchReadinessPanel from '@/components/LaunchReadinessPanel';
+import AutomationDiagnosticsPanel from '@/components/AutomationDiagnosticsPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
