@@ -59,3 +59,16 @@ Use Stripe as the source of truth. Keep the workspace in grace period, send the 
 ## Customer Asks Why They Got An Alert
 
 Open the alert detail and show source URL, fetch timestamp, diff excerpt, summary JSON, delivery status, and review history.
+
+## Backup Verification And Restore Drill
+
+1. Run `npm run backup:logical` with `DATABASE_URL` and an offsite-synced `BACKUP_OUTPUT_DIR`.
+2. Run `npm run backup:verify` and require `ok: true`, a verified checksum, and a non-zero archive entry count.
+3. Confirm the archive and JSON manifest exist in access-controlled storage outside Render.
+4. Quarterly, create a temporary empty Postgres database and restore with `pg_restore --clean --if-exists --no-owner --no-privileges --dbname "$TEMP_DATABASE_URL" backup.dump`.
+5. Point a temporary app deployment at that database and require `/api/health` and `/api/health/worker` to pass.
+6. Record the date, archive name, operator, result, and deletion of the temporary database.
+
+## Retention Cleanup
+
+The worker runs the safe automated retention cleanup after each successful scan. Check logs for `retention_cleanup_complete` or `retention_cleanup_failed`. Do not bulk-delete source snapshots, customer accounts, billing records, or audit history without a reviewed customer/legal deletion request and a verified backup.

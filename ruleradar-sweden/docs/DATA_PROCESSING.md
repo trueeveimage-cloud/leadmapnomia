@@ -28,6 +28,8 @@ RuleRadar does not require employee-level payroll records, personal identity num
 - Anonymous conversion events: 13 months maximum.
 - Security and operational logs: 90 days unless an incident requires longer preservation.
 
+The monitoring worker enforces the low-risk portions of this baseline on every run: expired or used reset tokens and invitations older than 30 days, anonymous conversion events older than 13 months, and non-pilot/non-customer contact requests inactive for 12 months are deleted automatically. Source evidence, billing records, customer accounts, and audit history require a separate reviewed deletion process.
+
 ## Data Subject Requests
 
 1. Verify the requester and record scope/date.
@@ -45,3 +47,5 @@ RuleRadar does not require employee-level payroll records, personal identity num
 - Verify Resend sender domain and review subprocessors.
 - Confirm OpenAI API organization is covered by the current business terms and DPA.
 - Replace placeholder RuleRadar legal identity/contact details before broad public sales.
+
+The deployed app reads the final seller identity from `LEGAL_ENTITY_NAME`, `LEGAL_ORG_NUMBER`, `LEGAL_POSTAL_ADDRESS`, and `LEGAL_CONTACT_EMAIL`. The admin readiness panel remains incomplete until all four are present.

@@ -1,6 +1,6 @@
-import { Activity, AlertTriangle, Bot, CheckCircle2, CreditCard, Database, Mail, Radar } from "lucide-react";
-import { databaseConfigured, getAdminMetrics, getConversionMetrics, getWorkerHealth, listContactRequests } from "@ruleradar/db";
-import { loadConfig } from "@ruleradar/shared";
+import { Activity, AlertTriangle, Bot, Building2, CheckCircle2, CreditCard, Database, Mail, Radar } from "lucide-react";
+import { databaseConfigured, getAdminMetrics, getConversionMetrics, getMigrationStatus, getWorkerHealth, listContactRequests } from "@ruleradar/db";
+import { getReleaseReadiness, loadConfig } from "@ruleradar/shared";
 import { AppTabs } from "../ui";
 import { requireAdmin } from "../auth";
 
@@ -9,13 +9,15 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage({ searchParams }: { searchParams?: Promise<{ lead?: string }> }) {
   const params = await searchParams;
   await requireAdmin("/admin");
-  const [metrics, conversion, worker, leads] = await Promise.all([getAdminMetrics(), getConversionMetrics(), getWorkerHealth(), listContactRequests()]);
+  const [metrics, conversion, worker, leads, migrations] = await Promise.all([getAdminMetrics(), getConversionMetrics(), getWorkerHealth(), listContactRequests(), getMigrationStatus()]);
   const config = loadConfig();
+  const release = getReleaseReadiness(config);
   const readiness = [
-    { label: "Databas", ready: databaseConfigured(), icon: Database, detail: databaseConfigured() ? "Ansluten" : "DATABASE_URL saknas" },
+    { label: "Databas", ready: databaseConfigured() && migrations.ok, icon: Database, detail: !databaseConfigured() ? "DATABASE_URL saknas" : migrations.ok ? `${migrations.applied}/${migrations.expected} migrationer` : `${migrations.missing.length} migrationer saknas` },
     { label: "OpenAI", ready: Boolean(config.OPENAI_API_KEY), icon: Bot, detail: config.OPENAI_API_KEY ? config.OPENAI_MODEL : "API-nyckel saknas" },
-    { label: "E-post", ready: Boolean(config.RESEND_API_KEY && config.ADMIN_ALERT_EMAIL && !config.ALERT_FROM_EMAIL.includes("example.com")), icon: Mail, detail: config.RESEND_API_KEY ? "Resend ansluten" : "Resend saknas" },
-    { label: "Stripe", ready: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_WEBHOOK_SECRET && config.STRIPE_SOLO_PRICE_ID && config.STRIPE_TEAM_PRICE_ID && config.STRIPE_MULTI_OFFICE_PRICE_ID), icon: CreditCard, detail: config.STRIPE_WEBHOOK_SECRET ? "Checkout + webhook" : "Ofullständig konfiguration" },
+    { label: "E-post", ready: release.email.ready, icon: Mail, detail: release.email.ready ? "ruleradar.se verifierad" : release.email.senderDomain ? `Avsändardomän: ${release.email.senderDomain}` : "Resend eller avsändare saknas" },
+    { label: "Stripe", ready: release.stripe.ready, icon: CreditCard, detail: release.stripe.ready ? "Live checkout + webhook" : release.stripe.configured ? `Konfigurerad i ${release.stripe.mode}-läge` : "Ofullständig konfiguration" },
+    { label: "Juridisk identitet", ready: release.legal.ready, icon: Building2, detail: release.legal.ready ? config.LEGAL_ENTITY_NAME! : "Företagsnamn, org.nr, adress eller kontakt saknas" },
     { label: "Bevakningsmotor", ready: worker.ok, icon: Radar, detail: worker.lastScanAt ? `${worker.healthySources}/${worker.enabledSources} källor friska` : "Ingen slutförd scan" }
   ];
   const readyCount = readiness.filter((item) => item.ready).length;
@@ -51,7 +53,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: Promi
       <section className="ops-grid">
         <article className="card ops-card"><div className="card-header"><div><h2>Källflöde</h2><p className="muted">Faktisk hälsa och scanresultat från det senaste dygnet.</p></div><span className={worker.ok ? "pill success" : "pill danger"}>{worker.ok ? "Friskt" : "Åtgärd krävs"}</span></div><dl className="ops-list"><div><dt>Friska aktiva källor</dt><dd>{worker.healthySources}/{worker.enabledSources}</dd></div><div><dt>Skanningar senaste 24 h</dt><dd>{worker.scans24h}</dd></div><div><dt>Misslyckade senaste 24 h</dt><dd>{worker.failedScans24h}</dd></div><div><dt>Senaste skanning</dt><dd>{worker.lastScanAt ? new Date(worker.lastScanAt).toLocaleString("sv-SE") : "Saknas"}</dd></div></dl></article>
         <article className="card ops-card"><div className="card-header"><div><h2>E-postleverans</h2><p className="muted">Köade, skickade och misslyckade alertar.</p></div><span className={metrics.failedDeliveries > 0 ? "pill danger" : "pill success"}>{metrics.failedDeliveries > 0 ? "Åtgärd krävs" : "Ingen känd störning"}</span></div><dl className="ops-list"><div><dt>Skickade</dt><dd>{metrics.sentAlerts}</dd></div><div><dt>Köade</dt><dd>{metrics.queuedDeliveries}</dd></div><div><dt>Misslyckade</dt><dd>{metrics.failedDeliveries}</dd></div></dl></article>
-        <article className="card ops-card"><div className="card-header"><div><h2>Betalning</h2><p className="muted">Teknisk konfiguration för provperiod och abonnemang.</p></div><span className={readiness[3]!.ready ? "pill success" : "pill warning"}>{readiness[3]!.ready ? "Klar" : "Ofullständig"}</span></div><dl className="ops-list"><div><dt>Standardplan</dt><dd>Team</dd></div><div><dt>Provperiod</dt><dd>14 dagar</dd></div><div><dt>Aktiverade senaste 30 d</dt><dd>{conversion.activated}</dd></div><div><dt>Webhook</dt><dd>{config.STRIPE_WEBHOOK_SECRET ? "Konfigurerad" : "Saknas"}</dd></div></dl></article>
+        <article className="card ops-card"><div className="card-header"><div><h2>Betalning</h2><p className="muted">Teknisk konfiguration för provperiod och abonnemang.</p></div><span className={release.stripe.ready ? "pill success" : "pill warning"}>{release.stripe.ready ? "Live" : release.stripe.mode === "test" ? "Testläge" : "Ofullständig"}</span></div><dl className="ops-list"><div><dt>Standardplan</dt><dd>Team</dd></div><div><dt>Provperiod</dt><dd>14 dagar</dd></div><div><dt>Aktiverade senaste 30 d</dt><dd>{conversion.activated}</dd></div><div><dt>Webhook</dt><dd>{config.STRIPE_WEBHOOK_SECRET ? "Konfigurerad" : "Saknas"}</dd></div></dl></article>
       </section>
 
       <section className="readiness-panel card">

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { claimStripeWebhookEvent, completeStripeWebhookEvent, getOrganizationBillingContact, syncStripeSubscription } from "@ruleradar/db";
+import { claimStripeWebhookEvent, completeStripeWebhookEvent, getOrganizationBillingContact } from "@ruleradar/db";
 import { renderLifecycleEmail, sendEmail } from "@ruleradar/notifications";
 import { loadConfig, logger } from "@ruleradar/shared";
-import { subscriptionPeriodEnd } from "../stripe-subscription";
+import { reconcileStripeEvent } from "./reconciliation";
 
 export async function POST(request: NextRequest) {
   const config = loadConfig();
@@ -64,76 +64,4 @@ function organizationIdFromResult(result: unknown) {
   if (!result || typeof result !== "object" || !("organizationId" in result)) return null;
   const value = (result as { organizationId?: unknown }).organizationId;
   return typeof value === "string" ? value : null;
-}
-
-async function reconcileStripeEvent(event: Stripe.Event, config: ReturnType<typeof loadConfig>) {
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    return syncStripeSubscription({
-      organizationId: session.client_reference_id || session.metadata?.organizationId,
-      stripeCustomerId: asString(session.customer),
-      stripeSubscriptionId: asString(session.subscription),
-      planId: session.metadata?.plan,
-      status: "checkout_completed"
-    });
-  }
-
-  if (
-    event.type === "customer.subscription.created" ||
-    event.type === "customer.subscription.updated" ||
-    event.type === "customer.subscription.deleted"
-  ) {
-    const subscription = event.data.object as Stripe.Subscription;
-    const priceId = subscription.items?.data?.[0]?.price?.id;
-    return syncStripeSubscription({
-      organizationId: subscription.metadata?.organizationId,
-      stripeCustomerId: asString(subscription.customer),
-      stripeSubscriptionId: subscription.id,
-      planId: subscription.metadata?.plan || planFromPrice(priceId, config),
-      status: event.type === "customer.subscription.deleted" ? "canceled" : subscription.status,
-      currentPeriodEnd: subscriptionPeriodEnd(subscription)
-    });
-  }
-
-  if (
-    event.type === "invoice.payment_failed" ||
-    event.type === "invoice.payment_succeeded" ||
-    event.type === "invoice.payment_action_required"
-  ) {
-    const invoice = event.data.object as Stripe.Invoice;
-    const stripeInvoice = invoice as any;
-    const subscriptionId = asString(stripeInvoice.subscription);
-    const customerId = asString(invoice.customer);
-    if (!subscriptionId) {
-      return syncStripeSubscription({
-        stripeCustomerId: customerId,
-        planId: invoice.metadata?.plan,
-        status: event.type === "invoice.payment_failed" ? "past_due" : "invoice_paid"
-      });
-    }
-
-    const subscription = await new Stripe(config.STRIPE_SECRET_KEY!).subscriptions.retrieve(subscriptionId);
-    const priceId = subscription.items?.data?.[0]?.price?.id;
-    return syncStripeSubscription({
-      organizationId: subscription.metadata?.organizationId || invoice.metadata?.organizationId,
-      stripeCustomerId: asString(subscription.customer) || customerId,
-      stripeSubscriptionId: subscription.id,
-      planId: subscription.metadata?.plan || invoice.metadata?.plan || planFromPrice(priceId, config),
-      status: event.type === "invoice.payment_failed" || event.type === "invoice.payment_action_required" ? "past_due" : subscription.status,
-      currentPeriodEnd: subscriptionPeriodEnd(subscription)
-    });
-  }
-
-  return { mode: "ignored" as const };
-}
-
-function asString(value: string | { id: string } | null) {
-  if (!value) return null;
-  return typeof value === "string" ? value : value.id;
-}
-
-function planFromPrice(priceId: string | undefined, config: ReturnType<typeof loadConfig>) {
-  if (priceId === config.STRIPE_SOLO_PRICE_ID) return "solo";
-  if (priceId === config.STRIPE_MULTI_OFFICE_PRICE_ID) return "multi_office";
-  return "team";
 }

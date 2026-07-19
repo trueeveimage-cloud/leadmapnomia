@@ -19,10 +19,12 @@
     "qa:auth": "node scripts/auth-smoke.mjs",
     "qa:sources": "tsx scripts/source-health.ts",
     "qa:visual": "node scripts/visual-qa.mjs",
+    "qa:production": "node scripts/production-smoke.mjs",
     "db:migrate": "tsx packages/db/src/migrate.ts",
     "db:seed": "tsx packages/db/src/seed.ts",
     "scan:run": "tsx apps/worker/src/run-once.ts",
-    "backup:logical": "node scripts/logical-backup.mjs"
+    "backup:logical": "node scripts/logical-backup.mjs",
+    "backup:verify": "node scripts/verify-backup.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

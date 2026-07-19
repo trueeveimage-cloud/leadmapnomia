@@ -13,6 +13,14 @@ services:
       - key: OPENAI_MODEL
         value: gpt-5
       - key: ALERT_FROM_EMAIL
-        value: RuleRadar Sweden <alerts@example.com>
+        value: RuleRadar Sweden <alerts@ruleradar.se>
+      - key: LEGAL_ENTITY_NAME
+        sync: false
+      - key: LEGAL_ORG_NUMBER
+        sync: false
+      - key: LEGAL_POSTAL_ADDRESS
+        sync: false
+      - key: LEGAL_CONTACT_EMAIL
+        sync: false
     healthCheckPath: /api/health
     autoDeployTrigger: off

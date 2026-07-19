@@ -41,6 +41,23 @@ export interface WorkerHealth {
   staleAfterMinutes: number;
 }
 
+export const expectedMigrations = [
+  "0001_init.sql",
+  "0002_alert_delivery_uniqueness.sql",
+  "0003_subscription_reconciliation.sql",
+  "0004_public_launch.sql",
+  "0005_account_recovery_team.sql",
+  "0006_release_observability.sql",
+  "0007_digest_delivery_runs.sql"
+] as const;
+
+export interface MigrationStatus {
+  ok: boolean;
+  applied: number;
+  expected: number;
+  missing: string[];
+}
+
 export interface NotificationRecipientView {
   id: string;
   organizationId: string;
@@ -83,6 +100,13 @@ export interface DeliveryRunResult {
   sent: number;
   skipped: number;
   failed: number;
+}
+
+export interface RetentionCleanupResult {
+  passwordResetTokens: number;
+  organizationInvites: number;
+  conversionEvents: number;
+  contactRequests: number;
 }
 
 export interface DailyDigestOptions {
@@ -214,6 +238,61 @@ export async function getConversionMetrics() {
     signups: row.signups || 0,
     checkouts: row.checkouts || 0,
     activated: row.activated || 0
+  };
+}
+
+export async function getMigrationStatus(): Promise<MigrationStatus> {
+  if (!databaseConfigured()) {
+    return { ok: false, applied: 0, expected: expectedMigrations.length, missing: [...expectedMigrations] };
+  }
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query("select name from schema_migrations");
+    const appliedNames = new Set(rows.map((row) => String(row.name)));
+    const missing = expectedMigrations.filter((name) => !appliedNames.has(name));
+    return { ok: missing.length === 0, applied: expectedMigrations.length - missing.length, expected: expectedMigrations.length, missing };
+  } catch {
+    return { ok: false, applied: 0, expected: expectedMigrations.length, missing: [...expectedMigrations] };
+  }
+}
+
+export async function runRetentionCleanup(): Promise<RetentionCleanupResult> {
+  const empty = { passwordResetTokens: 0, organizationInvites: 0, conversionEvents: 0, contactRequests: 0 };
+  if (!databaseConfigured()) return empty;
+  const pool = getPool();
+  const { rows } = await pool.query(`
+    with deleted_password_tokens as (
+      delete from password_reset_tokens
+      where created_at < now() - interval '30 days'
+        and (used_at is not null or expires_at < now())
+      returning 1
+    ), deleted_invites as (
+      delete from organization_invites
+      where created_at < now() - interval '30 days'
+        and (accepted_at is not null or expires_at < now())
+      returning 1
+    ), deleted_conversion_events as (
+      delete from conversion_events
+      where created_at < now() - interval '13 months'
+      returning 1
+    ), deleted_contact_requests as (
+      delete from contact_requests
+      where updated_at < now() - interval '12 months'
+        and status not in ('pilot', 'won')
+      returning 1
+    )
+    select
+      (select count(*)::int from deleted_password_tokens) as password_reset_tokens,
+      (select count(*)::int from deleted_invites) as organization_invites,
+      (select count(*)::int from deleted_conversion_events) as conversion_events,
+      (select count(*)::int from deleted_contact_requests) as contact_requests
+  `);
+  const row = rows[0] || empty;
+  return {
+    passwordResetTokens: Number(row.password_reset_tokens || 0),
+    organizationInvites: Number(row.organization_invites || 0),
+    conversionEvents: Number(row.conversion_events || 0),
+    contactRequests: Number(row.contact_requests || 0)
   };
 }
 
