@@ -50,8 +50,10 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          lead_id: string | null
           message: string
           payload: Json
+          product: string
           read_at: string | null
           title: string
           type: string
@@ -59,8 +61,10 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          lead_id?: string | null
           message?: string
           payload?: Json
+          product?: string
           read_at?: string | null
           title: string
           type: string
@@ -68,8 +72,10 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          lead_id?: string | null
           message?: string
           payload?: Json
+          product?: string
           read_at?: string | null
           title?: string
           type?: string
@@ -147,6 +153,96 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_recipients: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          block_reason: string | null
+          campaign_id: string
+          channel: string
+          created_at: string
+          eligibility: Json
+          eligible: boolean
+          id: string
+          lead_id: string
+          product: string
+          provider_message_id: string | null
+          rendered_body: string | null
+          rendered_subject: string | null
+          review_state: string
+          reviewed_at: string | null
+          send_error: string | null
+          send_status: string
+          sent_at: string | null
+          to_email: string | null
+          to_phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          block_reason?: string | null
+          campaign_id: string
+          channel?: string
+          created_at?: string
+          eligibility?: Json
+          eligible?: boolean
+          id?: string
+          lead_id: string
+          product?: string
+          provider_message_id?: string | null
+          rendered_body?: string | null
+          rendered_subject?: string | null
+          review_state?: string
+          reviewed_at?: string | null
+          send_error?: string | null
+          send_status?: string
+          sent_at?: string | null
+          to_email?: string | null
+          to_phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          block_reason?: string | null
+          campaign_id?: string
+          channel?: string
+          created_at?: string
+          eligibility?: Json
+          eligible?: boolean
+          id?: string
+          lead_id?: string
+          product?: string
+          provider_message_id?: string | null
+          rendered_body?: string | null
+          rendered_subject?: string | null
+          review_state?: string
+          reviewed_at?: string | null
+          send_error?: string | null
+          send_status?: string
+          sent_at?: string | null
+          to_email?: string | null
+          to_phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_runs: {
         Row: {
           campaign_id: string
@@ -187,12 +283,17 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           audience_filter: Json
           batch_cap: number
           call_after_hours: number
+          channel: string
           cooldown_days: number
           created_at: string
           daily_cap: number
+          email_subject: string | null
           id: string
           name: string
           product: string
@@ -202,12 +303,17 @@ export type Database = {
           variables_used: Json | null
         }
         Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           audience_filter?: Json
           batch_cap?: number
           call_after_hours?: number
+          channel?: string
           cooldown_days?: number
           created_at?: string
           daily_cap?: number
+          email_subject?: string | null
           id?: string
           name: string
           product?: string
@@ -217,12 +323,17 @@ export type Database = {
           variables_used?: Json | null
         }
         Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           audience_filter?: Json
           batch_cap?: number
           call_after_hours?: number
+          channel?: string
           cooldown_days?: number
           created_at?: string
           daily_cap?: number
+          email_subject?: string | null
           id?: string
           name?: string
           product?: string
@@ -1031,6 +1142,14 @@ export type Database = {
     Functions: {
       acquire_outreach_lock: {
         Args: { p_lead_id: string; p_manual_unlock?: boolean; p_method: string }
+        Returns: Json
+      }
+      normalize_business_identity: {
+        Args: { p_city?: string; p_name: string }
+        Returns: string
+      }
+      unlock_outreach_identity: {
+        Args: { p_lead_id: string; p_method: string; p_reason: string }
         Returns: Json
       }
     }
