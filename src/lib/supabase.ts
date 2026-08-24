@@ -324,7 +324,8 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export async function setSetting(key: string, value: string) {
-  await supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+  const { error } = await supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+  if (error) throw error;
 }
 
 export async function acquireOutreachLock(leadId: string, method: 'email' | 'sms' | 'call' | 'ai_call') {

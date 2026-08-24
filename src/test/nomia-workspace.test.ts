@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNomiaPipelineStage, isDoNotContact, isSwedishLead, renderNomiaTemplate } from '../lib/nomiaWorkspace';
+import { getNomiaCallOutcome, getNomiaPipelineStage, isDoNotContact, isSwedishLead, renderNomiaTemplate } from '../lib/nomiaWorkspace';
 
 describe('Nomia workspace rules', () => {
   it('recognizes Sweden from explicit country or phone', () => {
@@ -31,5 +31,12 @@ describe('Nomia workspace rules', () => {
       name: 'Acme AB', owner_name: 'Anna', city: 'Malmo',
     });
     expect(rendered).toBe('Hej Anna at Acme AB in Malmo');
+  });
+
+  it('normalizes old and new manual call results for analytics', () => {
+    expect(getNomiaCallOutcome({ type: 'manual_call_completed', payload: { outcome: 'no_answer' } })).toBe('no_answer');
+    expect(getNomiaCallOutcome({ type: 'call', payload: { outcome: 'answered', status: 'interested' } })).toBe('interested');
+    expect(getNomiaCallOutcome({ type: 'call', payload: { outcome: 'busy' } })).toBe('callback');
+    expect(getNomiaCallOutcome({ type: 'manual_call_started', payload: {} })).toBeNull();
   });
 });

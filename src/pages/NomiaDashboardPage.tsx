@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarCheck, CheckCircle2, Clock3, Mail, PhoneCall, RefreshCw, ShieldAlert, Users } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
-import { fetchNomiaWorkspaceSnapshot, getNomiaPipelineStage, isDoNotContact, isSwedishLead } from '@/lib/nomiaWorkspace';
+import { fetchNomiaWorkspaceSnapshot, getNomiaCallOutcome, getNomiaPipelineStage, isDoNotContact, isSwedishLead } from '@/lib/nomiaWorkspace';
 import type { Lead } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -47,13 +47,23 @@ export default function NomiaDashboardPage() {
     const meetingLeadIds = new Set(appointments.filter(a => a.status !== 'cancelled').map(a => a.lead_id));
     const now = Date.now();
     const endToday = new Date(); endToday.setHours(23, 59, 59, 999);
+    const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
     const eligibleCalls = leads.filter(l => isSwedishLead(l) && !!l.phone && !isDoNotContact(l) && ['not_contacted', 'callback'].includes(l.status));
     const followups = leads.filter(l => l.next_action_at && new Date(l.next_action_at).getTime() <= endToday.getTime() && !isDoNotContact(l));
     const unreadReplies = leads.filter(l => l.last_inbound_at && (!l.read_at || new Date(l.last_inbound_at) > new Date(l.read_at)));
     const meetings = appointments.filter(a => a.status !== 'cancelled' && new Date(a.scheduled_at).getTime() >= now);
     const won = leads.filter(l => getNomiaPipelineStage(l, meetingLeadIds.has(l.id)) === 'won');
     const reviewBatches = (snapshot?.campaigns || []).filter(c => c.channel === 'email' && ['ready_for_review', 'approved'].includes(c.approval_status));
-    return { leads, eligibleCalls, followups, unreadReplies, meetings, won, reviewBatches };
+    const callResultsToday = (snapshot?.activities || []).map(activity => ({ ...activity, outcome: getNomiaCallOutcome(activity) })).filter(activity => activity.outcome && new Date(activity.created_at).getTime() >= startToday.getTime());
+    const callOutcomes = {
+      interested: callResultsToday.filter(activity => activity.outcome === 'interested').length,
+      callback: callResultsToday.filter(activity => activity.outcome === 'callback').length,
+      noAnswer: callResultsToday.filter(activity => activity.outcome === 'no_answer').length,
+      notInterested: callResultsToday.filter(activity => activity.outcome === 'not_interested').length,
+      demos: callResultsToday.filter(activity => activity.outcome === 'demo').length,
+      wrongNumbers: callResultsToday.filter(activity => activity.outcome === 'wrong_number').length,
+    };
+    return { leads, eligibleCalls, followups, unreadReplies, meetings, won, reviewBatches, callResultsToday, callOutcomes };
   }, [snapshot]);
 
   return (
@@ -78,6 +88,24 @@ export default function NomiaDashboardPage() {
           <Metric label="Meetings" value={stats.meetings.length} detail="Upcoming booked meetings" icon={CalendarCheck} tone="green" />
           <Metric label="Closed won" value={stats.won.length} detail="Website sales" icon={CheckCircle2} tone="green" />
         </div>
+
+        <section className="mt-5 border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div><h2 className="text-sm font-semibold">Today's call results</h2><p className="text-xs text-muted-foreground">Saved by the Nomia Call Desk.</p></div>
+            <Link to="/nomia/analytics" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">Full analytics <ArrowRight size={13} /></Link>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-4 lg:grid-cols-7">
+            {[
+              ['Calls', stats.callResultsToday.length],
+              ['Interested', stats.callOutcomes.interested],
+              ['Callbacks', stats.callOutcomes.callback],
+              ['No answer', stats.callOutcomes.noAnswer],
+              ['Not interested', stats.callOutcomes.notInterested],
+              ['Demo requests', stats.callOutcomes.demos],
+              ['Wrong numbers', stats.callOutcomes.wrongNumbers],
+            ].map(([label, value]) => <div key={String(label)} className="px-4 py-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-lg font-semibold">{Number(value).toLocaleString()}</div></div>)}
+          </div>
+        </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
           <section className="border border-border bg-card">

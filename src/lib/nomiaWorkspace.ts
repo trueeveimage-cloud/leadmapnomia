@@ -86,20 +86,46 @@ export type NomiaMessageSummary = {
   created_at: string;
 };
 
+export type NomiaActivitySummary = {
+  id: string;
+  lead_id: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type NomiaCallOutcome = 'interested' | 'callback' | 'no_answer' | 'not_interested' | 'demo' | 'wrong_number';
+
+export function getNomiaCallOutcome(activity: Pick<NomiaActivitySummary, 'type' | 'payload'>): NomiaCallOutcome | null {
+  if (!['call', 'manual_call_completed'].includes(activity.type)) return null;
+  const payload = activity.payload || {};
+  const outcome = String(payload.outcome || '').toLowerCase().replace(/\s+/g, '_');
+  const status = String(payload.status || '').toLowerCase().replace(/\s+/g, '_');
+  if (outcome.includes('wrong_number')) return 'wrong_number';
+  if (outcome.includes('demo') || status.includes('demo')) return 'demo';
+  if (outcome.includes('not_interested') || status.includes('not_interested')) return 'not_interested';
+  if (outcome.includes('not_answered') || outcome.includes('no_answer')) return 'no_answer';
+  if (outcome.includes('callback') || outcome === 'busy' || status === 'callback') return 'callback';
+  if (outcome === 'interested' || status === 'interested') return 'interested';
+  return null;
+}
+
 export async function fetchNomiaWorkspaceSnapshot() {
   const client = supabase as any;
-  const [leadsResult, appointmentsResult, campaignsResult, messagesResult] = await Promise.all([
+  const [leadsResult, appointmentsResult, campaignsResult, messagesResult, activitiesResult] = await Promise.all([
     client.from('leads').select('*').eq('product', 'nomia').order('created_at', { ascending: false }).limit(6000),
     client.from('lead_appointments').select('id,lead_id,title,scheduled_at,status,leads!inner(product)').eq('leads.product', 'nomia').order('scheduled_at', { ascending: true }).limit(1000),
     client.from('campaigns').select('id,name,channel,approval_status,status,created_at').eq('product', 'nomia').order('created_at', { ascending: false }).limit(500),
     client.from('message_logs').select('id,lead_id,direction,channel,status,created_at').eq('product', 'nomia').order('created_at', { ascending: false }).limit(5000),
+    client.from('activities').select('id,lead_id,type,payload,created_at,leads!inner(product)').eq('leads.product', 'nomia').in('type', ['call', 'manual_call_completed']).order('created_at', { ascending: false }).limit(10000),
   ]);
-  const error = leadsResult.error || appointmentsResult.error || campaignsResult.error || messagesResult.error;
+  const error = leadsResult.error || appointmentsResult.error || campaignsResult.error || messagesResult.error || activitiesResult.error;
   if (error) throw error;
   return {
     leads: (leadsResult.data || []) as Lead[],
     appointments: (appointmentsResult.data || []) as NomiaAppointment[],
     campaigns: (campaignsResult.data || []) as NomiaCampaignSummary[],
     messages: (messagesResult.data || []) as NomiaMessageSummary[],
+    activities: (activitiesResult.data || []) as NomiaActivitySummary[],
   };
 }
