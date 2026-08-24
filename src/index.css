@@ -48,10 +48,17 @@
     /* Custom CRM tokens */
     --green: 0 0% 88%;
     --green-foreground: 0 0% 100%;
-    --amber: 0 0% 64%;
-    --amber-foreground: 0 0% 0%;
+    --amber: 38 92% 55%;
+    --amber-foreground: 30 40% 8%;
     --red: 0 72% 55%;
     --red-foreground: 0 0% 100%;
+
+    /* Nomia accents */
+    --emerald: 158 62% 42%;
+    --emerald-foreground: 160 40% 96%;
+    --cobalt: 217 78% 58%;
+    --cobalt-foreground: 220 40% 98%;
+
     --purple: 0 0% 76%;
     --purple-foreground: 0 0% 100%;
     --cyan: 0 0% 72%;
