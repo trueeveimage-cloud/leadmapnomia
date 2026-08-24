@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Lead, updateLead, logActivity } from '@/lib/supabase';
+import { Lead, updateLead, logActivity, unlockOutreachIdentity } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,9 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
   const [newUrl, setNewUrl] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [unlockReason, setUnlockReason] = useState('');
+  const [unlockMethod, setUnlockMethod] = useState<'email' | 'call'>('call');
+  const [unlocking, setUnlocking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const notesTimer = useRef<ReturnType<typeof setTimeout>>();
   const hasAiCallResult = !!(lead.retell_call_id || lead.call_status || lead.call_summary || lead.call_transcript);
@@ -301,6 +304,36 @@ export function LeadDetailPanel({ lead, onUpdate }: Props) {
       </div>
 
       {/* Combined timeline */}
+      <div className="rounded-md border border-amber-400/20 bg-amber-400/5 p-3">
+        <div className="text-xs font-semibold uppercase tracking-wider text-amber-300">Manual outreach unlock</div>
+        <p className="mt-1 text-[11px] text-muted-foreground">Use only when you intentionally need to contact this business again. The reason is permanently logged.</p>
+        <div className="mt-2 flex gap-2">
+          <select value={unlockMethod} onChange={e => setUnlockMethod(e.target.value as 'email' | 'call')} className="h-8 rounded-md border border-border bg-background px-2 text-xs">
+            <option value="call">Phone call</option>
+            <option value="email">Email</option>
+          </select>
+          <Input value={unlockReason} onChange={e => setUnlockReason(e.target.value)} placeholder="Reason for contacting again" className="h-8 text-xs" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 gap-1.5"
+            disabled={unlocking || unlockReason.trim().length < 8}
+            onClick={async () => {
+              setUnlocking(true);
+              try {
+                await unlockOutreachIdentity(lead.id, unlockMethod, unlockReason);
+                toast.success('Outreach identity unlocked and logged');
+                setUnlockReason('');
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Unlock failed');
+              } finally { setUnlocking(false); }
+            }}
+          >
+            <RotateCcw size={12} /> Unlock
+          </Button>
+        </div>
+      </div>
+
       <div>
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Timeline</div>
         <LeadTimeline leadId={lead.id} />

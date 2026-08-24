@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
-import { updateLead, Lead } from '@/lib/supabase';
+import { updateLead, Lead, getActiveProduct, getSetting } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { Inbox, MessageCircle, ChevronRight, ExternalLink, Phone, Mail, MapPin, Globe, Send, X, RefreshCw, BellRing, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
@@ -50,6 +50,7 @@ export default function InboxPage() {
       const { data, error } = await supabase
         .from('leads')
         .select('id, name, category, status, last_inbound_at, read_at, last_message_preview, phone, last_outbound_at')
+        .eq('product', getActiveProduct())
         .not('last_inbound_at', 'is', null);
       if (error) throw error;
       const unread = (data || []).filter(l => {
@@ -80,6 +81,7 @@ export default function InboxPage() {
         .from('message_logs')
         .select('*, leads!message_logs_lead_id_fkey(name, category, status)')
         .eq('direction', 'inbound')
+        .eq('product', getActiveProduct())
         .order('created_at', { ascending: false })
         .limit(200);
       if (error) throw error;
@@ -100,6 +102,7 @@ export default function InboxPage() {
       const { data, error } = await supabase
         .from('message_logs')
         .select('lead_id, body, created_at, direction, leads!message_logs_lead_id_fkey(name, category, status, last_inbound_at, last_outbound_at)')
+        .eq('product', getActiveProduct())
         .order('created_at', { ascending: false })
         .limit(1000);
       if (error) throw error;
@@ -213,7 +216,7 @@ export default function InboxPage() {
   // Load lead detail + conversation when selected
   useEffect(() => {
     if (!selectedLeadId) { setLeadDetail(null); setConversation([]); return; }
-    supabase.from('leads').select('*').eq('id', selectedLeadId).single()
+    supabase.from('leads').select('*').eq('id', selectedLeadId).eq('product', getActiveProduct()).single()
       .then(({ data }) => setLeadDetail(data as Lead | null));
     supabase.from('message_logs').select('*').eq('lead_id', selectedLeadId)
       .order('created_at', { ascending: true }).limit(50)
@@ -251,18 +254,24 @@ export default function InboxPage() {
     if (!selectedLeadId || !replyText.trim()) return;
     setSending(true);
     try {
+      if (await getSetting('outreach_master_paused') !== 'false') throw new Error('Outreach is paused in Nomia settings.');
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ leadId: selectedLeadId, body: replyText.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to send');
-      toast.success('SMS sent');
+      const lastInbound = [...conversation].reverse().find((item: any) => item.direction === 'inbound');
+      if (getActiveProduct() === 'nomia' && lastInbound?.channel === 'email' && leadDetail?.email) {
+        if (await getSetting('nomia_gmail_paused') !== 'false') throw new Error('Nomia Gmail is paused in settings.');
+        const { data, error } = await supabase.functions.invoke('send-gmail', { body: { leadId: selectedLeadId, to: leadDetail.email, subject: `Re: ${leadDetail.name}`, body: replyText.trim(), allowFollowUp: true } });
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Failed to send email reply');
+        toast.success('Email reply sent');
+      } else {
+        if (getActiveProduct() === 'nomia') throw new Error('Legacy Nomia SMS sending is paused. SMS history remains visible.');
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ leadId: selectedLeadId, body: replyText.trim() }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Failed to send');
+        toast.success('SMS sent');
+      }
       setReplyText('');
       // Mark as read since we just replied
       await supabase.from('leads').update({ read_at: new Date().toISOString() } as any).eq('id', selectedLeadId);

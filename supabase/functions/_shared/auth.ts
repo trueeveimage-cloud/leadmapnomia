@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-/** Validate a Supabase JWT from the Authorization header. Returns null on success, or a Response on failure. */
+/** Validate an owner JWT from the Authorization header. Returns null on success, or a Response on failure. */
 export async function requireUserJwt(req: Request, corsHeaders: Record<string, string>): Promise<Response | null> {
   const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
   if (!authHeader?.toLowerCase().startsWith('bearer ')) {
@@ -21,6 +21,12 @@ export async function requireUserJwt(req: Request, corsHeaders: Record<string, s
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const { data: isOwner, error: ownerError } = await sb.rpc('is_crm_owner');
+    if (ownerError || !isOwner) {
+      return new Response(JSON.stringify({ error: 'Owner access required' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     return null;
   } catch {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -34,13 +40,7 @@ export function requireCronOrService(req: Request, corsHeaders: Record<string, s
   const provided = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   const cronSecret = Deno.env.get('CRON_SECRET') || '';
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-  const publishableKey = Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || '';
-  // Legacy long-form publishable JWT still used by existing pg_cron jobs.
-  // This is a publishable (anon-role) token, safe to keep in source.
-  const legacyAnonJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sZnVjZHdtZWdkbmN6d3BnYWVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NTA1MjAsImV4cCI6MjA4NzAyNjUyMH0.93fafDWMxJ7KYCD9NRybKRP1TOQ_krGcGyJWnKSwTu0';
-  const accepted = [serviceKey, cronSecret, anonKey, publishableKey, legacyAnonJwt].filter(Boolean);
-  if (!provided || !accepted.includes(provided)) {
+  if (!provided || (provided !== serviceKey && (!cronSecret || provided !== cronSecret))) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -48,12 +48,9 @@ export function requireCronOrService(req: Request, corsHeaders: Record<string, s
   return null;
 }
 
-/** Allow scheduled/service calls, or a valid Supabase JWT from the CRM UI. */
+/** Allow scheduled/service calls, or an owner JWT from the CRM UI. */
 export async function requireCronServiceOrUserJwt(req: Request, corsHeaders: Record<string, string>): Promise<Response | null> {
   const cronOrServiceFail = requireCronOrService(req, corsHeaders);
   if (!cronOrServiceFail) return null;
-  const provided = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-  if (provided && anonKey && provided === anonKey) return null;
   return await requireUserJwt(req, corsHeaders);
 }

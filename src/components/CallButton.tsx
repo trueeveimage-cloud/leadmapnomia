@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lead, LeadStatus, updateLead, logActivity, createNotification } from '@/lib/supabase';
+import { Lead, LeadStatus, updateLead, logActivity, createNotification, acquireOutreachLock, getSetting } from '@/lib/supabase';
 import { useCRM } from '@/context/CRMContext';
 import { Button } from '@/components/ui/button';
 import { Bot, Check, Copy, Loader2, Phone, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { DemoFormModal } from './DemoFormModal';
 import { supabase } from '@/integrations/supabase/client';
 import { getOutreachBlockReason } from '@/lib/outreachLock';
+import { AI_COLD_CALLS_DISABLED } from '@/lib/disabledFeatures';
 
 const CALL_OUTCOMES = [
   { key: 'answered', label: 'Answered', color: 'hsl(142 69% 45%)', status: 'answered' as LeadStatus },
@@ -59,6 +60,7 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   const aiCallBlockReason = (() => {
+    if (AI_COLD_CALLS_DISABLED) return 'AI cold calls disabled after failed sales test.';
     if (!(lead.phone_e164 || lead.phone)) return 'This lead has no phone number.';
     if (lead.outreach_opt_out || lead.do_not_contact) return 'This lead is marked Do not contact.';
     if (lead.call_status === 'Calling') return 'This lead is already being called.';
@@ -69,14 +71,29 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
   const unlockWarning = (reason: string) =>
     window.confirm(`${reason}\n\nUnlocking can contact the same business twice. Continue anyway?`);
 
-  const handleCall = () => {
-    // Always open phone app immediately
-    window.location.href = `tel:${lead.phone}`;
-    // Then show outcome popup
-    setStep('outcome');
+  const handleCall = async () => {
+    try {
+      if (await getSetting('outreach_master_paused') !== 'false') {
+        toast.error('Outreach is paused. Unpause it from Nomia settings before calling.');
+        return;
+      }
+      const lock = await acquireOutreachLock(lead.id, 'call');
+      if (!lock?.allowed) {
+        toast.error(`Call blocked: ${String(lock?.reason || 'outreach locked').replace(/_/g, ' ')}`);
+        return;
+      }
+      window.location.href = `tel:${lead.phone}`;
+      setStep('outcome');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not verify call safety');
+    }
   };
 
   const startAiCall = async () => {
+    if (AI_COLD_CALLS_DISABLED) {
+      toast.error('AI cold calls are disabled. Use manual calling only.');
+      return;
+    }
     const blockReason = aiCallBlockReason || getOutreachBlockReason(lead, 'ai_call');
     if (aiCallBlockReason) {
       toast.error(aiCallBlockReason);
@@ -276,10 +293,12 @@ export function CallButton({ lead, onUpdate }: CallButtonProps) {
               >
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   {aiBusy ? <Loader2 size={14} className="animate-spin text-primary" /> : <Bot size={14} className="text-primary" />}
-                  Let AI call
+                  {AI_COLD_CALLS_DISABLED ? 'AI calls disabled' : 'Let AI call'}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Retell calls the lead and saves the result/summary in CRM.
+                  {AI_COLD_CALLS_DISABLED
+                    ? 'Disabled because the cold-call test did not produce sales.'
+                    : 'Retell calls the lead and saves the result/summary in CRM.'}
                 </div>
                 {aiCallBlockReason && <div className="mt-2 text-xs text-red-400">{aiCallBlockReason}</div>}
               </button>

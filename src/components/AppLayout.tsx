@@ -2,9 +2,11 @@ import React from 'react';
 import Sidebar from './Sidebar';
 import { useCRM } from '@/context/CRMContext';
 import { Menu } from 'lucide-react';
+import { useProduct } from '@/context/ProductContext';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useCRM();
+  const { product } = useProduct();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -32,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <span className="font-bold text-sm text-foreground">CRM</span>
+          <span className="font-semibold text-sm text-foreground">{product === 'nomia' ? 'Nomia CRM' : 'Leadmap AI'}</span>
         </div>
         {children}
       </main>

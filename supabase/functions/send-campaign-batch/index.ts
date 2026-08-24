@@ -50,6 +50,10 @@ Deno.serve(async (req) => {
       if (authErr || !user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
       }
+      const { data: isOwner } = await supabase.rpc('is_crm_owner');
+      if (!isOwner) {
+        return new Response(JSON.stringify({ error: 'Owner access required' }), { status: 403, headers: corsHeaders });
+      }
     }
 
     const { campaignId, batchSize, countries: requestedCountries } = await req.json();
@@ -67,11 +71,28 @@ Deno.serve(async (req) => {
 
     const dbClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+    const { data: pauseRows, error: pauseError } = await dbClient
+      .from('settings')
+      .select('key,value')
+      .in('key', ['outreach_master_paused', 'nomia_sms_paused']);
+    if (pauseError) throw pauseError;
+    const pauses = Object.fromEntries((pauseRows || []).map((row: any) => [row.key, row.value]));
+    if (pauses.outreach_master_paused !== 'false' || pauses.nomia_sms_paused !== 'false') {
+      return new Response(JSON.stringify({ error: 'SMS outreach is paused' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Fetch campaign
     const { data: campaign, error: campErr } = await dbClient
       .from('campaigns').select('*').eq('id', campaignId).single();
     if (campErr || !campaign) {
       return new Response(JSON.stringify({ error: 'Campaign not found' }), { status: 404, headers: corsHeaders });
+    }
+    if (campaign.channel !== 'sms' || campaign.approval_status !== 'approved') {
+      return new Response(JSON.stringify({ error: 'Campaign must be an approved SMS campaign' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const filter = campaign.audience_filter || {};
@@ -231,6 +252,15 @@ Deno.serve(async (req) => {
         });
 
         const e164 = normalizeToE164(toNumber, lead.address);
+        const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
+          p_lead_id: lead.id,
+          p_method: 'sms',
+          p_manual_unlock: false,
+        });
+        if (lockError || !lockResult?.allowed) {
+          stats.skipped_duplicate++;
+          continue;
+        }
         stats.attempted++;
 
         if (useTwilio) {

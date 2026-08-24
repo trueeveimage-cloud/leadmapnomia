@@ -19,8 +19,11 @@ import {
   getActiveProduct,
   logActivity,
   updateLead,
+  acquireOutreachLock,
+  getSetting,
   type Lead,
 } from '@/lib/supabase';
+import { AI_COLD_CALLS_DISABLED } from '@/lib/disabledFeatures';
 
 type ManualCallModalProps = {
   open: boolean;
@@ -125,6 +128,11 @@ export function ManualCallModal({ open, onOpenChange, onDone }: ManualCallModalP
     try {
       const lead = await ensureLead();
       if (!lead) throw new Error('Could not create the lead.');
+      if (await getSetting('outreach_master_paused') !== 'false') {
+        throw new Error('Outreach is paused. Unpause it from Nomia settings before calling.');
+      }
+      const lock = await acquireOutreachLock(lead.id, 'call');
+      if (!lock?.allowed) throw new Error(`Call blocked: ${String(lock?.reason || 'outreach locked').replace(/_/g, ' ')}`);
       const updated = await updateLead(lead.id, {
         call_attempts: (lead.call_attempts || 0) + 1,
         last_contacted_at: new Date().toISOString(),
@@ -146,12 +154,16 @@ export function ManualCallModal({ open, onOpenChange, onDone }: ManualCallModalP
   };
 
   const callWithAi = async () => {
+    if (AI_COLD_CALLS_DISABLED) {
+      toast.error('AI cold calls are disabled. Use manual calling only.');
+      return;
+    }
     setBusy('ai');
     try {
       const lead = await ensureLead();
       if (!lead) throw new Error('Could not create the lead.');
       const { data, error } = await supabase.functions.invoke('retell-start-call', {
-        body: { leadId: lead.id, manualUnlock: true },
+        body: { leadId: lead.id, manualUnlock: false },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.message || data.error);
@@ -251,13 +263,15 @@ export function ManualCallModal({ open, onOpenChange, onDone }: ManualCallModalP
             <Button
               type="button"
               className="h-auto justify-start gap-2 py-3"
-              disabled={!phoneValid || !!busy}
+              disabled={!phoneValid || !!busy || AI_COLD_CALLS_DISABLED}
               onClick={callWithAi}
             >
               {busy === 'ai' ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
               <span className="text-left">
-                <span className="block text-sm font-semibold">AI calls</span>
-                <span className="block text-xs opacity-80">Save result in CRM</span>
+                <span className="block text-sm font-semibold">{AI_COLD_CALLS_DISABLED ? 'AI disabled' : 'AI calls'}</span>
+                <span className="block text-xs opacity-80">
+                  {AI_COLD_CALLS_DISABLED ? 'Failed sales test' : 'Save result in CRM'}
+                </span>
               </span>
             </Button>
           </div>

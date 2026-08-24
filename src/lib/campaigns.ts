@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Country } from '@/lib/cities';
 import { detectLeadCountry } from '@/lib/countryRouting';
+import { getActiveProduct, type Product } from '@/lib/supabase';
 
 type LeadEligibilityRow = {
   id: string;
@@ -42,6 +43,11 @@ export interface Campaign {
   status: 'draft' | 'running' | 'paused' | 'completed';
   created_at: string;
   updated_at: string;
+  product: Product;
+  channel: 'email' | 'sms' | 'ai_call';
+  approval_status: 'draft' | 'ready_for_review' | 'approved' | 'cancelled';
+  approved_at: string | null;
+  approved_by: string | null;
 }
 
 export interface CampaignRun {
@@ -55,15 +61,15 @@ export interface CampaignRun {
 }
 
 export async function fetchCampaigns(): Promise<Campaign[]> {
-  const { data, error } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('campaigns').select('*').eq('product', getActiveProduct()).order('created_at', { ascending: false });
   if (error) throw error;
-  return data as Campaign[];
+  return data as unknown as Campaign[];
 }
 
 export async function fetchCampaign(id: string): Promise<Campaign> {
   const { data, error } = await supabase.from('campaigns').select('*').eq('id', id).single();
   if (error) throw error;
-  return data as Campaign;
+  return data as unknown as Campaign;
 }
 
 export async function createCampaign(campaign: Partial<Campaign>): Promise<Campaign> {
@@ -74,7 +80,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   };
   const { data, error } = await supabase.from('campaigns').insert(payload as any).select().single();
   if (error) throw error;
-  return data as Campaign;
+  return data as unknown as Campaign;
 }
 
 export async function updateCampaign(id: string, updates: Partial<Campaign>): Promise<Campaign> {
@@ -83,7 +89,7 @@ export async function updateCampaign(id: string, updates: Partial<Campaign>): Pr
   if (updates.variables_used) payload.variables_used = JSON.parse(JSON.stringify(updates.variables_used));
   const { data, error } = await supabase.from('campaigns').update(payload).eq('id', id).select().single();
   if (error) throw error;
-  return data as Campaign;
+  return data as unknown as Campaign;
 }
 
 export async function deleteCampaign(id: string): Promise<void> {

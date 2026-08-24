@@ -3,10 +3,11 @@ import { detectLeadCountry, shouldNeedCall } from "@/lib/countryRouting";
 
 export type Product = 'nomia' | 'leadmap';
 
-/** Read currently active product from localStorage (set by ProductContext). Defaults to Leadmap. */
+/** Read currently active product from localStorage (set by ProductContext). Defaults to Nomia. */
 export function getActiveProduct(): Product {
-  if (typeof window === 'undefined') return 'leadmap';
-  return ((localStorage.getItem('crm.activeProduct') as Product) || 'leadmap');
+  if (typeof window === 'undefined') return 'nomia';
+  const stored = localStorage.getItem('crm.activeProduct');
+  return stored === 'leadmap' || stored === 'nomia' ? stored : 'nomia';
 }
 
 const MOBILE_REGEX = /^(070|072|073|076|079|\+46(70|72|73|76|79)|46(70|72|73|76|79))/;
@@ -61,6 +62,8 @@ export interface Lead {
   tags: string[];
   created_at: string;
   updated_at: string;
+  product?: Product;
+  read_at?: string | null;
   // Outreach fields
   phone_e164: string | null;
   outreach_opt_out: boolean;
@@ -134,6 +137,8 @@ export interface AppNotification {
   payload: Record<string, any>;
   read_at: string | null;
   created_at: string;
+  product?: Product | null;
+  lead_id?: string | null;
 }
 
 /** Determine section from contact info */
@@ -270,19 +275,25 @@ export async function createNotification(input: {
   title: string;
   message?: string;
   payload?: Record<string, any>;
+  product?: Product;
+  leadId?: string;
 }) {
   await (supabase as any).from('app_notifications').insert({
     type: input.type,
     title: input.title,
     message: input.message || '',
     payload: input.payload || {},
+    product: input.product || getActiveProduct(),
+    lead_id: input.leadId || null,
   } as any);
 }
 
 export async function fetchNotifications(limit = 100): Promise<AppNotification[]> {
+  const product = getActiveProduct();
   const { data, error } = await (supabase as any)
     .from('app_notifications')
     .select('*')
+    .eq('product', product)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
@@ -298,9 +309,11 @@ export async function markNotificationRead(id: string) {
 }
 
 export async function markAllNotificationsRead() {
+  const product = getActiveProduct();
   const { error } = await (supabase as any)
     .from('app_notifications')
     .update({ read_at: new Date().toISOString() } as any)
+    .eq('product', product)
     .is('read_at', null);
   if (error) throw error;
 }
@@ -312,4 +325,25 @@ export async function getSetting(key: string): Promise<string | null> {
 
 export async function setSetting(key: string, value: string) {
   await supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+}
+
+export async function acquireOutreachLock(leadId: string, method: 'email' | 'sms' | 'call' | 'ai_call') {
+  const { data, error } = await (supabase as any).rpc('acquire_outreach_lock', {
+    p_lead_id: leadId,
+    p_method: method,
+    p_manual_unlock: false,
+  });
+  if (error) throw error;
+  return data as { allowed: boolean; reason?: string; existing_lead_id?: string };
+}
+
+export async function unlockOutreachIdentity(leadId: string, method: 'email' | 'sms' | 'call' | 'ai_call', reason: string) {
+  if (reason.trim().length < 8) throw new Error('Enter a clear unlock reason (at least 8 characters).');
+  const { data, error } = await (supabase as any).rpc('unlock_outreach_identity', {
+    p_lead_id: leadId,
+    p_method: method,
+    p_reason: reason.trim(),
+  });
+  if (error) throw error;
+  return data as { allowed: boolean; reason?: string };
 }

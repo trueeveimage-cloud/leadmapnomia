@@ -10,6 +10,7 @@ const corsHeaders = {
 
 const BodySchema = z.object({
   leadId: z.string().uuid(),
+  campaignRecipientId: z.string().uuid().optional(),
   manualUnlock: z.boolean().optional(),
 });
 
@@ -24,24 +25,10 @@ function appendHistory(lead: JsonRecord, item: JsonRecord) {
   return [...history, { ...item, at: new Date().toISOString() }];
 }
 
-const COUNTRY_DIAL: Record<string, string> = {
-  SE: '46', SWEDEN: '46', SVERIGE: '46',
-  NO: '47', NORWAY: '47', NORGE: '47',
-  DK: '45', DENMARK: '45', DANMARK: '45',
-  FI: '358', FINLAND: '358',
-  US: '1', USA: '1', GB: '44', UK: '44',
-};
-
-function normalizeE164(value?: string | null, country?: string | null) {
-  let cleaned = String(value || '').trim().replace(/[\s().\-‐-―]/g, '');
-  if (!cleaned) return null;
-  if (cleaned.startsWith('00')) cleaned = `+${cleaned.slice(2)}`;
-  if (!cleaned.startsWith('+')) {
-    const dial = COUNTRY_DIAL[String(country || '').trim().toUpperCase()] || '46';
-    cleaned = cleaned.replace(/^0+/, '');
-    cleaned = `+${dial}${cleaned}`;
-  }
-  return /^\+[1-9]\d{7,14}$/.test(cleaned) ? cleaned : null;
+function normalizeE164(value?: string | null) {
+  const cleaned = String(value || '').trim().replace(/[\s().-]/g, '');
+  const withPlus = cleaned.startsWith('00') ? `+${cleaned.slice(2)}` : cleaned;
+  return /^\+[1-9]\d{7,14}$/.test(withPlus) ? withPlus : null;
 }
 
 Deno.serve(async (req) => {
@@ -50,7 +37,6 @@ Deno.serve(async (req) => {
 
   const authFail = await requireCronServiceOrUserJwt(req, corsHeaders);
   if (authFail) return authFail;
-
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return json({ error: 'invalid_body', details: parsed.error.flatten().fieldErrors }, 400);
@@ -64,41 +50,81 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const { data: masterPause } = await supabase.from('settings').select('value').eq('key', 'outreach_master_paused').maybeSingle();
+  if (masterPause?.value !== 'false') return json({ error: 'master_paused' }, 409);
+  const { data: aiPause } = await supabase.from('settings').select('value').eq('key', 'nomia_ai_calls_paused').maybeSingle();
+  if (aiPause?.value !== 'false') return json({ error: 'nomia_ai_calls_paused' }, 409);
   const { data: rawLead, error } = await supabase.from('leads').select('*').eq('id', parsed.data.leadId).maybeSingle();
   if (error) return json({ error: error.message }, 500);
   if (!rawLead) return json({ error: 'lead_not_found' }, 404);
   const lead = rawLead as JsonRecord;
 
-  const country = String(lead.country || '');
-  const toNumber = normalizeE164(String(lead.phone_e164 || ''), country) || normalizeE164(String(lead.phone || ''), country);
+  if (lead.product === 'nomia') {
+    if (!parsed.data.campaignRecipientId) return json({ error: 'approved_recipient_required' }, 409);
+    const { data: recipient } = await supabase
+      .from('campaign_recipients')
+      .select('id,campaign_id,lead_id,status')
+      .eq('id', parsed.data.campaignRecipientId)
+      .eq('lead_id', parsed.data.leadId)
+      .eq('status', 'approved')
+      .maybeSingle();
+    if (!recipient) return json({ error: 'approved_recipient_required' }, 409);
+    const { data: campaign } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('id', recipient.campaign_id)
+      .eq('product', 'nomia')
+      .eq('channel', 'ai_call')
+      .eq('approval_status', 'approved')
+      .maybeSingle();
+    if (!campaign) return json({ error: 'approved_campaign_required' }, 409);
+  }
+
+  const toNumber = normalizeE164(String(lead.phone_e164 || '')) || normalizeE164(String(lead.phone || ''));
   if (!toNumber) return json({ error: 'phone_not_e164', message: 'Lead phone must be in E.164 format, for example +46701234567.' }, 400);
   if (lead.do_not_contact || lead.outreach_opt_out) return json({ error: 'do_not_contact' }, 409);
   if (lead.call_status === 'Calling') return json({ error: 'already_calling' }, 409);
+  const { data: activeLead } = await supabase
+    .from('leads')
+    .select('id,name,retell_call_id,last_called_at')
+    .eq('product', lead.product || 'leadmap')
+    .eq('call_status', 'Calling')
+    .neq('id', String(lead.id))
+    .order('last_called_at', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (activeLead) {
+    return json({
+      error: 'active_call_in_progress',
+      message: `${activeLead.name || 'Another lead'} is still marked Calling.`,
+      activeLeadId: activeLead.id,
+      retell_call_id: activeLead.retell_call_id,
+      lastCalledAt: activeLead.last_called_at,
+    }, 409);
+  }
   const callAttempts = typeof lead.call_attempts === 'number' ? lead.call_attempts : 0;
-  if (callAttempts >= 3 && !parsed.data.manualUnlock) return json({ error: 'call_attempt_limit' }, 409);
+  if (callAttempts >= 3) return json({ error: 'call_attempt_limit' }, 409);
 
-  if (!parsed.data.manualUnlock) {
-    const candidates = Array.from(new Set([toNumber, lead.phone_e164, lead.phone].filter(Boolean)));
-    const duplicateFilter = candidates.flatMap((phone) => [`phone.eq.${phone}`, `phone_e164.eq.${phone}`]).join(',');
-    if (duplicateFilter) {
-      const { data: duplicate } = await supabase
-        .from('leads')
-        .select('id,name,last_contacted_at')
-        .neq('id', String(lead.id))
-        .not('last_contacted_at', 'is', null)
-        .or(duplicateFilter)
-        .limit(1)
-        .maybeSingle();
-      if (duplicate) {
-        return json({ error: 'duplicate_phone_contacted', existing_lead_id: duplicate.id, existing_lead_name: duplicate.name }, 409);
-      }
+  const candidates = Array.from(new Set([toNumber, lead.phone_e164, lead.phone].filter(Boolean)));
+  const duplicateFilter = candidates.flatMap((phone) => [`phone.eq.${phone}`, `phone_e164.eq.${phone}`]).join(',');
+  if (duplicateFilter) {
+    const { data: duplicate } = await supabase
+      .from('leads')
+      .select('id,name,last_contacted_at')
+      .neq('id', String(lead.id))
+      .not('last_contacted_at', 'is', null)
+      .or(duplicateFilter)
+      .limit(1)
+      .maybeSingle();
+    if (duplicate) {
+      return json({ error: 'duplicate_phone_contacted', existing_lead_id: duplicate.id, existing_lead_name: duplicate.name }, 409);
     }
   }
 
   const { data: lockResult, error: lockError } = await supabase.rpc('acquire_outreach_lock', {
     p_lead_id: parsed.data.leadId,
     p_method: 'ai_call',
-    p_manual_unlock: !!parsed.data.manualUnlock,
+    p_manual_unlock: false,
   });
   if (lockError) return json({ error: 'outreach_lock_failed', details: lockError.message }, 500);
   if (!lockResult?.allowed) return json({ error: lockResult?.reason || 'outreach_locked', lock: lockResult }, 409);
@@ -109,8 +135,8 @@ Deno.serve(async (req) => {
     override_agent_id: RETELL_AGENT_ID,
     metadata: {
       lead_id: String(lead.id),
-      source: 'leadmap_crm',
-      campaign: 'leadmap_ai_cold_call_mvp',
+      source: `${String(lead.product || 'leadmap')}_crm`,
+      campaign: `${String(lead.product || 'leadmap')}_approved_ai_call`,
     },
     retell_llm_dynamic_variables: {
       business_name: String(lead.business_name || lead.name || ''),
@@ -120,7 +146,7 @@ Deno.serve(async (req) => {
       country: String(lead.country || ''),
       demo_link: String(LEADMAP_DEMO_LINK || ''),
       my_name: 'Maged',
-      company_name: 'Leadmap AI',
+      company_name: lead.product === 'nomia' ? 'Nomia' : 'Leadmap',
     },
   };
 

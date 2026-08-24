@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { fetchLeadCounts } from '@/lib/supabase';
+import { fetchLeadCounts, getActiveProduct } from '@/lib/supabase';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -102,6 +102,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const { data: activeCampaigns } = await supabase
         .from('campaigns')
         .select('id')
+        .eq('product', getActiveProduct())
         .eq('status', 'active');
       const batchReady = (activeCampaigns?.length || 0) > 0;
 
@@ -109,6 +110,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const { data: unreadData } = await supabase
         .from('leads')
         .select('id, last_inbound_at, read_at')
+        .eq('product', getActiveProduct())
         .not('last_inbound_at', 'is', null);
       const unreadInbox = (unreadData || []).filter((l: any) => {
         if (!l.last_inbound_at) return false;
@@ -119,6 +121,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const { count } = await (supabase as any)
         .from('app_notifications')
         .select('id', { count: 'exact', head: true })
+        .eq('product', getActiveProduct())
         .is('read_at', null);
 
       setNotifications({ batchReady, unreadInbox, unreadHistory: count || 0 });
@@ -130,7 +133,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     refreshNotifications();
     // Refresh notifications every 60 seconds
     const interval = setInterval(refreshNotifications, 15000);
-    window.addEventListener('crm-product-change', refreshCounts);
+    const handleProductChange = () => { refreshCounts(); refreshNotifications(); };
+    window.addEventListener('crm-product-change', handleProductChange);
     const channel = supabase
       .channel('app-notifications-realtime')
       .on(
@@ -145,7 +149,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       .subscribe();
     return () => {
       clearInterval(interval);
-      window.removeEventListener('crm-product-change', refreshCounts);
+      window.removeEventListener('crm-product-change', handleProductChange);
       supabase.removeChannel(channel);
     };
   }, [refreshCounts, refreshNotifications]);

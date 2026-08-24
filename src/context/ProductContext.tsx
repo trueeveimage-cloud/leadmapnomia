@@ -7,14 +7,15 @@ interface Ctx {
   setProduct: (p: Product) => void;
 }
 
-const ProductContext = createContext<Ctx>({ product: 'leadmap', setProduct: () => {} });
+const ProductContext = createContext<Ctx>({ product: 'nomia', setProduct: () => {} });
 
 const KEY = 'crm.activeProduct';
 
 export function ProductProvider({ children }: { children: React.ReactNode }) {
   const [product, setProductState] = useState<Product>(() => {
-    if (typeof window === 'undefined') return 'leadmap';
-    return (localStorage.getItem(KEY) as Product) || 'leadmap';
+    if (typeof window === 'undefined') return 'nomia';
+    const stored = localStorage.getItem(KEY);
+    return stored === 'leadmap' || stored === 'nomia' ? stored : 'nomia';
   });
 
   const setProduct = useCallback((p: Product) => {

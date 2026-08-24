@@ -39,6 +39,10 @@ Deno.serve(async (req) => {
     if (authErr || !claims?.claims) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
+    const { data: isOwner } = await supabase.rpc('is_crm_owner');
+    if (!isOwner) {
+      return new Response(JSON.stringify({ error: 'Owner access required' }), { status: 403, headers: corsHeaders });
+    }
 
     const { messageIds } = await req.json();
     if (!messageIds?.length) {
@@ -52,6 +56,16 @@ Deno.serve(async (req) => {
 
     const dbClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+    const { data: pauseRows, error: pauseError } = await dbClient
+      .from('settings')
+      .select('key,value')
+      .in('key', ['outreach_master_paused', 'nomia_sms_paused']);
+    if (pauseError) throw pauseError;
+    const pauses = Object.fromEntries((pauseRows || []).map((row: any) => [row.key, row.value]));
+    if (pauses.outreach_master_paused !== 'false' || pauses.nomia_sms_paused !== 'false') {
+      return new Response(JSON.stringify({ error: 'SMS outreach is paused' }), { status: 409, headers: corsHeaders });
+    }
+
     // Fetch failed messages
     const { data: failedMsgs } = await dbClient
       .from('message_logs')
@@ -62,6 +76,19 @@ Deno.serve(async (req) => {
     let retried = 0, succeeded = 0, stillFailed = 0;
 
     for (const msg of (failedMsgs || [])) {
+      if (!msg.lead_id) {
+        stillFailed++;
+        continue;
+      }
+      const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
+        p_lead_id: msg.lead_id,
+        p_method: 'sms',
+        p_manual_unlock: false,
+      });
+      if (lockError || !lockResult?.allowed) {
+        stillFailed++;
+        continue;
+      }
       const result = await sendTwilioSms(twilioSid, twilioToken, twilioFrom, msg.to_number!, msg.body!, statusCallback);
       retried++;
 

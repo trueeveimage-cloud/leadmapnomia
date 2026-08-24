@@ -46,6 +46,221 @@ function hasAny(text: string, values: string[]) {
   return values.some((value) => text.includes(value));
 }
 
+function countWords(text: string) {
+  return (text.match(/[\p{L}\p{N}]+/gu) || []).length;
+}
+
+function normalizeText(text: string) {
+  return text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function userSpeech(transcript: string) {
+  if (!transcript) return '';
+  const parts = transcript.match(/User:\s*([\s\S]*?)(?=\b(?:Agent|Assistant|Bot|User):|$)/gi);
+  if (!parts?.length) return '';
+  return parts
+    .map((part) => part.replace(/^User:\s*/i, '').trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function classifyConversation(input: {
+  event: string;
+  call: JsonRecord;
+  payload: JsonRecord;
+  transcript: string;
+  summary: string;
+  explicitOutcome: string;
+}) {
+  const transportText = normalizeText(`${firstString(input.call.call_status, input.payload.call_status)} ${firstString(input.call.disconnection_reason, input.payload.disconnection_reason)}`);
+  const transcriptText = normalizeText(input.transcript);
+  const summaryText = normalizeText(input.summary);
+  const explicitText = normalizeText(input.explicitOutcome);
+  const userText = normalizeText(userSpeech(input.transcript));
+  const allText = `${summaryText} ${transcriptText} ${transportText}`;
+  const userWordCount = countWords(userText);
+
+  const transportNoAnswer = hasAny(`${transportText} ${summaryText}`, [
+    'no answer',
+    'voicemail',
+    'voice mail',
+    'did not connect',
+    'not connected',
+    'not_connected',
+    'dial no answer',
+    'dial_no_answer',
+    'dial busy',
+    'dial_busy',
+    'dial failed',
+    'dial_failed',
+    'busy',
+  ]);
+  const automatedOrNoHuman = hasAny(allText, [
+    'automated message',
+    'automated voice',
+    'auto attendant',
+    'phone menu',
+    'ivr',
+    'press one',
+    'press 1',
+    'tryck ett',
+    'trycker du',
+    'leave a message',
+    'lamna meddelande',
+    'oppettider',
+    'opening hours',
+    'no live conversation',
+    'no meaningful conversation',
+    'no meaningful interaction',
+    'no task was completed',
+    'cut short before further details',
+    'did not respond directly',
+    'unclear statement',
+    'speech was unclear',
+    'message was unclear',
+    'transcription errors',
+    'lasted only 4 seconds',
+    'ended after 4 seconds',
+    'after 4 seconds',
+    'brief unclear',
+    'disconnected after a few seconds',
+    'ended abruptly',
+    'hung up',
+  ]);
+  if (transportNoAnswer || automatedOrNoHuman || (!userText && hasAny(allText, ['valkommen till', 'welcome to']))) {
+    return {
+      call_status: 'No answer',
+      outreach_state: 'not_contacted',
+      next_step: 'No clear live interest captured - retry another eligible day',
+      __no_answer: true,
+      __classification_reason: transportNoAnswer ? 'transport_no_answer' : 'no_clear_live_conversation',
+    };
+  }
+
+  if (hasAny(`${userText} ${summaryText} ${explicitText}`, [
+    'do not contact',
+    'do-not-contact',
+    'opt out',
+    'opt-out',
+    'stop calling',
+    'do not call',
+    'dont call',
+    'remove',
+    'unsubscribe',
+    'sluta ring',
+    'ring inte',
+    'kontakta inte',
+    'ta bort',
+  ])) {
+    return {
+      call_status: 'Do not contact',
+      status: 'not_interested',
+      outreach_state: 'do_not_contact',
+      do_not_contact: true,
+      outreach_opt_out: true,
+      next_step: 'Do not contact again',
+      __classification_reason: 'do_not_contact',
+    };
+  }
+
+  if (hasAny(`${userText} ${summaryText}`, [
+    'not interested',
+    'no interest',
+    'not relevant',
+    'not a fit',
+    'declined',
+    'declined further contact',
+    'nothing today',
+    'no thanks',
+    'nej tack',
+    'inte intresserad',
+    'inget intresse',
+    'inte relevant',
+    'behover inte',
+    'behover ej',
+    'vi har redan',
+    'redan en losning',
+  ])) {
+    return {
+      call_status: 'Not interested',
+      status: 'not_interested',
+      outreach_state: 'called',
+      next_step: 'No follow-up needed',
+      __classification_reason: 'negative_user_signal',
+    };
+  }
+
+  const demoSignal = hasAny(userText, [
+    'send demo',
+    'send a demo',
+    'skicka demo',
+    'skicka en demo',
+    'maila demo',
+    'mejla demo',
+    'email demo',
+    'book demo',
+    'boka demo',
+    'book a meeting',
+    'schedule meeting',
+    'boka mote',
+  ]) || (hasAny(userText, ['yes', 'ja', 'absolutely', 'garna', 'sure']) && hasAny(transcriptText, ['demo', 'mote', 'meeting']));
+  if (demoSignal) {
+    return {
+      call_status: hasAny(userText, ['meeting', 'mote']) ? 'Meeting requested' : 'Demo requested',
+      status: 'demo',
+      outreach_state: 'called',
+      next_step: 'Send demo or schedule the requested follow-up',
+      __classification_reason: 'demo_user_signal',
+    };
+  }
+
+  const interestSignal = userWordCount >= 5 && (
+    hasAny(userText, [
+      'sounds interesting',
+      'that sounds good',
+      'tell me more',
+      'send information',
+      'send info',
+      'maila information',
+      'mejla information',
+      'later today',
+      'call back',
+      'ring tillbaka',
+      'later',
+      'intressant',
+      'later bra',
+    ])
+    || (hasAny(summaryText, ['confirmed they sometimes miss calls', 'confirmed missing calls', 'bekraftade']) && !hasAny(summaryText, ['cut short', 'unclear', 'no meaningful']))
+  );
+  if (interestSignal) {
+    return {
+      call_status: 'Interested',
+      status: 'interested',
+      outreach_state: 'called',
+      next_step: 'Follow up manually',
+      __classification_reason: 'positive_user_signal',
+    };
+  }
+
+  if (input.event === 'call_ended' || input.event === 'call_analyzed') {
+    return {
+      call_status: 'Error',
+      status: 'answered',
+      call_outcome: 'Review needed',
+      outreach_state: 'called',
+      next_step: 'Review transcript before deciding follow-up',
+      __classification_reason: 'answered_needs_review',
+    };
+  }
+
+  return {};
+}
+
 function boolish(value: unknown) {
   return value === true || String(value).toLowerCase() === 'true';
 }
@@ -104,45 +319,25 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     outcomeFromCustom(custom),
     analysis.call_successful,
   ).toLowerCase();
-  const explicit = statusFromExplicitOutcome(firstString(
+  const explicitOutcome = firstString(
     custom.outcome,
     custom.call_outcome,
     custom.lead_outcome,
     custom.status,
     custom.interest_level,
     outcomeFromCustom(custom),
-  ));
-  if (explicit) return explicit;
+  );
+  const explicit = statusFromExplicitOutcome(explicitOutcome);
   const transportText = `${firstString(call.call_status, payload.call_status)} ${firstString(call.disconnection_reason, payload.disconnection_reason)}`.toLowerCase();
   const analysisText = `${primary} ${summary}`.toLowerCase();
-  const transcriptText = transcript.toLowerCase();
   const text = `${analysisText} ${transportText}`;
 
   if (event === 'call_started' || hasAny(text, ['ongoing', 'registered'])) {
     return { call_status: 'Calling' };
   }
-  if (hasAny(`${analysisText} ${transcriptText}`, ['do not contact', 'do-not-contact', 'opt out', 'opt-out', 'stop calling', 'sluta ring', 'kontakta inte'])) {
-    return {
-      call_status: 'Do not contact',
-      status: 'not_interested',
-      outreach_state: 'do_not_contact',
-      do_not_contact: true,
-      outreach_opt_out: true,
-      next_step: 'Do not contact again',
-    };
-  }
-  if (hasAny(`${analysisText} ${transcriptText}`, ['not interested', 'declined', 'declined further contact', 'no interest', 'nothing today', 'not relevant', 'not a fit', 'inget intresse', 'inte intresserad', 'without the user opting in'])) {
-    return { call_status: 'Not interested', status: 'not_interested', outreach_state: 'called', next_step: 'No follow-up needed' };
-  }
-  if (hasAny(analysisText, ['meeting requested', 'booked a meeting', 'meeting booked', 'requested a meeting', 'schedule meeting'])) {
-    return { call_status: 'Meeting requested', status: 'demo', outreach_state: 'called', next_step: 'Schedule meeting and follow up manually' };
-  }
-  if (hasAny(analysisText, ['demo requested', 'asked for demo', 'wants demo', 'requested a demo', 'send demo'])) {
-    return { call_status: 'Demo requested', status: 'demo', outreach_state: 'called', next_step: 'Send demo and follow up manually' };
-  }
-  if (hasAny(analysisText, ['interested', 'positive response', 'wants more info', 'follow up requested', 'callback requested'])) {
-    return { call_status: 'Interested', status: 'interested', outreach_state: 'called', next_step: 'Follow up manually' };
-  }
+  const classified = classifyConversation({ event, call, payload, transcript, summary, explicitOutcome });
+  if (classified.call_status) return classified;
+  if (explicit) return explicit;
   if (hasAny(`${transportText} ${analysisText}`, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy'])) {
     // Doesn't count as a real call — clear last_called_at so it isn't counted in "calls today",
     // schedule a retry for tomorrow, and let no_answer_count gate the 3-strike rule.
@@ -152,7 +347,7 @@ function statusFromEvent(event: string, call: JsonRecord, payload: JsonRecord) {
     return { call_status: 'Error', outreach_state: 'follow_up_needed', next_step: 'Check Retell error and retry manually if appropriate' };
   }
   if (event === 'call_ended' || event === 'call_analyzed') {
-    return { call_status: 'Answered', status: 'answered', outreach_state: 'called', next_step: 'Review transcript and decide next action' };
+    return { call_status: 'Error', status: 'answered', call_outcome: 'Review needed', outreach_state: 'follow_up_needed', next_step: 'Review transcript and decide next action' };
   }
   return {};
 }
@@ -169,9 +364,7 @@ function connectedFromEvent(event: string, call: JsonRecord, payload: JsonRecord
   if (hasAny(status, ['no answer', 'voicemail', 'did not connect', 'not_connected', 'dial_no_answer', 'dial_busy', 'dial_failed', 'busy', 'failed', 'error'])) {
     return false;
   }
-  if (boolish(analysis.call_successful) || boolish(custom.interested) || boolish(custom.demo_requested) || boolish(custom.meeting_requested)) {
-    return true;
-  }
+  if (hasAny(`${firstString(statusUpdate.call_status)} ${firstString(statusUpdate.status)} ${firstString(statusUpdate.call_outcome)}`.toLowerCase(), ['answered', 'interested', 'not interested', 'demo requested', 'meeting requested', 'do not contact'])) return true;
   if (hasAny(reason, ['user_hangup', 'agent_hangup', 'completed', 'call_transfer'])) return true;
   if (hasAny(status, ['interested', 'not interested', 'demo requested', 'meeting requested', 'do not contact'])) return true;
   return event === 'call_analyzed' && !!transcript;
@@ -246,7 +439,9 @@ Deno.serve(async (req) => {
   const dynamicVariables = record(call.retell_llm_dynamic_variables);
   const transcript = transcriptToText(call.transcript || payload.transcript || call.transcript_with_tool_calls || payload.transcript_with_tool_calls);
   const summary = firstString(analysis.call_summary, analysis.summary, custom.short_summary, custom.summary, payload.summary);
-  const outcome = firstString(custom.outcome, custom.call_outcome, custom.lead_outcome, outcomeFromCustom(custom), statusUpdate.call_status, call.call_status, payload.call_status, event);
+  const classificationReason = firstString((statusUpdate as JsonRecord).__classification_reason);
+  delete (statusUpdate as JsonRecord).__classification_reason;
+  const outcome = firstString(statusUpdate.call_outcome, statusUpdate.call_status, custom.outcome, custom.call_outcome, custom.lead_outcome, outcomeFromCustom(custom), call.call_status, payload.call_status, event);
   const demoDeliveryMethod = firstString(custom.demo_delivery_method, custom.preferred_contact_method, custom.delivery_method, dynamicVariables.demo_delivery_method);
   const demoContactValue = firstString(custom.demo_contact_value, custom.contact_value, custom.email, custom.phone);
 
@@ -256,7 +451,7 @@ Deno.serve(async (req) => {
 
   const outreach_history = [
     ...history,
-    { event_id: eventId, event, method: 'AI Call', status: outcome, retell_call_id: callId, no_answer: isNoAnswer || undefined, at: new Date().toISOString() },
+    { event_id: eventId, event, method: 'AI Call', status: outcome, retell_call_id: callId, no_answer: isNoAnswer || undefined, classification_reason: classificationReason || undefined, at: new Date().toISOString() },
   ];
 
   const updates: Record<string, unknown> = {
@@ -293,8 +488,8 @@ Deno.serve(async (req) => {
     if (naCount >= 3) {
       updates.outreach_state = 'do_not_contact';
       updates.do_not_contact = true;
-      updates.call_status = 'Dead (3x no answer)';
-      updates.next_step = 'Stop calling — 3 no-answers';
+      updates.call_status = 'Do not contact';
+      updates.next_step = 'Stop calling - 3 no-answers';
       updates.next_call_after = null;
     }
   } else if (isConnected) {
@@ -313,7 +508,7 @@ Deno.serve(async (req) => {
   await supabase.from('activities').insert({
     lead_id: String(lead.id),
     type: 'retell_webhook',
-    payload: { event_id: eventId, event, retell_call_id: callId, outcome, call_connected: isConnected },
+    payload: { event_id: eventId, event, retell_call_id: callId, outcome, call_connected: isConnected, classification_reason: classificationReason || undefined },
   });
 
   if (['call_ended', 'call_analyzed', 'call_failed'].includes(event)) {
@@ -328,6 +523,7 @@ Deno.serve(async (req) => {
         event,
         outcome,
         call_connected: isConnected,
+        classification_reason: classificationReason || undefined,
       },
     });
   }

@@ -36,8 +36,12 @@ Deno.serve(async (req) => {
     if (authErr || !data?.claims) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const { data: isOwner } = await supabase.rpc('is_crm_owner');
+    if (!isOwner) {
+      return new Response(JSON.stringify({ error: 'Owner access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    const { leadId, body, phone, manualUnlock } = await req.json();
+    const { leadId, body, phone } = await req.json();
     
     // Support direct phone sending (no lead required)
     if (!body) {
@@ -60,6 +64,13 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+    const [{ data: masterPause }, { data: smsPause }] = await Promise.all([
+      dbClient.from('settings').select('value').eq('key', 'outreach_master_paused').maybeSingle(),
+      dbClient.from('settings').select('value').eq('key', 'nomia_sms_paused').maybeSingle(),
+    ]);
+    if (masterPause?.value !== 'false' || smsPause?.value !== 'false') {
+      return new Response(JSON.stringify({ error: 'sms_paused' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     let toNumber: string;
     let resolvedLeadId: string | null = leadId || null;
@@ -80,7 +91,7 @@ Deno.serve(async (req) => {
       const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
         p_lead_id: leadId,
         p_method: 'sms',
-        p_manual_unlock: !!manualUnlock,
+        p_manual_unlock: false,
       });
       if (lockError) {
         return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -116,7 +127,7 @@ Deno.serve(async (req) => {
       const { data: lockResult, error: lockError } = await dbClient.rpc('acquire_outreach_lock', {
         p_lead_id: resolvedLeadId,
         p_method: 'sms',
-        p_manual_unlock: !!manualUnlock,
+        p_manual_unlock: false,
       });
       if (lockError) {
         return new Response(JSON.stringify({ error: 'outreach_lock_failed', details: lockError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -130,6 +141,10 @@ Deno.serve(async (req) => {
         });
         return new Response(JSON.stringify({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
+    }
+
+    if (!resolvedLeadId) {
+      return new Response(JSON.stringify({ error: 'reviewed_lead_required' }), { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

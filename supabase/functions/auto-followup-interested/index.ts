@@ -18,6 +18,18 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const db = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+    const { data: pauseRows, error: pauseError } = await db
+      .from('settings')
+      .select('key,value')
+      .in('key', ['outreach_master_paused', 'nomia_sms_paused']);
+    if (pauseError) throw pauseError;
+    const pauses = Object.fromEntries((pauseRows || []).map((row: any) => [row.key, row.value]));
+    if (pauses.outreach_master_paused !== 'false' || pauses.nomia_sms_paused !== 'false') {
+      return new Response(JSON.stringify({ skipped: true, reason: 'SMS outreach is paused' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Check if follow-up is enabled
     const { data: enabledSetting } = await db.from('settings').select('value').eq('key', 'followup_enabled').single();
     if (!enabledSetting || enabledSetting.value !== 'true') {
@@ -49,8 +61,10 @@ Deno.serve(async (req) => {
     const { data: leads, error } = await db
       .from('leads')
       .select('id, name, phone, phone_e164, last_outbound_at')
+      .eq('product', 'nomia')
       .eq('status', 'interested')
       .eq('outreach_opt_out', false)
+      .eq('do_not_contact', false)
       .not('phone', 'is', null)
       .lt('last_outbound_at', cutoff)
       .order('last_outbound_at', { ascending: true })
@@ -87,6 +101,13 @@ Deno.serve(async (req) => {
 
       const firstName = lead.name.split(' ')[0];
       const body = template.replace('{name}', firstName);
+
+      const { data: lockResult, error: lockError } = await db.rpc('acquire_outreach_lock', {
+        p_lead_id: lead.id,
+        p_method: 'sms',
+        p_manual_unlock: false,
+      });
+      if (lockError || !lockResult?.allowed) continue;
 
       const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
       const credentials = btoa(`${twilioSid.trim()}:${twilioToken.trim()}`);

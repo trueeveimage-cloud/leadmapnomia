@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { z } from 'npm:zod@3';
 import { requireCronServiceOrUserJwt } from '../_shared/auth.ts';
@@ -9,17 +10,21 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/google_mail/gmail/v1';
-const DEFAULT_DAILY_CAP = 100;
+const DEFAULT_DAILY_CAP = 20;
+const HARD_EMAIL_DAILY_CAP = Math.max(1, Math.min(100, Number.parseInt(Deno.env.get('EMAIL_HARD_DAILY_CAP') || '20', 10) || 20));
 const UNSUBSCRIBE_MAILBOX = 'leadmapai.se@gmail.com';
+const DEFAULT_FROM_NAME = 'Leadmap';
 
 const BodySchema = z.object({
   leadId: z.string().uuid().optional(),
+  campaignRecipientId: z.string().uuid().optional(),
   partnerProspectId: z.string().uuid().optional(),
   to: z.string().email(),
   subject: z.string().min(1).max(500),
   body: z.string().min(1).max(20000),
   manualUnlock: z.boolean().optional(),
   skipCooldown: z.boolean().optional(),
+  allowFollowUp: z.boolean().optional(),
 });
 
 function b64url(s: string): string {
@@ -56,6 +61,71 @@ function withComplianceFooter(body: string) {
   return body;
 }
 
+function mailProvider() {
+  if (Deno.env.get('RESEND_API_KEY')) return 'resend';
+  if (Deno.env.get('LOVABLE_API_KEY') && Deno.env.get('GOOGLE_MAIL_API_KEY')) return 'gmail';
+  return 'missing';
+}
+
+function senderAddress() {
+  return Deno.env.get('EMAIL_FROM') || Deno.env.get('RESEND_FROM_EMAIL') || Deno.env.get('GMAIL_FROM_ADDRESS') || '';
+}
+
+async function sendViaResend(input: { to: string; subject: string; body: string; fromName?: string }) {
+  const apiKey = Deno.env.get('RESEND_API_KEY');
+  const from = senderAddress();
+  if (!apiKey) return { ok: false, status: 500, data: { error: 'RESEND_API_KEY missing' } };
+  if (!from) return { ok: false, status: 500, data: { error: 'EMAIL_FROM missing' } };
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: `${input.fromName || DEFAULT_FROM_NAME} <${from}>`,
+      to: [input.to],
+      subject: input.subject,
+      text: input.body,
+      headers: {
+        'List-Unsubscribe': `<mailto:${UNSUBSCRIBE_MAILBOX}?subject=unsubscribe>`,
+      },
+    }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, data, id: data?.id };
+}
+
+async function sendViaLovableGmail(input: { to: string; subject: string; body: string }) {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
+  if (!LOVABLE_API_KEY) return { ok: false, status: 500, data: { error: 'LOVABLE_API_KEY missing' } };
+  if (!GMAIL_KEY) return { ok: false, status: 500, data: { error: 'Gmail is not connected' } };
+
+  let fromAddress: string | undefined;
+  try {
+    const profResp = await fetch(`${GATEWAY_URL}/users/me/profile`, {
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': GMAIL_KEY },
+    });
+    const prof = await profResp.json().catch(() => ({}));
+    if (profResp.ok && prof?.emailAddress) fromAddress = String(prof.emailAddress);
+  } catch { /* Gmail will use connected account by default */ }
+
+  const raw = buildRaw(input.to, input.subject, input.body, fromAddress);
+  const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      'X-Connection-Api-Key': GMAIL_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raw }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, data, id: data?.id };
+}
+
 function parseSuppressionList(value: string | null | undefined) {
   return String(value || '')
     .split(/[\n,;]/)
@@ -79,6 +149,11 @@ function hasCallContact(lead: any) {
     || (Number(lead?.call_attempts || 0) > 0);
 }
 
+function settingNumber(value: string | null | undefined, fallback: number) {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 async function notify(supabase: any, input: { type: string; title: string; message: string; payload?: Record<string, unknown> }) {
   await supabase.from('app_notifications').insert({
     type: input.type,
@@ -96,22 +171,28 @@ Deno.serve(async (req) => {
 
 
 
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  const GMAIL_KEY = Deno.env.get('GOOGLE_MAIL_API_KEY');
-  if (!LOVABLE_API_KEY) return jsonResp({ error: 'LOVABLE_API_KEY missing' }, 500);
-  if (!GMAIL_KEY) return jsonResp({ error: 'Gmail is not connected' }, 500);
-
   let parsed;
   try { parsed = BodySchema.safeParse(await req.json()); }
   catch { return jsonResp({ error: 'Invalid JSON' }, 400); }
   if (!parsed.success) return jsonResp({ error: parsed.error.flatten().fieldErrors }, 400);
-  const { leadId, partnerProspectId, subject, manualUnlock, skipCooldown } = parsed.data;
+  const { leadId, partnerProspectId, campaignRecipientId, subject, skipCooldown, allowFollowUp } = parsed.data;
   const to = normalizeEmail(parsed.data.to);
   const body = withComplianceFooter(parsed.data.body);
+  const emailProvider = mailProvider();
+  if (emailProvider === 'missing') {
+    return jsonResp({
+      error: 'email_provider_missing',
+      details: 'Set RESEND_API_KEY + EMAIL_FROM for owned Supabase sending, or LOVABLE_API_KEY + GOOGLE_MAIL_API_KEY for Lovable Gmail fallback.',
+    }, 500);
+  }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   let leadRecord: any = null;
   let partnerRecord: any = null;
+
+  const { data: masterPause } = await supabase.from('settings').select('value').eq('key', 'outreach_master_paused').maybeSingle();
+  if (masterPause?.value !== 'false') return jsonResp({ error: 'master_paused', message: 'All outreach is paused.' }, 409);
+  if (!leadId && !partnerProspectId) return jsonResp({ error: 'reviewed_lead_required', message: 'Direct email sending is disabled. Use a reviewed CRM lead.' }, 409);
 
   const { data: suppressionSetting } = await supabase.from('settings').select('value').eq('key', 'email_suppression_list').maybeSingle();
   if (isSuppressed(to, parseSuppressionList(suppressionSetting?.value))) {
@@ -126,6 +207,8 @@ Deno.serve(async (req) => {
 
   // Partner outreach is intentionally separate from the normal customer lead automation.
   if (partnerProspectId) {
+    const { data: partnerPause } = await supabase.from('settings').select('value').eq('key', 'partner_outreach_paused').maybeSingle();
+    if (partnerPause?.value !== 'false') return jsonResp({ error: 'partner_outreach_paused' }, 409);
     const { data: partner } = await supabase.from('partner_prospects').select('*').eq('id', partnerProspectId).maybeSingle();
     partnerRecord = partner;
     if (!partner) return jsonResp({ error: 'partner_not_found' }, 404);
@@ -172,6 +255,30 @@ Deno.serve(async (req) => {
   if (leadId) {
     const { data: lead } = await supabase.from('leads').select('*').eq('id', leadId).maybeSingle();
     leadRecord = lead;
+    if (lead?.product === 'nomia') {
+      const { data: gmailPause } = await supabase.from('settings').select('value').eq('key', 'nomia_gmail_paused').maybeSingle();
+      if (gmailPause?.value !== 'false') return jsonResp({ error: 'nomia_gmail_paused' }, 409);
+      if (!allowFollowUp) {
+        if (!campaignRecipientId) return jsonResp({ error: 'approved_recipient_required' }, 409);
+        const { data: recipient } = await supabase
+          .from('campaign_recipients')
+          .select('id,campaign_id,lead_id,status')
+          .eq('id', campaignRecipientId)
+          .eq('lead_id', leadId)
+          .eq('status', 'approved')
+          .maybeSingle();
+        if (!recipient) return jsonResp({ error: 'approved_recipient_required' }, 409);
+        const { data: approvedCampaign } = await supabase
+          .from('campaigns')
+          .select('id')
+          .eq('id', recipient.campaign_id)
+          .eq('product', 'nomia')
+          .eq('channel', 'email')
+          .eq('approval_status', 'approved')
+          .maybeSingle();
+        if (!approvedCampaign) return jsonResp({ error: 'approved_campaign_required' }, 409);
+      }
+    }
     if (lead?.outreach_opt_out || lead?.do_not_contact || lead?.outreach_state === 'do_not_contact') {
       await notify(supabase, {
         type: 'outreach_skipped',
@@ -181,7 +288,7 @@ Deno.serve(async (req) => {
       });
       return jsonResp({ skipped: true, reason: 'opt_out' });
     }
-    if (hasCallContact(lead)) {
+    if (!allowFollowUp && hasCallContact(lead)) {
       await notify(supabase, {
         type: 'outreach_skipped',
         title: 'Gmail skipped: lead already called',
@@ -193,7 +300,7 @@ Deno.serve(async (req) => {
   }
 
   // 2) Dedupe: already emailed this lead successfully
-  if (leadId) {
+  if (leadId && !allowFollowUp) {
     const { data: existing } = await supabase
       .from('message_logs')
       .select('id')
@@ -211,40 +318,42 @@ Deno.serve(async (req) => {
   }
 
   // 2b) Dedupe across duplicate lead rows by recipient email.
-  const normalizedTo = to;
-  const { data: matchingLeads } = await supabase
-    .from('leads')
-    .select('id, name, last_called_at, last_contact_method, outreach_state, call_attempts')
-    .ilike('email', normalizedTo);
-  const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
-  if (matchingLeadIds.length > 0) {
-    const calledMatch = (matchingLeads || []).find((lead: any) => hasCallContact(lead));
-    if (calledMatch) {
-      await notify(supabase, {
-        type: 'outreach_skipped',
-        title: 'Gmail skipped: matching lead already called',
-        message: `${to} matches a business already contacted by AI call.`,
-        payload: { leadId: leadId || '', to, reason: 'matching_lead_already_called', matchedLeadId: calledMatch.id },
-      });
-      return jsonResp({ skipped: true, reason: 'matching_lead_already_called' });
-    }
+  if (!allowFollowUp) {
+    const normalizedTo = to;
+    const { data: matchingLeads } = await supabase
+      .from('leads')
+      .select('id, name, last_called_at, last_contact_method, outreach_state, call_attempts')
+      .ilike('email', normalizedTo);
+    const matchingLeadIds = (matchingLeads || []).map((l: any) => l.id);
+    if (matchingLeadIds.length > 0) {
+      const calledMatch = (matchingLeads || []).find((lead: any) => hasCallContact(lead));
+      if (calledMatch) {
+        await notify(supabase, {
+          type: 'outreach_skipped',
+          title: 'Gmail skipped: matching lead already called',
+          message: `${to} matches a business already contacted by AI call.`,
+          payload: { leadId: leadId || '', to, reason: 'matching_lead_already_called', matchedLeadId: calledMatch.id },
+        });
+        return jsonResp({ skipped: true, reason: 'matching_lead_already_called' });
+      }
 
-    const { data: existingByEmail } = await supabase
-      .from('message_logs')
-      .select('id, lead_id')
-      .eq('channel', 'email')
-      .eq('direction', 'outbound')
-      .in('status', ['sent', 'queued'])
-      .in('lead_id', matchingLeadIds)
-      .limit(1);
-    if (existingByEmail && existingByEmail.length > 0) {
-      await notify(supabase, {
-        type: 'outreach_skipped',
-        title: 'Gmail skipped: email already contacted',
-        message: `${to} was already contacted on another lead row.`,
-        payload: { leadId: leadId || '', to, reason: 'email_already_contacted', matchedLeadId: existingByEmail[0].lead_id },
-      });
-      return jsonResp({ skipped: true, reason: 'email_already_contacted' });
+      const { data: existingByEmail } = await supabase
+        .from('message_logs')
+        .select('id, lead_id')
+        .eq('channel', 'email')
+        .eq('direction', 'outbound')
+        .in('status', ['sent', 'queued'])
+        .in('lead_id', matchingLeadIds)
+        .limit(1);
+      if (existingByEmail && existingByEmail.length > 0) {
+        await notify(supabase, {
+          type: 'outreach_skipped',
+          title: 'Gmail skipped: email already contacted',
+          message: `${to} was already contacted on another lead row.`,
+          payload: { leadId: leadId || '', to, reason: 'email_already_contacted', matchedLeadId: existingByEmail[0].lead_id },
+        });
+        return jsonResp({ skipped: true, reason: 'email_already_contacted' });
+      }
     }
   }
 
@@ -252,14 +361,14 @@ Deno.serve(async (req) => {
     const { data: lockResult, error: lockError } = await supabase.rpc('acquire_outreach_lock', {
       p_lead_id: leadId,
       p_method: 'email',
-      p_manual_unlock: !!manualUnlock,
+      p_manual_unlock: false,
     });
     if (lockError) return jsonResp({ error: 'outreach_lock_failed', details: lockError.message }, 500);
     if (!lockResult?.allowed) {
       await notify(supabase, {
         type: 'outreach_skipped',
-        title: 'Gmail skipped: outreach locked',
-        message: `${leadRecord?.name || to} was blocked by the outreach lock.`,
+        title: 'Gmail skipped: duplicate/lock',
+        message: `${leadRecord?.name || to} was skipped because it was already contacted or matched an outreach lock.`,
         payload: { leadId, to, reason: lockResult?.reason || 'outreach_locked' },
       });
       return jsonResp({ skipped: true, reason: lockResult?.reason || 'outreach_locked', lock: lockResult }, 409);
@@ -276,7 +385,7 @@ Deno.serve(async (req) => {
       supabase.from('settings').select('value').eq('key', 'partner_gmail_daily_cap').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'partner_gmail_delay_seconds').maybeSingle(),
     ]);
-    dailyCap = Math.max(0, Math.min(50, parseInt(capSetting?.value || '') || 30));
+    dailyCap = Math.max(0, Math.min(HARD_EMAIL_DAILY_CAP, parseInt(capSetting?.value || '') || DEFAULT_DAILY_CAP));
     delaySeconds = Math.max(0, Math.min(3600, parseInt(delaySetting?.value || '') || 0));
     const { count } = await supabase
       .from('partner_outreach_logs').select('id', { count: 'exact', head: true })
@@ -284,16 +393,27 @@ Deno.serve(async (req) => {
       .gte('created_at', startOfDay.toISOString());
     sentToday = count ?? 0;
   } else {
-    const [{ data: capSetting }, { data: delaySetting }] = await Promise.all([
+    const [{ data: capSetting }, { data: autoCapSetting }, { data: seCapSetting }, { data: ukCapSetting }, { data: esCapSetting }, { data: delaySetting }] = await Promise.all([
       supabase.from('settings').select('value').eq('key', 'gmail_daily_cap').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'gmail_autosend_daily').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'gmail_autosend_daily_se').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'gmail_autosend_daily_uk').maybeSingle(),
+      supabase.from('settings').select('value').eq('key', 'gmail_autosend_daily_es').maybeSingle(),
       supabase.from('settings').select('value').eq('key', 'gmail_autosend_delay_seconds').maybeSingle(),
     ]);
-    dailyCap = Math.max(0, Math.min(100, parseInt(capSetting?.value || '') || DEFAULT_DAILY_CAP));
+    const baseCap = settingNumber(capSetting?.value, DEFAULT_DAILY_CAP);
+    const autoCap = settingNumber(autoCapSetting?.value, baseCap);
+    const splitCap = [seCapSetting, ukCapSetting, esCapSetting]
+      .reduce((sum, row) => sum + Math.max(0, settingNumber(row?.value, 0)), 0);
+    dailyCap = Math.max(baseCap, autoCap, splitCap || 0);
+    dailyCap = Math.max(0, Math.min(HARD_EMAIL_DAILY_CAP, dailyCap));
     delaySeconds = Math.max(0, Math.min(900, parseInt(delaySetting?.value || '') || 0));
-    const { count } = await supabase
+    let sentTodayQuery = supabase
       .from('message_logs').select('id', { count: 'exact', head: true })
       .eq('channel', 'email').eq('direction', 'outbound').eq('status', 'sent')
       .gte('created_at', startOfDay.toISOString());
+    if (leadRecord?.product) sentTodayQuery = sentTodayQuery.eq('product', leadRecord.product);
+    const { count } = await sentTodayQuery;
     sentToday = count ?? 0;
   }
   if ((sentToday ?? 0) >= dailyCap) {
@@ -302,7 +422,7 @@ Deno.serve(async (req) => {
         partner_prospect_id: partnerProspectId,
         channel: 'email',
         direction: 'outbound',
-        provider: 'gmail',
+        provider: emailProvider,
         to_email: to,
         subject,
         body,
@@ -311,8 +431,9 @@ Deno.serve(async (req) => {
       } as any);
     } else if (leadId) {
       await supabase.from('message_logs').insert({
-        lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+        lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'skipped',
+        product: leadRecord?.product || 'nomia',
         error_message: `daily_cap reached (${sentToday}/${dailyCap})`,
       } as any);
     }
@@ -338,36 +459,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Always use the connected Gmail account as the From address.
-    // We resolve it via the Gmail profile endpoint so we never fall back to a stale
-    // "gmail_from_address" setting (which is what caused emails to go out as the wrong sender).
-    let fromAddress: string | undefined;
-    try {
-      const profResp = await fetch(`${GATEWAY_URL}/users/me/profile`, {
-        headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': GMAIL_KEY },
-      });
-      const prof = await profResp.json().catch(() => ({}));
-      if (profResp.ok && prof?.emailAddress) fromAddress = String(prof.emailAddress);
-    } catch { /* fall through — Gmail will use connected account by default */ }
-    const raw = buildRaw(to, subject, body, fromAddress);
-    const resp = await fetch(`${GATEWAY_URL}/users/me/messages/send`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'X-Connection-Api-Key': GMAIL_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ raw }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
+    const result = emailProvider === 'resend'
+      ? await sendViaResend({ to, subject, body, fromName: leadRecord?.product === 'nomia' ? 'Nomia' : DEFAULT_FROM_NAME })
+      : await sendViaLovableGmail({ to, subject, body });
+    const data = result.data || {};
+    const messageId = result.id || data.id || data.message_id || null;
+    if (!result.ok) {
       const errorText = JSON.stringify(data).slice(0, 500);
       if (partnerProspectId) {
         await supabase.from('partner_outreach_logs').insert({
           partner_prospect_id: partnerProspectId,
           channel: 'email',
           direction: 'outbound',
-          provider: 'gmail',
+          provider: emailProvider,
           to_email: to,
           subject,
           body,
@@ -376,8 +480,9 @@ Deno.serve(async (req) => {
         } as any);
       } else if (leadId) {
         await supabase.from('message_logs').insert({
-          lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+          lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
           to_number: to, body: `${subject}\n\n${body}`, status: 'failed',
+          product: leadRecord?.product || 'nomia',
           error_message: errorText,
         } as any);
         if (/bounce|invalid|rejected|does not exist|550/i.test(errorText)) {
@@ -390,11 +495,11 @@ Deno.serve(async (req) => {
       }
       await notify(supabase, {
         type: 'system_error',
-        title: 'Gmail send failed',
-        message: `${to}: Gmail API returned ${resp.status}.`,
-        payload: { leadId: leadId || '', partnerProspectId: partnerProspectId || '', to, status: resp.status, error: JSON.stringify(data).slice(0, 300) },
+        title: 'Email send failed',
+        message: `${to}: ${emailProvider} returned ${result.status}.`,
+        payload: { leadId: leadId || '', partnerProspectId: partnerProspectId || '', to, provider: emailProvider, status: result.status, error: JSON.stringify(data).slice(0, 300) },
       });
-      return jsonResp({ error: 'gmail_send_failed', status: resp.status, details: data }, 502);
+      return jsonResp({ error: 'email_send_failed', provider: emailProvider, status: result.status, details: data }, 502);
     }
 
     if (partnerProspectId) {
@@ -402,12 +507,12 @@ Deno.serve(async (req) => {
         partner_prospect_id: partnerProspectId,
         channel: 'email',
         direction: 'outbound',
-        provider: 'gmail',
+        provider: emailProvider,
         to_email: to,
         subject,
         body,
         status: 'sent',
-        provider_message_id: data.id || null,
+        provider_message_id: messageId,
       } as any);
       await supabase.from('partner_prospects').update({
         status: partnerRecord?.status === 'qualified' ? 'qualified' : 'contacted',
@@ -416,9 +521,10 @@ Deno.serve(async (req) => {
       } as any).eq('id', partnerProspectId);
     } else if (leadId) {
       await supabase.from('message_logs').insert({
-        lead_id: leadId, channel: 'email', direction: 'outbound', provider: 'gmail',
+        lead_id: leadId, channel: 'email', direction: 'outbound', provider: emailProvider,
         to_number: to, body: `${subject}\n\n${body}`, status: 'sent',
-        provider_message_sid: data.id || null,
+        provider_message_sid: messageId,
+        product: leadRecord?.product || 'nomia',
       } as any);
       await supabase.from('leads').update({
         last_outbound_at: new Date().toISOString(),
@@ -436,11 +542,11 @@ Deno.serve(async (req) => {
         last_message_preview: subject.slice(0, 140),
       } as any).eq('id', leadId);
       await supabase.from('activities').insert({
-        lead_id: leadId, type: 'email_sent', payload: { to, subject, gmail_id: data.id },
+        lead_id: leadId, type: 'email_sent', payload: { to, subject, provider: emailProvider, message_id: messageId },
       } as any);
     }
 
-    return jsonResp({ success: true, id: data.id, sentToday: (sentToday ?? 0) + 1, dailyCap, partner: !!partnerProspectId });
+    return jsonResp({ success: true, provider: emailProvider, id: messageId, sentToday: (sentToday ?? 0) + 1, dailyCap, partner: !!partnerProspectId });
   } catch (e: any) {
     return jsonResp({ error: e?.message || 'unknown' }, 500);
   }

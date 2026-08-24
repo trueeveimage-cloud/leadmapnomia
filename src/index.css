@@ -48,17 +48,10 @@
     /* Custom CRM tokens */
     --green: 0 0% 88%;
     --green-foreground: 0 0% 100%;
-    --amber: 38 92% 55%;
-    --amber-foreground: 30 40% 8%;
+    --amber: 0 0% 64%;
+    --amber-foreground: 0 0% 0%;
     --red: 0 72% 55%;
     --red-foreground: 0 0% 100%;
-
-    /* Nomia accents */
-    --emerald: 158 62% 42%;
-    --emerald-foreground: 160 40% 96%;
-    --cobalt: 217 78% 58%;
-    --cobalt-foreground: 220 40% 98%;
-
     --purple: 0 0% 76%;
     --purple-foreground: 0 0% 100%;
     --cyan: 0 0% 72%;
@@ -78,14 +71,29 @@
 
   /* Nomia: black + warm white accent */
   html[data-product="nomia"] {
-    --primary: 0 0% 94%;
-    --primary-foreground: 222 28% 7%;
-    --accent: 0 0% 94%;
-    --accent-foreground: 222 28% 7%;
-    --ring: 0 0% 94%;
-    --sidebar-primary: 0 0% 94%;
-    --sidebar-ring: 0 0% 94%;
-    --shadow-glow: 0 0 20px hsl(0 0% 94% / 0.10);
+    --background: 220 8% 7%;
+    --foreground: 210 14% 93%;
+    --card: 220 7% 10%;
+    --card-foreground: 210 14% 93%;
+    --popover: 220 7% 10%;
+    --popover-foreground: 210 14% 93%;
+    --primary: 154 54% 52%;
+    --primary-foreground: 220 10% 6%;
+    --secondary: 220 7% 15%;
+    --secondary-foreground: 210 10% 82%;
+    --muted: 220 7% 13%;
+    --muted-foreground: 215 9% 58%;
+    --accent: 202 76% 58%;
+    --accent-foreground: 220 10% 6%;
+    --border: 220 7% 18%;
+    --input: 220 7% 16%;
+    --ring: 154 54% 52%;
+    --sidebar-background: 220 9% 5%;
+    --sidebar-accent: 220 7% 13%;
+    --sidebar-border: 220 7% 14%;
+    --sidebar-primary: 154 54% 52%;
+    --sidebar-ring: 154 54% 52%;
+    --shadow-glow: 0 0 20px hsl(154 54% 52% / 0.10);
   }
 
   /* Leadmap: black + white accent */

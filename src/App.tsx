@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { CRMProvider } from "@/context/CRMContext";
 import { ProductProvider, useProduct } from "@/context/ProductContext";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { lazy, Suspense, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import OutreachTimerWidget from "@/components/OutreachTimerWidget";
@@ -13,6 +13,8 @@ import OutreachTimerWidget from "@/components/OutreachTimerWidget";
 // Eager: auth + small pages on critical path
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import NotFound from "./pages/NotFound";
+import AuthPage from "./pages/AuthPage";
+import WorkspaceChooserPage from "./pages/WorkspaceChooserPage";
 
 // Lazy: everything else — splits bundle per route for faster initial load
 const AddPage = lazy(() => import("./pages/AddPage"));
@@ -48,6 +50,13 @@ const HotLeadsPage = lazy(() => import("./pages/HotLeadsPage"));
 const MailboxPage = lazy(() => import("./pages/MailboxPage"));
 const EmailFinderPage = lazy(() => import("./pages/EmailFinderPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const NomiaDashboardPage = lazy(() => import("./pages/NomiaDashboardPage"));
+const NomiaLeadsPage = lazy(() => import("./pages/NomiaLeadsPage"));
+const NomiaCallsPage = lazy(() => import("./pages/NomiaCallsPage"));
+const NomiaEmailPage = lazy(() => import("./pages/NomiaEmailPage"));
+const NomiaPipelinePage = lazy(() => import("./pages/NomiaPipelinePage"));
+const NomiaAnalyticsPage = lazy(() => import("./pages/NomiaAnalyticsPage"));
+const NomiaSettingsPage = lazy(() => import("./pages/NomiaSettingsPage"));
 
 
 const queryClient = new QueryClient();
@@ -93,7 +102,7 @@ function GlobalHotkeys() {
 
       if (e.key === 'n' && !isInput && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        navigate('/next');
+        navigate('/nomia/leads');
       }
     };
     window.addEventListener('keydown', handler);
@@ -188,6 +197,9 @@ function activateEasterEgg() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">Checking secure session...</div>;
+  if (!user) return <AuthPage />;
   return <>{children}</>;
 }
 
@@ -209,12 +221,35 @@ const App = () => (
                   <ScoringWeightsBootstrap />
                   <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading…</div>}>
                     <Routes>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<DashboardPage />} />
-                      <Route path="/automation" element={<AutomationPage />} />
-                      <Route path="/outreach-progress" element={<OutreachProgressPage />} />
-                      <Route path="/automation-runs" element={<AutomationRunsPage />} />
-                      <Route path="/notifications" element={<NotificationsPage />} />
+                      <Route path="/" element={<WorkspaceChooserPage />} />
+                      <Route path="/dashboard" element={<Navigate to="/nomia/dashboard" replace />} />
+                      <Route path="/nomia" element={<Navigate to="/nomia/dashboard" replace />} />
+                      <Route path="/nomia/dashboard" element={<NomiaDashboardPage />} />
+                      <Route path="/nomia/leads" element={<NomiaLeadsPage />} />
+                      <Route path="/nomia/calls" element={<NomiaCallsPage />} />
+                      <Route path="/nomia/email" element={<NomiaEmailPage />} />
+                      <Route path="/nomia/inbox" element={<InboxPage />} />
+                      <Route path="/nomia/pipeline" element={<NomiaPipelinePage />} />
+                      <Route path="/nomia/analytics" element={<NomiaAnalyticsPage />} />
+                      <Route path="/nomia/settings" element={<NomiaSettingsPage />} />
+                      <Route path="/nomia/notifications" element={<NotificationsPage />} />
+                      <Route path="/leadmap" element={<Navigate to="/leadmap/dashboard" replace />} />
+                      <Route path="/leadmap/dashboard" element={<DashboardPage />} />
+                      <Route path="/leadmap/leads" element={<SectionPage allSections product="leadmap" title="Leadmap CRM" showTriage emptyMessage="No Leadmap leads yet" />} />
+                      <Route path="/leadmap/finder" element={<EmailFinderPage />} />
+                      <Route path="/leadmap/automation" element={<AutomationPage />} />
+                      <Route path="/leadmap/automation-runs" element={<AutomationRunsPage />} />
+                      <Route path="/leadmap/email" element={<EmailOutreachPage />} />
+                      <Route path="/leadmap/email-results" element={<EmailResultsPage />} />
+                      <Route path="/leadmap/ai-calls" element={<CallListPage />} />
+                      <Route path="/leadmap/outreach-progress" element={<OutreachProgressPage />} />
+                      <Route path="/leadmap/partners" element={<PartnerAcquisitionPage />} />
+                      <Route path="/leadmap/organic-growth" element={<GBPContentLoopPage />} />
+                      <Route path="/leadmap/settings" element={<SettingsPage />} />
+                      <Route path="/automation" element={<Navigate to="/leadmap/automation" replace />} />
+                      <Route path="/outreach-progress" element={<Navigate to="/leadmap/outreach-progress" replace />} />
+                      <Route path="/automation-runs" element={<Navigate to="/leadmap/automation-runs" replace />} />
+                      <Route path="/notifications" element={<Navigate to="/nomia/notifications" replace />} />
                       <Route path="/hot-leads" element={<HotLeadsPage />} />
                       <Route path="/add" element={<AddPage />} />
                       <Route path="/bulk" element={<BulkPage />} />
@@ -240,18 +275,18 @@ const App = () => (
                       <Route path="/finder" element={<Navigate to="/lead-finder" replace />} />
                       <Route path="/leadmap/closing" element={<LeadmapClosingPage />} />
                       <Route path="/leadmap/email-outreach" element={<EmailOutreachPage />} />
-                      <Route path="/email-results" element={<EmailResultsPage />} />
-                      <Route path="/partners" element={<PartnerAcquisitionPage />} />
-                      <Route path="/gbp-content" element={<GBPContentLoopPage />} />
-                      <Route path="/nomia/email-outreach" element={<EmailOutreachPage />} />
-                      <Route path="/nomia/sms-outreach" element={<SmsOutreachPage />} />
-                      <Route path="/nomia/closing" element={<ClosingPage status="interested" title="Nomia Closing" />} />
+                      <Route path="/email-results" element={<Navigate to="/leadmap/email-results" replace />} />
+                      <Route path="/partners" element={<Navigate to="/leadmap/partners" replace />} />
+                      <Route path="/gbp-content" element={<Navigate to="/leadmap/organic-growth" replace />} />
+                      <Route path="/nomia/email-outreach" element={<Navigate to="/nomia/email" replace />} />
+                      <Route path="/nomia/sms-outreach" element={<Navigate to="/nomia/inbox" replace />} />
+                      <Route path="/nomia/closing" element={<Navigate to="/nomia/pipeline" replace />} />
                       <Route path="/cold-call" element={<NextLeadPage mode="leadline" />} />
-                      <Route path="/ai-calls" element={<CallListPage />} />
-                      <Route path="/leadmap-crm" element={<SectionPage allSections product="leadmap" title="Leadmap CRM" showTriage emptyMessage="No Leadmap leads yet" />} />
-                      <Route path="/nomia-crm" element={<SectionPage allSections product="nomia" title="Nomia CRM" showTriage emptyMessage="No Nomia leads yet" />} />
-                      <Route path="/email-finder" element={<Navigate to="/lead-finder" replace />} />
-                      <Route path="/lead-finder" element={<EmailFinderPage />} />
+                      <Route path="/ai-calls" element={<Navigate to="/leadmap/ai-calls" replace />} />
+                      <Route path="/leadmap-crm" element={<Navigate to="/leadmap/leads" replace />} />
+                      <Route path="/nomia-crm" element={<Navigate to="/nomia/leads" replace />} />
+                      <Route path="/email-finder" element={<Navigate to="/leadmap/finder" replace />} />
+                      <Route path="/lead-finder" element={<Navigate to="/leadmap/finder" replace />} />
                       <Route path="/finder/coverage" element={<FinderCoveragePage />} />
                       <Route path="/finder/runs/:id" element={<FinderRunPage />} />
                       <Route path="/finder/batch/:batchId" element={<FinderBatchPage />} />
@@ -260,14 +295,14 @@ const App = () => (
                       <Route path="/campaigns/new" element={<CampaignNewPage />} />
                       <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
                       <Route path="/campaigns/compare" element={<CampaignStatsPage />} />
-                      <Route path="/inbox" element={<InboxPage />} />
-                      <Route path="/call-list" element={<CallListPage />} />
+                      <Route path="/inbox" element={<Navigate to="/nomia/inbox" replace />} />
+                      <Route path="/call-list" element={<Navigate to="/leadmap/ai-calls" replace />} />
                       <Route path="/next" element={<NextLeadPage mode="nomia" />} />
                       <Route path="/next-leadline" element={<NextLeadPage mode="leadline" />} />
                       <Route path="/quick-send" element={<QuickSendPage />} />
                       <Route path="/mailbox" element={<MailboxPage />} />
                       <Route path="/guide" element={<GuidePage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/settings" element={<Navigate to="/nomia/settings" replace />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
