@@ -7,12 +7,14 @@ import {
   CircleOff,
   Clock3,
   Copy,
+  Heart,
   Loader2,
   MapPin,
   Phone,
   PhoneCall,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
   Square,
   UserRound,
   X,
@@ -39,13 +41,20 @@ type SimpleOutcome = 'interested' | 'callback' | 'no_answer' | 'not_interested' 
 type DialState = 'idle' | 'checking' | 'ready' | 'blocked';
 
 const OUTCOMES: Array<{ key: SimpleOutcome; label: string; detail: string; tone: string; shortcut: string }> = [
-  { key: 'interested', label: 'Interested', detail: 'Follow up tomorrow', tone: 'border-emerald-400/35 text-emerald-300 hover:bg-emerald-400/10', shortcut: '1' },
-  { key: 'callback', label: 'Call back', detail: 'Choose date and time', tone: 'border-blue-400/35 text-blue-300 hover:bg-blue-400/10', shortcut: '2' },
+  { key: 'interested', label: 'Interested', detail: 'Follow up tomorrow', tone: 'border-pink-400/45 text-pink-200 hover:bg-pink-400/10', shortcut: '1' },
+  { key: 'callback', label: 'Call back', detail: 'Choose date and time', tone: 'border-fuchsia-400/35 text-fuchsia-200 hover:bg-fuchsia-400/10', shortcut: '2' },
   { key: 'no_answer', label: 'No answer', detail: 'Retry next workday', tone: 'border-amber-400/35 text-amber-300 hover:bg-amber-400/10', shortcut: '3' },
   { key: 'not_interested', label: 'Not interested', detail: 'Remove from call queue', tone: 'border-border text-foreground hover:bg-muted', shortcut: '4' },
   { key: 'demo', label: 'Demo requested', detail: 'Add to follow-up', tone: 'border-violet-400/35 text-violet-300 hover:bg-violet-400/10', shortcut: '5' },
   { key: 'wrong_number', label: 'Wrong number', detail: 'Block future outreach', tone: 'border-red-400/35 text-red-300 hover:bg-red-400/10', shortcut: '6' },
 ];
+
+function callMilestone(count: number) {
+  if (count === 20) return '20 calls logged. Absolute star energy.';
+  if (count === 10) return '10 calls done. You are on fire.';
+  if (count > 0 && count % 5 === 0) return `${count} calls done. Tiny victory dance unlocked.`;
+  return null;
+}
 
 function nextWorkday(hour = 10) {
   const date = new Date();
@@ -267,9 +276,10 @@ export default function NomiaCallsPage() {
         leadId: lead.id,
       });
       setLeads((previous) => previous.map((item) => item.id === updated.id ? updated : item));
-      setCompletedToday((count) => count + 1);
+      const nextCompleted = completedToday + 1;
+      setCompletedToday(nextCompleted);
       resetCall();
-      toast.success(`${label} saved. Next lead ready.`);
+      toast.success(callMilestone(nextCompleted) || `${label} saved. Next lead ready.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save the call outcome');
     } finally {
@@ -364,9 +374,10 @@ export default function NomiaCallsPage() {
 
               {step === 'ready' && (
                 <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <Button className="h-14 gap-2 text-base" onClick={startCall} disabled={masterPaused || saving || !callerName.trim()}>
+                  <Button className="h-14 gap-2 bg-pink-600 text-base text-white hover:bg-pink-500" onClick={startCall} disabled={masterPaused || saving || !callerName.trim()}>
                     {saving ? <Loader2 size={18} className="animate-spin" /> : <Phone size={18} />}
                     Call {lead.name}
+                    <Heart size={15} fill="currentColor" className="ml-1 opacity-80" />
                   </Button>
                   <Button variant="outline" className="h-14 gap-2" onClick={skipLead}><ArrowRight size={16} /> Skip for now</Button>
                 </div>
@@ -383,11 +394,13 @@ export default function NomiaCallsPage() {
         </div>
 
         {step !== 'ready' && lead && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-            <div role="dialog" aria-modal="true" aria-labelledby="call-outcome-title" className="max-h-[95vh] w-full overflow-y-auto border border-border bg-background shadow-2xl sm:max-w-xl sm:rounded-md">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-4 py-3">
-                <div className="min-w-0">
-                  <div className="text-xs text-muted-foreground">Now calling</div>
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" aria-labelledby="call-outcome-title" className="relative max-h-[95vh] w-full overflow-y-auto border border-pink-400/35 bg-background shadow-[0_20px_80px_rgba(236,72,153,0.18)] sm:max-w-xl sm:rounded-md">
+              <Heart size={13} fill="currentColor" className="absolute left-3 top-3 z-20 rotate-[-12deg] text-pink-400/45" aria-hidden="true" />
+              <Heart size={9} fill="currentColor" className="absolute right-12 top-5 z-20 rotate-12 text-fuchsia-300/35" aria-hidden="true" />
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-pink-400/20 bg-background px-5 py-3">
+                <div className="min-w-0 pl-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-pink-300"><Sparkles size={12} /> You've got this</div>
                   <h2 id="call-outcome-title" className="truncate text-base font-semibold">{lead.name}</h2>
                 </div>
                 {dialState === 'blocked' && <Button variant="ghost" size="icon" onClick={resetCall} title="Close"><X size={17} /></Button>}
@@ -395,9 +408,9 @@ export default function NomiaCallsPage() {
 
               {dialState === 'checking' && (
                 <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
-                  <Loader2 size={24} className="animate-spin text-emerald-300" />
+                  <div className="relative"><Loader2 size={26} className="animate-spin text-pink-300" /><Heart size={9} fill="currentColor" className="absolute -right-3 -top-2 text-pink-300" /></div>
                   <div className="mt-4 text-sm font-semibold">Checking duplicate protection</div>
-                  <div className="mt-1 text-xs text-muted-foreground">The phone app will open automatically.</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Safety first, then go charm them.</div>
                 </div>
               )}
 
@@ -412,9 +425,9 @@ export default function NomiaCallsPage() {
 
               {dialState === 'ready' && step === 'outcome' && (
                 <div className="p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border border-emerald-400/25 bg-emerald-400/5 px-3 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border border-pink-400/30 bg-pink-400/5 px-3 py-3">
                     <div><div className="font-mono text-lg font-semibold">{lead.phone_e164 || lead.phone}</div><div className="text-xs text-muted-foreground">Choose the result as soon as the call ends</div></div>
-                    <Button asChild size="sm" variant="outline" className="gap-2"><a href={`tel:${lead.phone_e164 || lead.phone}`}><Phone size={14} /> Open phone app</a></Button>
+                    <Button asChild size="sm" className="gap-2 bg-pink-600 text-white hover:bg-pink-500"><a href={`tel:${lead.phone_e164 || lead.phone}`}><Phone size={14} /> Open phone app</a></Button>
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
@@ -428,12 +441,13 @@ export default function NomiaCallsPage() {
                   </div>
 
                   <label className="mt-4 block text-xs text-muted-foreground">Quick note (optional)<Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Only add what the next person needs to know" className="mt-1 min-h-16 resize-none" /></label>
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-pink-300/70"><Heart size={10} fill="currentColor" /> {completedToday === 0 ? 'First call magic starts here' : `${completedToday} calls handled beautifully this session`}</div>
                 </div>
               )}
 
               {dialState === 'ready' && step === 'callback' && (
                 <div className="p-4 sm:p-5">
-                  <div className="flex items-center gap-2"><CalendarClock size={17} className="text-blue-300" /><h3 className="text-sm font-semibold">Schedule the callback</h3></div>
+                  <div className="flex items-center gap-2"><CalendarClock size={17} className="text-pink-300" /><h3 className="text-sm font-semibold">Schedule the callback</h3><Heart size={11} fill="currentColor" className="text-pink-300/70" /></div>
                   <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
                     <Input type="datetime-local" value={callbackAt} onChange={(event) => setCallbackAt(event.target.value)} autoFocus />
                     <Button onClick={saveCallback} disabled={saving}>{saving ? <Loader2 size={15} className="animate-spin" /> : <Clock3 size={15} />}<span className="ml-2">Save and next</span></Button>
