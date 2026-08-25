@@ -77,7 +77,16 @@ export default {
           DEFAULT: "hsl(var(--cyan))",
           foreground: "hsl(var(--cyan-foreground))",
         },
+        emerald: {
+          DEFAULT: "hsl(var(--emerald))",
+          foreground: "hsl(var(--emerald-foreground))",
+        },
+        cobalt: {
+          DEFAULT: "hsl(var(--cobalt))",
+          foreground: "hsl(var(--cobalt-foreground))",
+        },
       },
+
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
