@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   Square,
   UserRound,
+  X,
 } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -35,14 +36,15 @@ import { toast } from 'sonner';
 
 type CallStep = 'ready' | 'outcome' | 'callback';
 type SimpleOutcome = 'interested' | 'callback' | 'no_answer' | 'not_interested' | 'demo' | 'wrong_number';
+type DialState = 'idle' | 'checking' | 'ready' | 'blocked';
 
-const OUTCOMES: Array<{ key: SimpleOutcome; label: string; detail: string; tone: string }> = [
-  { key: 'interested', label: 'Interested', detail: 'Follow up tomorrow', tone: 'border-emerald-400/35 text-emerald-300 hover:bg-emerald-400/10' },
-  { key: 'callback', label: 'Call back', detail: 'Choose date and time', tone: 'border-blue-400/35 text-blue-300 hover:bg-blue-400/10' },
-  { key: 'no_answer', label: 'No answer', detail: 'Retry next workday', tone: 'border-amber-400/35 text-amber-300 hover:bg-amber-400/10' },
-  { key: 'not_interested', label: 'Not interested', detail: 'Remove from call queue', tone: 'border-border text-foreground hover:bg-muted' },
-  { key: 'demo', label: 'Demo requested', detail: 'Add to follow-up', tone: 'border-violet-400/35 text-violet-300 hover:bg-violet-400/10' },
-  { key: 'wrong_number', label: 'Wrong number', detail: 'Block future outreach', tone: 'border-red-400/35 text-red-300 hover:bg-red-400/10' },
+const OUTCOMES: Array<{ key: SimpleOutcome; label: string; detail: string; tone: string; shortcut: string }> = [
+  { key: 'interested', label: 'Interested', detail: 'Follow up tomorrow', tone: 'border-emerald-400/35 text-emerald-300 hover:bg-emerald-400/10', shortcut: '1' },
+  { key: 'callback', label: 'Call back', detail: 'Choose date and time', tone: 'border-blue-400/35 text-blue-300 hover:bg-blue-400/10', shortcut: '2' },
+  { key: 'no_answer', label: 'No answer', detail: 'Retry next workday', tone: 'border-amber-400/35 text-amber-300 hover:bg-amber-400/10', shortcut: '3' },
+  { key: 'not_interested', label: 'Not interested', detail: 'Remove from call queue', tone: 'border-border text-foreground hover:bg-muted', shortcut: '4' },
+  { key: 'demo', label: 'Demo requested', detail: 'Add to follow-up', tone: 'border-violet-400/35 text-violet-300 hover:bg-violet-400/10', shortcut: '5' },
+  { key: 'wrong_number', label: 'Wrong number', detail: 'Block future outreach', tone: 'border-red-400/35 text-red-300 hover:bg-red-400/10', shortcut: '6' },
 ];
 
 function nextWorkday(hour = 10) {
@@ -64,6 +66,8 @@ export default function NomiaCallsPage() {
   const [saving, setSaving] = useState(false);
   const [masterPaused, setMasterPaused] = useState(true);
   const [step, setStep] = useState<CallStep>('ready');
+  const [dialState, setDialState] = useState<DialState>('idle');
+  const [dialError, setDialError] = useState('');
   const [notes, setNotes] = useState('');
   const [callbackAt, setCallbackAt] = useState(() => toDateTimeLocal(nextWorkday()));
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
@@ -117,6 +121,8 @@ export default function NomiaCallsPage() {
 
   const resetCall = () => {
     setStep('ready');
+    setDialState('idle');
+    setDialError('');
     setNotes('');
     setCallbackAt(toDateTimeLocal(nextWorkday()));
   };
@@ -171,6 +177,9 @@ export default function NomiaCallsPage() {
       toast.error('Enter the caller name first');
       return;
     }
+    setStep('outcome');
+    setDialState('checking');
+    setDialError('');
     setSaving(true);
     try {
       if (await getSetting('outreach_master_paused') !== 'false') {
@@ -184,14 +193,36 @@ export default function NomiaCallsPage() {
         phone: lead.phone_e164 || lead.phone,
         product: 'nomia',
       });
-      setStep('outcome');
-      window.location.href = `tel:${lead.phone_e164 || lead.phone}`;
+      setDialState('ready');
+      const dialLink = document.createElement('a');
+      dialLink.href = `tel:${lead.phone_e164 || lead.phone}`;
+      dialLink.style.display = 'none';
+      document.body.appendChild(dialLink);
+      dialLink.click();
+      dialLink.remove();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not open the call');
+      const message = error instanceof Error ? error.message : 'Could not open the call';
+      setDialState('blocked');
+      setDialError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (step !== 'outcome' || dialState !== 'ready') return;
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      const outcome = OUTCOMES.find((item) => item.shortcut === event.key);
+      if (!outcome || saving) return;
+      event.preventDefault();
+      if (outcome.key === 'callback') setStep('callback');
+      else void saveOutcome(outcome.key);
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  });
 
   const saveOutcome = async (outcome: SimpleOutcome, customFollowUp?: Date) => {
     if (!lead) return;
@@ -341,32 +372,6 @@ export default function NomiaCallsPage() {
                 </div>
               )}
 
-              {step === 'outcome' && (
-                <div className="mt-6 border-t border-border pt-5">
-                  <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">How did the call go?</h3><p className="mt-1 text-xs text-muted-foreground">Add a note first if needed, then choose one result.</p></div><PhoneCall size={20} className="text-emerald-300" /></div>
-                  <label className="mt-4 block text-xs text-muted-foreground">Call note (optional)<Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Anything useful for the next follow-up" className="mt-1 min-h-20" /></label>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {OUTCOMES.map((outcome) => (
-                      <button key={outcome.key} disabled={saving} onClick={() => outcome.key === 'callback' ? setStep('callback') : void saveOutcome(outcome.key)} className={`min-h-16 border px-4 py-3 text-left transition-colors disabled:opacity-50 ${outcome.tone}`}>
-                        <div className="text-sm font-semibold">{outcome.label}</div>
-                        <div className="mt-1 text-xs opacity-70">{outcome.detail}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {step === 'callback' && (
-                <div className="mt-6 border-t border-border pt-5">
-                  <div className="flex items-center gap-2"><CalendarClock size={17} className="text-blue-300" /><h3 className="text-sm font-semibold">When should she call back?</h3></div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-                    <Input type="datetime-local" value={callbackAt} onChange={(event) => setCallbackAt(event.target.value)} />
-                    <Button onClick={saveCallback} disabled={saving}>{saving ? <Loader2 size={15} className="animate-spin" /> : <Clock3 size={15} />}<span className="ml-2">Save callback</span></Button>
-                    <Button variant="outline" onClick={() => setStep('outcome')}>Back</Button>
-                  </div>
-                  <label className="mt-4 block text-xs text-muted-foreground">Call note (optional)<Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What should the next caller know?" className="mt-1 min-h-20" /></label>
-                </div>
-              )}
             </div>
           ) : (
             <div className="flex min-h-80 flex-col items-center justify-center px-6 text-center">
@@ -376,6 +381,74 @@ export default function NomiaCallsPage() {
             </div>
           )}
         </div>
+
+        {step !== 'ready' && lead && (
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" aria-labelledby="call-outcome-title" className="max-h-[95vh] w-full overflow-y-auto border border-border bg-background shadow-2xl sm:max-w-xl sm:rounded-md">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-4 py-3">
+                <div className="min-w-0">
+                  <div className="text-xs text-muted-foreground">Now calling</div>
+                  <h2 id="call-outcome-title" className="truncate text-base font-semibold">{lead.name}</h2>
+                </div>
+                {dialState === 'blocked' && <Button variant="ghost" size="icon" onClick={resetCall} title="Close"><X size={17} /></Button>}
+              </div>
+
+              {dialState === 'checking' && (
+                <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+                  <Loader2 size={24} className="animate-spin text-emerald-300" />
+                  <div className="mt-4 text-sm font-semibold">Checking duplicate protection</div>
+                  <div className="mt-1 text-xs text-muted-foreground">The phone app will open automatically.</div>
+                </div>
+              )}
+
+              {dialState === 'blocked' && (
+                <div className="px-5 py-8 text-center">
+                  <ShieldAlert size={26} className="mx-auto text-red-300" />
+                  <div className="mt-3 text-sm font-semibold">Call blocked</div>
+                  <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">{dialError}</p>
+                  <Button className="mt-5" variant="outline" onClick={resetCall}>Back to queue</Button>
+                </div>
+              )}
+
+              {dialState === 'ready' && step === 'outcome' && (
+                <div className="p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border border-emerald-400/25 bg-emerald-400/5 px-3 py-3">
+                    <div><div className="font-mono text-lg font-semibold">{lead.phone_e164 || lead.phone}</div><div className="text-xs text-muted-foreground">Choose the result as soon as the call ends</div></div>
+                    <Button asChild size="sm" variant="outline" className="gap-2"><a href={`tel:${lead.phone_e164 || lead.phone}`}><Phone size={14} /> Open phone app</a></Button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {OUTCOMES.map((outcome) => (
+                      <button key={outcome.key} disabled={saving} onClick={() => outcome.key === 'callback' ? setStep('callback') : void saveOutcome(outcome.key)} className={`relative min-h-20 border px-3 py-3 text-left transition-colors disabled:opacity-50 sm:px-4 ${outcome.tone}`}>
+                        <span className="absolute right-2 top-2 hidden min-w-5 border border-current/25 px-1 text-center text-[10px] opacity-60 sm:block">{outcome.shortcut}</span>
+                        <div className="pr-5 text-sm font-semibold">{outcome.label}</div>
+                        <div className="mt-1 text-xs opacity-70">{outcome.detail}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="mt-4 block text-xs text-muted-foreground">Quick note (optional)<Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Only add what the next person needs to know" className="mt-1 min-h-16 resize-none" /></label>
+                </div>
+              )}
+
+              {dialState === 'ready' && step === 'callback' && (
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center gap-2"><CalendarClock size={17} className="text-blue-300" /><h3 className="text-sm font-semibold">Schedule the callback</h3></div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <Input type="datetime-local" value={callbackAt} onChange={(event) => setCallbackAt(event.target.value)} autoFocus />
+                    <Button onClick={saveCallback} disabled={saving}>{saving ? <Loader2 size={15} className="animate-spin" /> : <Clock3 size={15} />}<span className="ml-2">Save and next</span></Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[1, 3].map((hours) => <Button key={hours} size="sm" variant="outline" onClick={() => void saveOutcome('callback', new Date(Date.now() + hours * 60 * 60 * 1000))}>In {hours}h</Button>)}
+                    <Button size="sm" variant="outline" onClick={() => void saveOutcome('callback', nextWorkday())}>Tomorrow 10:00</Button>
+                  </div>
+                  <label className="mt-4 block text-xs text-muted-foreground">Quick note (optional)<Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What should the caller remember?" className="mt-1 min-h-16 resize-none" /></label>
+                  <Button variant="ghost" className="mt-3" onClick={() => setStep('outcome')}>Back to outcomes</Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
