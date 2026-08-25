@@ -162,9 +162,12 @@ export type Database = {
           channel: string
           created_at: string
           eligibility: Json
+          eligibility_snapshot: Json
           eligible: boolean
+          error_message: string | null
           id: string
           lead_id: string
+          position: number
           product: string
           provider_message_id: string | null
           rendered_body: string | null
@@ -174,6 +177,7 @@ export type Database = {
           send_error: string | null
           send_status: string
           sent_at: string | null
+          status: string
           to_email: string | null
           to_phone: string | null
           updated_at: string
@@ -186,9 +190,12 @@ export type Database = {
           channel?: string
           created_at?: string
           eligibility?: Json
+          eligibility_snapshot?: Json
           eligible?: boolean
+          error_message?: string | null
           id?: string
           lead_id: string
+          position?: number
           product?: string
           provider_message_id?: string | null
           rendered_body?: string | null
@@ -198,6 +205,7 @@ export type Database = {
           send_error?: string | null
           send_status?: string
           sent_at?: string | null
+          status?: string
           to_email?: string | null
           to_phone?: string | null
           updated_at?: string
@@ -210,9 +218,12 @@ export type Database = {
           channel?: string
           created_at?: string
           eligibility?: Json
+          eligibility_snapshot?: Json
           eligible?: boolean
+          error_message?: string | null
           id?: string
           lead_id?: string
+          position?: number
           product?: string
           provider_message_id?: string | null
           rendered_body?: string | null
@@ -222,6 +233,7 @@ export type Database = {
           send_error?: string | null
           send_status?: string
           sent_at?: string | null
+          status?: string
           to_email?: string | null
           to_phone?: string | null
           updated_at?: string
@@ -899,6 +911,11 @@ export type Database = {
           lock_value: string
           manually_unlocked: boolean
           method: string
+          unlock_method: string | null
+          unlock_reason: string | null
+          unlocked_at: string | null
+          unlocked_by: string | null
+          unlocked_for_lead_id: string | null
         }
         Insert: {
           created_at?: string
@@ -908,6 +925,11 @@ export type Database = {
           lock_value: string
           manually_unlocked?: boolean
           method: string
+          unlock_method?: string | null
+          unlock_reason?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          unlocked_for_lead_id?: string | null
         }
         Update: {
           created_at?: string
@@ -917,8 +939,21 @@ export type Database = {
           lock_value?: string
           manually_unlocked?: boolean
           method?: string
+          unlock_method?: string | null
+          unlock_reason?: string | null
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+          unlocked_for_lead_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "outreach_locks_unlocked_for_lead_id_fkey"
+            columns: ["unlocked_for_lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partner_outreach_logs: {
         Row: {
@@ -1092,6 +1127,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          role: string
           updated_at: string
           user_id: string
         }
@@ -1099,6 +1135,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          role?: string
           updated_at?: string
           user_id: string
         }
@@ -1106,6 +1143,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          role?: string
           updated_at?: string
           user_id?: string
         }
@@ -1144,6 +1182,7 @@ export type Database = {
         Args: { p_lead_id: string; p_manual_unlock?: boolean; p_method: string }
         Returns: Json
       }
+      is_crm_owner: { Args: never; Returns: boolean }
       normalize_business_identity: {
         Args: { p_city?: string; p_name: string }
         Returns: string
