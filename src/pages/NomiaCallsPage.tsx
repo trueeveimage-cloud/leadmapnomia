@@ -138,17 +138,16 @@ export default function NomiaCallsPage() {
 
   const startSession = async () => {
     try {
-      const [gmail, ai, sms, partner] = await Promise.all([
-        getSetting('nomia_gmail_paused'),
-        getSetting('nomia_ai_calls_paused'),
-        getSetting('nomia_sms_paused'),
-        getSetting('partner_outreach_paused'),
+      if (!window.confirm('Start a manual calling session? Automated Gmail, AI calls, SMS and partner outreach will stay paused.')) return;
+      await Promise.all([
+        setSetting('nomia_gmail_paused', 'true'),
+        setSetting('nomia_ai_calls_paused', 'true'),
+        setSetting('nomia_sms_paused', 'true'),
+        setSetting('partner_outreach_paused', 'true'),
+        setSetting('gmail_autosend_enabled', 'false'),
+        setSetting('ai_calls_enabled', 'false'),
+        setSetting('partner_gmail_auto_enabled', 'false'),
       ]);
-      if ([gmail, ai, sms, partner].some((value) => value !== 'true')) {
-        toast.error('Manual session blocked: Gmail, AI calls, SMS and partner outreach must all remain paused.');
-        return;
-      }
-      if (!window.confirm('Start a manual calling session? Only calls you press yourself can open. Database duplicate locks remain active.')) return;
       await setSetting('outreach_master_paused', 'false');
       setMasterPaused(false);
       await createNotification({
