@@ -400,7 +400,7 @@ export default function NomiaCallsPage() {
               <Heart size={9} fill="currentColor" className="absolute right-12 top-5 z-20 rotate-12 text-fuchsia-300/35" aria-hidden="true" />
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-pink-400/20 bg-background px-5 py-3">
                 <div className="min-w-0 pl-3">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-pink-300"><Sparkles size={12} /> You've got this</div>
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-pink-300"><Sparkles size={12} /> Now calling</div>
                   <h2 id="call-outcome-title" className="truncate text-base font-semibold">{lead.name}</h2>
                 </div>
                 {dialState === 'blocked' && <Button variant="ghost" size="icon" onClick={resetCall} title="Close"><X size={17} /></Button>}
